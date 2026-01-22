@@ -17,41 +17,53 @@ Native macOS integration for Calendar, Reminders, and Contacts using EventKit an
 
 ## Installation
 
-### Via Claude Code Plugin Manager
+### Option 1: Standalone Installation
 
-1. **Update the marketplace** (if not already done):
-   ```
-   /plugin update agent-plugins
-   ```
+Install directly from this repository:
 
-2. **Install the plugin**:
-   ```
-   /plugin install apple-pim@agent-plugins
-   ```
+```bash
+# Add this repo as a marketplace
+claude plugin marketplace add omarshahine/Apple-PIM-Agent-Plugin
 
-3. **Run the setup script** to build Swift CLIs and install dependencies:
-   ```bash
-   # Find and run the setup script
-   cd ~/.claude/plugins/cache/agent-plugins/apple-pim/*/
-   ./setup.sh
-   ```
+# Install the plugin
+claude plugin install apple-pim@apple-pim
 
-4. **Restart Claude Code** to load the MCP server.
+# Run the setup script to build Swift CLIs and install dependencies
+~/.claude/plugins/cache/apple-pim/apple-pim/*/setup.sh
 
-5. **Grant permissions**: On first use, macOS will prompt for Calendar, Reminders, and Contacts access. Grant these permissions in System Settings > Privacy & Security.
+# Restart Claude Code to load the MCP server
+```
 
-### Manual Installation (Development)
+### Option 2: Via omarshahine-agent-plugins Marketplace
+
+If you already have the omarshahine-agent-plugins marketplace:
+
+```bash
+# Install the plugin
+claude plugin install apple-pim@omarshahine-agent-plugins
+
+# Run the setup script
+~/.claude/plugins/cache/omarshahine-agent-plugins/apple-pim/*/setup.sh
+
+# Restart Claude Code to load the MCP server
+```
+
+### Post-Installation
+
+**Grant permissions**: On first use, macOS will prompt for Calendar, Reminders, and Contacts access. Grant these permissions in System Settings > Privacy & Security.
+
+### Development Installation
 
 ```bash
 # Clone the repo
-git clone https://github.com/omarshahine/Agent-Plugins.git
-cd Agent-Plugins/plugins/apple-pim
+git clone https://github.com/omarshahine/Apple-PIM-Agent-Plugin.git
+cd Apple-PIM-Agent-Plugin
 
 # Run setup
 ./setup.sh
 
 # Test with Claude Code
-cc --plugin-dir .
+claude --plugin-dir .
 ```
 
 ## Configuration
@@ -215,9 +227,9 @@ You may need to restart Claude Code after granting permissions.
 
 ### CLI Not Found
 
-Ensure you've built the Swift package:
+Ensure you've built the Swift package by running setup.sh, or manually:
 ```bash
-cd ~/.claude/plugins/cache/agent-plugins/apple-pim/*/swift
+cd ~/.claude/plugins/cache/apple-pim/apple-pim/*/swift
 swift build -c release
 ```
 
