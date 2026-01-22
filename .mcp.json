@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "apple-pim": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/server.js"]
+    }
+  }
+}

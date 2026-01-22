@@ -1,0 +1,17 @@
+# Swift build artifacts
+.build/
+Package.resolved
+
+# Node.js
+node_modules/
+package-lock.json
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Local configuration
+*.local.md
