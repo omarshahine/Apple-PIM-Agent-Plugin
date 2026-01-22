@@ -7,6 +7,8 @@ Native macOS integration for Calendar, Reminders, and Contacts using EventKit an
 - **Calendar Management**: List calendars, create/read/update/delete events, search by date/title
 - **Reminder Management**: List reminder lists, create/complete/update/delete reminders, search
 - **Contact Management**: List groups, create/read/update/delete contacts, search by name/email/phone
+- **Recurrence Rules**: Create recurring events and reminders (daily, weekly, monthly, yearly)
+- **Batch Operations**: Create multiple events or reminders in a single efficient transaction
 - **Proactive Agent**: The `pim-assistant` agent triggers automatically when you mention scheduling, reminders, or contacts
 
 ## Prerequisites
@@ -181,13 +183,52 @@ The `pim-assistant` agent triggers proactively for natural language requests:
 
 ## MCP Tools
 
-The plugin exposes 22 MCP tools:
+The plugin exposes 24 MCP tools:
 
 | Category | Tools |
 |----------|-------|
-| **Calendar** | `calendar_list`, `calendar_events`, `calendar_get`, `calendar_search`, `calendar_create`, `calendar_update`, `calendar_delete` |
-| **Reminders** | `reminder_lists`, `reminder_items`, `reminder_get`, `reminder_search`, `reminder_create`, `reminder_complete`, `reminder_update`, `reminder_delete` |
+| **Calendar** | `calendar_list`, `calendar_events`, `calendar_get`, `calendar_search`, `calendar_create`, `calendar_update`, `calendar_delete`, `calendar_batch_create` |
+| **Reminders** | `reminder_lists`, `reminder_items`, `reminder_get`, `reminder_search`, `reminder_create`, `reminder_complete`, `reminder_update`, `reminder_delete`, `reminder_batch_create` |
 | **Contacts** | `contact_groups`, `contact_list`, `contact_search`, `contact_get`, `contact_create`, `contact_update`, `contact_delete` |
+
+### Recurrence Rules
+
+Create recurring events and reminders with the `recurrence` parameter:
+
+```json
+{
+  "frequency": "weekly",
+  "interval": 1,
+  "daysOfTheWeek": ["monday", "wednesday", "friday"],
+  "endDate": "2025-12-31"
+}
+```
+
+**Supported frequencies**: `daily`, `weekly`, `monthly`, `yearly`
+
+**End conditions** (optional):
+- `endDate`: Stop repeating after this date (ISO format)
+- `occurrenceCount`: Stop after N occurrences
+
+**Weekly patterns**: Use `daysOfTheWeek` array (e.g., `["monday", "wednesday"]`)
+
+**Monthly patterns**: Use `daysOfTheMonth` array (e.g., `[1, 15]` for 1st and 15th)
+
+### Batch Operations
+
+Create multiple events or reminders efficiently with `calendar_batch_create` and `reminder_batch_create`:
+
+```json
+{
+  "events": [
+    {"title": "Standup", "start": "2025-01-27 09:00"},
+    {"title": "Team Sync", "start": "2025-01-27 14:00"},
+    {"title": "Review", "start": "2025-01-27 16:00"}
+  ]
+}
+```
+
+Batch operations commit all changes in a single transaction, improving performance for bulk operations.
 
 ## Architecture
 
@@ -253,10 +294,30 @@ cd swift/.build/release
 ./calendar-cli events --from today --to tomorrow
 ./calendar-cli search "meeting"
 
+# Create a weekly recurring event
+./calendar-cli create --title "Team Standup" --start "2025-01-27 09:00" \
+  --recurrence '{"frequency":"weekly","daysOfTheWeek":["monday","wednesday","friday"]}'
+
+# Batch create multiple events
+./calendar-cli batch-create --json '[
+  {"title":"Task 1","start":"2025-01-27 10:00"},
+  {"title":"Task 2","start":"2025-01-27 11:00"}
+]'
+
 # Reminders
 ./reminder-cli lists
 ./reminder-cli items --list "Personal"
 ./reminder-cli create --title "Test" --due "tomorrow"
+
+# Create a monthly recurring reminder
+./reminder-cli create --title "Pay Rent" --due "2025-02-01" \
+  --recurrence '{"frequency":"monthly","interval":1}'
+
+# Batch create multiple reminders
+./reminder-cli batch-create --json '[
+  {"title":"Buy groceries"},
+  {"title":"Call mom","priority":1}
+]'
 
 # Contacts
 ./contacts-cli search "John"

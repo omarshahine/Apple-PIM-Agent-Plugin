@@ -16,6 +16,7 @@ struct ReminderCLI: AsyncParsableCommand {
             CompleteReminder.self,
             UpdateReminder.self,
             DeleteReminder.self,
+            BatchCreateReminder.self,
         ]
     )
 }
@@ -204,6 +205,88 @@ func alarmToDict(_ alarm: EKAlarm) -> [String: Any] {
     ]
 }
 
+// MARK: - Recurrence Helpers
+
+struct RecurrenceJSON: Codable {
+    let frequency: String
+    let interval: Int?
+    let endDate: String?
+    let occurrenceCount: Int?
+    let daysOfTheWeek: [String]?
+    let daysOfTheMonth: [Int]?
+}
+
+func dayStringToEKDay(_ day: String) -> EKRecurrenceDayOfWeek? {
+    switch day.lowercased() {
+    case "sunday", "sun": return EKRecurrenceDayOfWeek(.sunday)
+    case "monday", "mon": return EKRecurrenceDayOfWeek(.monday)
+    case "tuesday", "tue": return EKRecurrenceDayOfWeek(.tuesday)
+    case "wednesday", "wed": return EKRecurrenceDayOfWeek(.wednesday)
+    case "thursday", "thu": return EKRecurrenceDayOfWeek(.thursday)
+    case "friday", "fri": return EKRecurrenceDayOfWeek(.friday)
+    case "saturday", "sat": return EKRecurrenceDayOfWeek(.saturday)
+    default: return nil
+    }
+}
+
+func parseRecurrenceRule(_ json: String) -> EKRecurrenceRule? {
+    guard let data = json.data(using: .utf8),
+          let recurrence = try? JSONDecoder().decode(RecurrenceJSON.self, from: data) else {
+        return nil
+    }
+
+    // Parse frequency
+    let frequency: EKRecurrenceFrequency
+    switch recurrence.frequency.lowercased() {
+    case "daily": frequency = .daily
+    case "weekly": frequency = .weekly
+    case "monthly": frequency = .monthly
+    case "yearly": frequency = .yearly
+    default: return nil
+    }
+
+    // Parse interval (default: 1)
+    let interval = recurrence.interval ?? 1
+
+    // Parse end condition
+    var recurrenceEnd: EKRecurrenceEnd? = nil
+    if let endDateStr = recurrence.endDate, let endDate = parseDate(endDateStr) {
+        recurrenceEnd = EKRecurrenceEnd(end: endDate)
+    } else if let count = recurrence.occurrenceCount {
+        recurrenceEnd = EKRecurrenceEnd(occurrenceCount: count)
+    }
+
+    // Parse days of the week
+    var daysOfTheWeek: [EKRecurrenceDayOfWeek]? = nil
+    if let days = recurrence.daysOfTheWeek {
+        daysOfTheWeek = days.compactMap { dayStringToEKDay($0) }
+        if daysOfTheWeek?.isEmpty == true {
+            daysOfTheWeek = nil
+        }
+    }
+
+    // Parse days of the month
+    var daysOfTheMonth: [NSNumber]? = nil
+    if let days = recurrence.daysOfTheMonth {
+        daysOfTheMonth = days.map { NSNumber(value: $0) }
+        if daysOfTheMonth?.isEmpty == true {
+            daysOfTheMonth = nil
+        }
+    }
+
+    return EKRecurrenceRule(
+        recurrenceWith: frequency,
+        interval: interval,
+        daysOfTheWeek: daysOfTheWeek,
+        daysOfTheMonth: daysOfTheMonth,
+        monthsOfTheYear: nil,
+        weeksOfTheYear: nil,
+        daysOfTheYear: nil,
+        setPositions: nil,
+        end: recurrenceEnd
+    )
+}
+
 // MARK: - Commands
 
 struct ListLists: AsyncParsableCommand {
@@ -382,6 +465,9 @@ struct CreateReminder: AsyncParsableCommand {
     @Option(name: .long, help: "Alarm minutes before due (can specify multiple)")
     var alarm: [Int] = []
 
+    @Option(name: .long, help: "Recurrence rule as JSON (e.g., '{\"frequency\":\"monthly\",\"interval\":1}')")
+    var recurrence: String?
+
     func run() async throws {
         try await requestReminderAccess()
 
@@ -415,6 +501,11 @@ struct CreateReminder: AsyncParsableCommand {
         for minutes in alarm {
             let alarm = EKAlarm(relativeOffset: TimeInterval(-minutes * 60))
             reminder.addAlarm(alarm)
+        }
+
+        // Add recurrence rule if specified
+        if let recurrenceJSON = recurrence, let rule = parseRecurrenceRule(recurrenceJSON) {
+            reminder.addRecurrenceRule(rule)
         }
 
         try eventStore.save(reminder, commit: true)
@@ -484,6 +575,9 @@ struct UpdateReminder: AsyncParsableCommand {
     @Option(name: .long, help: "New priority")
     var priority: Int?
 
+    @Option(name: .long, help: "Recurrence rule as JSON (e.g., '{\"frequency\":\"monthly\",\"interval\":1}')")
+    var recurrence: String?
+
     func run() async throws {
         try await requestReminderAccess()
 
@@ -504,6 +598,20 @@ struct UpdateReminder: AsyncParsableCommand {
         }
         if let newPriority = priority {
             reminder.priority = newPriority
+        }
+
+        // Update recurrence rule if specified
+        if let recurrenceJSON = recurrence {
+            // Remove existing recurrence rules
+            if let existingRules = reminder.recurrenceRules {
+                for rule in existingRules {
+                    reminder.removeRecurrenceRule(rule)
+                }
+            }
+            // Add new recurrence rule
+            if let rule = parseRecurrenceRule(recurrenceJSON) {
+                reminder.addRecurrenceRule(rule)
+            }
         }
 
         try eventStore.save(reminder, commit: true)
@@ -539,6 +647,118 @@ struct DeleteReminder: AsyncParsableCommand {
             "success": true,
             "message": "Reminder deleted successfully",
             "deletedReminder": reminderInfo
+        ])
+    }
+}
+
+// MARK: - Batch Operations
+
+struct BatchReminderInput: Codable {
+    let title: String
+    let list: String?
+    let due: String?
+    let notes: String?
+    let priority: Int?
+    let url: String?
+    let alarm: [Int]?
+    let recurrence: RecurrenceJSON?
+}
+
+struct BatchCreateReminder: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "batch-create",
+        abstract: "Create multiple reminders in a single transaction"
+    )
+
+    @Option(name: .long, help: "JSON array of reminders to create")
+    var json: String
+
+    func run() async throws {
+        try await requestReminderAccess()
+
+        guard let data = json.data(using: .utf8),
+              let reminders = try? JSONDecoder().decode([BatchReminderInput].self, from: data) else {
+            throw CLIError.invalidInput("Invalid JSON format for reminders array")
+        }
+
+        if reminders.isEmpty {
+            throw CLIError.invalidInput("Reminders array cannot be empty")
+        }
+
+        var createdReminders: [[String: Any]] = []
+        var errors: [[String: Any]] = []
+
+        for (index, reminderInput) in reminders.enumerated() {
+            do {
+                let reminder = EKReminder(eventStore: eventStore)
+                reminder.title = reminderInput.title
+
+                if let listName = reminderInput.list {
+                    let lists = eventStore.calendars(for: .reminder)
+                    guard let cal = lists.first(where: { $0.calendarIdentifier == listName || $0.title.lowercased() == listName.lowercased() }) else {
+                        throw CLIError.notFound("Reminder list not found: \(listName)")
+                    }
+                    reminder.calendar = cal
+                } else {
+                    reminder.calendar = eventStore.defaultCalendarForNewReminders()
+                }
+
+                if let dueStr = reminderInput.due, let dueDate = parseDate(dueStr) {
+                    reminder.dueDateComponents = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: dueDate)
+                }
+
+                if let n = reminderInput.notes {
+                    reminder.notes = n
+                }
+
+                if let p = reminderInput.priority {
+                    reminder.priority = p
+                }
+
+                if let urlStr = reminderInput.url, let reminderUrl = URL(string: urlStr) {
+                    reminder.url = reminderUrl
+                }
+
+                if let alarms = reminderInput.alarm {
+                    for minutes in alarms {
+                        let alarm = EKAlarm(relativeOffset: TimeInterval(-minutes * 60))
+                        reminder.addAlarm(alarm)
+                    }
+                }
+
+                // Add recurrence rule if specified
+                if let recurrenceInput = reminderInput.recurrence {
+                    let recurrenceJSON = try JSONEncoder().encode(recurrenceInput)
+                    if let recurrenceStr = String(data: recurrenceJSON, encoding: .utf8),
+                       let rule = parseRecurrenceRule(recurrenceStr) {
+                        reminder.addRecurrenceRule(rule)
+                    }
+                }
+
+                // Save with commit: false to batch changes
+                try eventStore.save(reminder, commit: false)
+                createdReminders.append(reminderToDict(reminder))
+            } catch {
+                errors.append([
+                    "index": index,
+                    "title": reminderInput.title,
+                    "error": error.localizedDescription
+                ])
+            }
+        }
+
+        // Commit all changes at once
+        if !createdReminders.isEmpty {
+            try eventStore.commit()
+        }
+
+        outputJSON([
+            "success": errors.isEmpty,
+            "message": "Batch create completed",
+            "created": createdReminders,
+            "createdCount": createdReminders.count,
+            "errors": errors,
+            "errorCount": errors.count
         ])
     }
 }

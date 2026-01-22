@@ -202,6 +202,46 @@ const tools = [
           items: { type: "number" },
           description: "Alarm minutes before event",
         },
+        url: {
+          type: "string",
+          description: "URL associated with the event",
+        },
+        recurrence: {
+          type: "object",
+          description: "Recurrence rule for repeating events",
+          properties: {
+            frequency: {
+              type: "string",
+              enum: ["daily", "weekly", "monthly", "yearly"],
+              description: "How often the event repeats",
+            },
+            interval: {
+              type: "number",
+              description: "Repeat every N periods (default: 1)",
+            },
+            endDate: {
+              type: "string",
+              description: "Stop repeating after this date (ISO format)",
+            },
+            occurrenceCount: {
+              type: "number",
+              description: "Stop after N occurrences",
+            },
+            daysOfTheWeek: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Days of the week for weekly recurrence (e.g., ['monday', 'wednesday', 'friday'])",
+            },
+            daysOfTheMonth: {
+              type: "array",
+              items: { type: "number" },
+              description:
+                "Days of the month for monthly recurrence (e.g., [1, 15])",
+            },
+          },
+          required: ["frequency"],
+        },
       },
       required: ["title", "start"],
     },
@@ -236,6 +276,51 @@ const tools = [
           type: "string",
           description: "New notes",
         },
+        url: {
+          type: "string",
+          description: "New URL",
+        },
+        recurrence: {
+          type: "object",
+          description: "New recurrence rule (replaces existing)",
+          properties: {
+            frequency: {
+              type: "string",
+              enum: ["daily", "weekly", "monthly", "yearly"],
+              description: "How often the event repeats",
+            },
+            interval: {
+              type: "number",
+              description: "Repeat every N periods (default: 1)",
+            },
+            endDate: {
+              type: "string",
+              description: "Stop repeating after this date (ISO format)",
+            },
+            occurrenceCount: {
+              type: "number",
+              description: "Stop after N occurrences",
+            },
+            daysOfTheWeek: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Days of the week for weekly recurrence (e.g., ['monday', 'wednesday', 'friday'])",
+            },
+            daysOfTheMonth: {
+              type: "array",
+              items: { type: "number" },
+              description:
+                "Days of the month for monthly recurrence (e.g., [1, 15])",
+            },
+          },
+          required: ["frequency"],
+        },
+        futureEvents: {
+          type: "boolean",
+          description:
+            "Apply changes to all future events in a recurring series (default: true for recurring events)",
+        },
       },
       required: ["id"],
     },
@@ -252,6 +337,65 @@ const tools = [
         },
       },
       required: ["id"],
+    },
+  },
+  {
+    name: "calendar_batch_create",
+    description:
+      "Create multiple calendar events in a single transaction for better performance",
+    inputSchema: {
+      type: "object",
+      properties: {
+        events: {
+          type: "array",
+          description: "Array of events to create",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string", description: "Event title" },
+              start: { type: "string", description: "Start date/time" },
+              end: {
+                type: "string",
+                description: "End date/time (default: 1 hour after start)",
+              },
+              duration: {
+                type: "number",
+                description: "Duration in minutes (alternative to end)",
+              },
+              calendar: {
+                type: "string",
+                description: "Calendar name or ID",
+              },
+              location: { type: "string", description: "Event location" },
+              notes: { type: "string", description: "Event notes" },
+              url: { type: "string", description: "URL associated with event" },
+              allDay: { type: "boolean", description: "All-day event" },
+              alarm: {
+                type: "array",
+                items: { type: "number" },
+                description: "Alarm minutes before event",
+              },
+              recurrence: {
+                type: "object",
+                properties: {
+                  frequency: {
+                    type: "string",
+                    enum: ["daily", "weekly", "monthly", "yearly"],
+                  },
+                  interval: { type: "number" },
+                  endDate: { type: "string" },
+                  occurrenceCount: { type: "number" },
+                  daysOfTheWeek: { type: "array", items: { type: "string" } },
+                  daysOfTheMonth: { type: "array", items: { type: "number" } },
+                },
+                required: ["frequency"],
+              },
+            },
+            required: ["title", "start"],
+          },
+        },
+      },
+      required: ["events"],
     },
   },
 
@@ -366,6 +510,42 @@ const tools = [
           items: { type: "number" },
           description: "Alarm minutes before due",
         },
+        recurrence: {
+          type: "object",
+          description: "Recurrence rule for repeating reminders",
+          properties: {
+            frequency: {
+              type: "string",
+              enum: ["daily", "weekly", "monthly", "yearly"],
+              description: "How often the reminder repeats",
+            },
+            interval: {
+              type: "number",
+              description: "Repeat every N periods (default: 1)",
+            },
+            endDate: {
+              type: "string",
+              description: "Stop repeating after this date (ISO format)",
+            },
+            occurrenceCount: {
+              type: "number",
+              description: "Stop after N occurrences",
+            },
+            daysOfTheWeek: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Days of the week for weekly recurrence (e.g., ['monday', 'wednesday', 'friday'])",
+            },
+            daysOfTheMonth: {
+              type: "array",
+              items: { type: "number" },
+              description:
+                "Days of the month for monthly recurrence (e.g., [1, 15])",
+            },
+          },
+          required: ["frequency"],
+        },
       },
       required: ["title"],
     },
@@ -414,6 +594,42 @@ const tools = [
           type: "number",
           description: "New priority",
         },
+        recurrence: {
+          type: "object",
+          description: "New recurrence rule (replaces existing)",
+          properties: {
+            frequency: {
+              type: "string",
+              enum: ["daily", "weekly", "monthly", "yearly"],
+              description: "How often the reminder repeats",
+            },
+            interval: {
+              type: "number",
+              description: "Repeat every N periods (default: 1)",
+            },
+            endDate: {
+              type: "string",
+              description: "Stop repeating after this date (ISO format)",
+            },
+            occurrenceCount: {
+              type: "number",
+              description: "Stop after N occurrences",
+            },
+            daysOfTheWeek: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Days of the week for weekly recurrence (e.g., ['monday', 'wednesday', 'friday'])",
+            },
+            daysOfTheMonth: {
+              type: "array",
+              items: { type: "number" },
+              description:
+                "Days of the month for monthly recurrence (e.g., [1, 15])",
+            },
+          },
+          required: ["frequency"],
+        },
       },
       required: ["id"],
     },
@@ -430,6 +646,59 @@ const tools = [
         },
       },
       required: ["id"],
+    },
+  },
+  {
+    name: "reminder_batch_create",
+    description:
+      "Create multiple reminders in a single transaction for better performance",
+    inputSchema: {
+      type: "object",
+      properties: {
+        reminders: {
+          type: "array",
+          description: "Array of reminders to create",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string", description: "Reminder title" },
+              list: { type: "string", description: "Reminder list name or ID" },
+              due: { type: "string", description: "Due date/time" },
+              notes: { type: "string", description: "Notes" },
+              priority: {
+                type: "number",
+                description: "Priority (0=none, 1=high, 5=medium, 9=low)",
+              },
+              url: {
+                type: "string",
+                description: "URL associated with reminder",
+              },
+              alarm: {
+                type: "array",
+                items: { type: "number" },
+                description: "Alarm minutes before due",
+              },
+              recurrence: {
+                type: "object",
+                properties: {
+                  frequency: {
+                    type: "string",
+                    enum: ["daily", "weekly", "monthly", "yearly"],
+                  },
+                  interval: { type: "number" },
+                  endDate: { type: "string" },
+                  occurrenceCount: { type: "number" },
+                  daysOfTheWeek: { type: "array", items: { type: "string" } },
+                  daysOfTheMonth: { type: "array", items: { type: "number" } },
+                },
+                required: ["frequency"],
+              },
+            },
+            required: ["title"],
+          },
+        },
+      },
+      required: ["reminders"],
     },
   },
 
@@ -698,11 +967,15 @@ async function handleTool(name, args) {
       if (targetCalendar) cliArgs.push("--calendar", targetCalendar);
       if (args.location) cliArgs.push("--location", args.location);
       if (args.notes) cliArgs.push("--notes", args.notes);
+      if (args.url) cliArgs.push("--url", args.url);
       if (args.allDay) cliArgs.push("--all-day");
       if (args.alarm) {
         for (const minutes of args.alarm) {
           cliArgs.push("--alarm", String(minutes));
         }
+      }
+      if (args.recurrence) {
+        cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
       }
       return await runCLI("calendar-cli", cliArgs);
     }
@@ -726,6 +999,11 @@ async function handleTool(name, args) {
       if (args.end) cliArgs.push("--end", args.end);
       if (args.location) cliArgs.push("--location", args.location);
       if (args.notes) cliArgs.push("--notes", args.notes);
+      if (args.url) cliArgs.push("--url", args.url);
+      if (args.recurrence) {
+        cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
+      }
+      if (args.futureEvents) cliArgs.push("--future-events");
       return await runCLI("calendar-cli", cliArgs);
     }
 
@@ -743,6 +1021,34 @@ async function handleTool(name, args) {
       }
 
       return await runCLI("calendar-cli", ["delete", "--id", args.id]);
+    }
+
+    case "calendar_batch_create": {
+      if (!args.events || !Array.isArray(args.events) || args.events.length === 0) {
+        throw new Error("Events array is required and cannot be empty");
+      }
+
+      // Validate all calendars before proceeding
+      for (const event of args.events) {
+        if (event.calendar) {
+          await validateCalendarForWrite(event.calendar);
+        }
+      }
+
+      // Get default calendar for events without one specified
+      const defaultCalendar = await getDefaultCalendar();
+
+      // Transform events to include default calendar if not specified
+      const eventsWithDefaults = args.events.map((event) => ({
+        ...event,
+        calendar: event.calendar || defaultCalendar,
+      }));
+
+      return await runCLI("calendar-cli", [
+        "batch-create",
+        "--json",
+        JSON.stringify(eventsWithDefaults),
+      ]);
     }
 
     // Reminder tools
@@ -841,6 +1147,9 @@ async function handleTool(name, args) {
           cliArgs.push("--alarm", String(minutes));
         }
       }
+      if (args.recurrence) {
+        cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
+      }
       return await runCLI("reminder-cli", cliArgs);
     }
 
@@ -881,6 +1190,9 @@ async function handleTool(name, args) {
       if (args.notes) cliArgs.push("--notes", args.notes);
       if (args.priority !== undefined)
         cliArgs.push("--priority", String(args.priority));
+      if (args.recurrence) {
+        cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
+      }
       return await runCLI("reminder-cli", cliArgs);
     }
 
@@ -898,6 +1210,38 @@ async function handleTool(name, args) {
       }
 
       return await runCLI("reminder-cli", ["delete", "--id", args.id]);
+    }
+
+    case "reminder_batch_create": {
+      if (
+        !args.reminders ||
+        !Array.isArray(args.reminders) ||
+        args.reminders.length === 0
+      ) {
+        throw new Error("Reminders array is required and cannot be empty");
+      }
+
+      // Validate all lists before proceeding
+      for (const reminder of args.reminders) {
+        if (reminder.list) {
+          await validateReminderListForWrite(reminder.list);
+        }
+      }
+
+      // Get default list for reminders without one specified
+      const defaultList = await getDefaultReminderList();
+
+      // Transform reminders to include default list if not specified
+      const remindersWithDefaults = args.reminders.map((reminder) => ({
+        ...reminder,
+        list: reminder.list || defaultList,
+      }));
+
+      return await runCLI("reminder-cli", [
+        "batch-create",
+        "--json",
+        JSON.stringify(remindersWithDefaults),
+      ]);
     }
 
     // Contact tools (no filtering for contacts by default, but groups could be filtered)
