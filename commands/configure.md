@@ -66,10 +66,27 @@ Edit this file to modify access. Restart Claude Code after changes.
 
 1. First, call `calendar_list` and `reminder_lists` to get available options
 2. Check if `~/.claude/apple-pim.local.md` exists and read current settings
-3. Ask the user:
-   - Which calendars should be accessible? (multi-select)
-   - Which reminder lists should be accessible? (multi-select)
+3. **Plan the questions carefully:**
+   - AskUserQuestion allows max 4 options per question
+   - Calculate how many questions needed: `ceil(item_count / 4)`
+   - **CRITICAL: Create a checklist of ALL items and verify each one is assigned to a question**
+   - Group logically (e.g., personal calendars, subscriptions, work-related)
+4. Ask the user:
+   - First ask: "All items" vs "Select specific" to simplify if user wants everything
+   - If selecting specific: present ALL calendars across multiple questions (multi-select)
+   - Present ALL reminder lists across multiple questions (multi-select)
    - Which calendar should be the default for new events?
    - Which list should be the default for new reminders?
-4. Write the configuration file
-5. Display a summary and remind user to restart Claude Code
+5. **Verify before writing:** Double-check that user was asked about every calendar and reminder list
+6. Write the configuration file
+7. Display a summary and remind user to restart Claude Code
+
+## Important: Preventing Missed Items
+
+Before presenting options to the user, explicitly list out:
+- Total number of calendars found: X
+- Total number of reminder lists found: Y
+- Questions needed for calendars: ceil(X/4)
+- Questions needed for reminders: ceil(Y/4)
+
+Then verify your questions cover all items. Missing items means the user can't configure them!
