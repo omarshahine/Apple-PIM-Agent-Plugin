@@ -663,8 +663,8 @@ struct UpdateEvent: AsyncParsableCommand {
             }
         }
 
-        // Use futureEvents span if updating a recurring event or if flag is set
-        let span: EKSpan = (futureEvents || event.hasRecurrenceRules) ? .futureEvents : .thisEvent
+        // Only use futureEvents span when explicitly requested by user
+        let span: EKSpan = futureEvents ? .futureEvents : .thisEvent
         try eventStore.save(event, span: span)
 
         outputJSON([
