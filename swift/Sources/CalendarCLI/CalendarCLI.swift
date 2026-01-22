@@ -15,6 +15,7 @@ struct CalendarCLI: AsyncParsableCommand {
             CreateEvent.self,
             UpdateEvent.self,
             DeleteEvent.self,
+            BatchCreateEvent.self,
         ]
     )
 }
@@ -234,6 +235,88 @@ func participantRoleString(_ role: EKParticipantRole) -> String {
     }
 }
 
+// MARK: - Recurrence Helpers
+
+struct RecurrenceJSON: Codable {
+    let frequency: String
+    let interval: Int?
+    let endDate: String?
+    let occurrenceCount: Int?
+    let daysOfTheWeek: [String]?
+    let daysOfTheMonth: [Int]?
+}
+
+func dayStringToEKDay(_ day: String) -> EKRecurrenceDayOfWeek? {
+    switch day.lowercased() {
+    case "sunday", "sun": return EKRecurrenceDayOfWeek(.sunday)
+    case "monday", "mon": return EKRecurrenceDayOfWeek(.monday)
+    case "tuesday", "tue": return EKRecurrenceDayOfWeek(.tuesday)
+    case "wednesday", "wed": return EKRecurrenceDayOfWeek(.wednesday)
+    case "thursday", "thu": return EKRecurrenceDayOfWeek(.thursday)
+    case "friday", "fri": return EKRecurrenceDayOfWeek(.friday)
+    case "saturday", "sat": return EKRecurrenceDayOfWeek(.saturday)
+    default: return nil
+    }
+}
+
+func parseRecurrenceRule(_ json: String) -> EKRecurrenceRule? {
+    guard let data = json.data(using: .utf8),
+          let recurrence = try? JSONDecoder().decode(RecurrenceJSON.self, from: data) else {
+        return nil
+    }
+
+    // Parse frequency
+    let frequency: EKRecurrenceFrequency
+    switch recurrence.frequency.lowercased() {
+    case "daily": frequency = .daily
+    case "weekly": frequency = .weekly
+    case "monthly": frequency = .monthly
+    case "yearly": frequency = .yearly
+    default: return nil
+    }
+
+    // Parse interval (default: 1)
+    let interval = recurrence.interval ?? 1
+
+    // Parse end condition
+    var recurrenceEnd: EKRecurrenceEnd? = nil
+    if let endDateStr = recurrence.endDate, let endDate = parseDate(endDateStr) {
+        recurrenceEnd = EKRecurrenceEnd(end: endDate)
+    } else if let count = recurrence.occurrenceCount {
+        recurrenceEnd = EKRecurrenceEnd(occurrenceCount: count)
+    }
+
+    // Parse days of the week
+    var daysOfTheWeek: [EKRecurrenceDayOfWeek]? = nil
+    if let days = recurrence.daysOfTheWeek {
+        daysOfTheWeek = days.compactMap { dayStringToEKDay($0) }
+        if daysOfTheWeek?.isEmpty == true {
+            daysOfTheWeek = nil
+        }
+    }
+
+    // Parse days of the month
+    var daysOfTheMonth: [NSNumber]? = nil
+    if let days = recurrence.daysOfTheMonth {
+        daysOfTheMonth = days.map { NSNumber(value: $0) }
+        if daysOfTheMonth?.isEmpty == true {
+            daysOfTheMonth = nil
+        }
+    }
+
+    return EKRecurrenceRule(
+        recurrenceWith: frequency,
+        interval: interval,
+        daysOfTheWeek: daysOfTheWeek,
+        daysOfTheMonth: daysOfTheMonth,
+        monthsOfTheYear: nil,
+        weeksOfTheYear: nil,
+        daysOfTheYear: nil,
+        setPositions: nil,
+        end: recurrenceEnd
+    )
+}
+
 // MARK: - Commands
 
 struct ListCalendars: AsyncParsableCommand {
@@ -433,6 +516,9 @@ struct CreateEvent: AsyncParsableCommand {
     @Option(name: .long, help: "Alarm minutes before event (can specify multiple)")
     var alarm: [Int] = []
 
+    @Option(name: .long, help: "Recurrence rule as JSON (e.g., '{\"frequency\":\"weekly\",\"interval\":1}')")
+    var recurrence: String?
+
     func run() async throws {
         try await requestCalendarAccess()
 
@@ -483,6 +569,11 @@ struct CreateEvent: AsyncParsableCommand {
             event.addAlarm(alarm)
         }
 
+        // Add recurrence rule if specified
+        if let recurrenceJSON = recurrence, let rule = parseRecurrenceRule(recurrenceJSON) {
+            event.addRecurrenceRule(rule)
+        }
+
         try eventStore.save(event, span: .thisEvent)
 
         outputJSON([
@@ -517,6 +608,15 @@ struct UpdateEvent: AsyncParsableCommand {
     @Option(name: .long, help: "New notes")
     var notes: String?
 
+    @Option(name: .long, help: "New URL")
+    var url: String?
+
+    @Option(name: .long, help: "Recurrence rule as JSON (e.g., '{\"frequency\":\"weekly\",\"interval\":1}')")
+    var recurrence: String?
+
+    @Flag(name: .long, help: "Apply changes to all future events in a recurring series")
+    var futureEvents: Bool = false
+
     func run() async throws {
         try await requestCalendarAccess()
 
@@ -545,8 +645,27 @@ struct UpdateEvent: AsyncParsableCommand {
         if let newNotes = notes {
             event.notes = newNotes
         }
+        if let urlStr = url, let eventUrl = URL(string: urlStr) {
+            event.url = eventUrl
+        }
 
-        try eventStore.save(event, span: .thisEvent)
+        // Update recurrence rule if specified
+        if let recurrenceJSON = recurrence {
+            // Remove existing recurrence rules
+            if let existingRules = event.recurrenceRules {
+                for rule in existingRules {
+                    event.removeRecurrenceRule(rule)
+                }
+            }
+            // Add new recurrence rule
+            if let rule = parseRecurrenceRule(recurrenceJSON) {
+                event.addRecurrenceRule(rule)
+            }
+        }
+
+        // Only use futureEvents span when explicitly requested by user
+        let span: EKSpan = futureEvents ? .futureEvents : .thisEvent
+        try eventStore.save(event, span: span)
 
         outputJSON([
             "success": true,
@@ -579,6 +698,134 @@ struct DeleteEvent: AsyncParsableCommand {
             "success": true,
             "message": "Event deleted successfully",
             "deletedEvent": eventInfo
+        ])
+    }
+}
+
+// MARK: - Batch Operations
+
+struct BatchEventInput: Codable {
+    let title: String
+    let start: String
+    let end: String?
+    let duration: Int?
+    let calendar: String?
+    let location: String?
+    let notes: String?
+    let url: String?
+    let allDay: Bool?
+    let alarm: [Int]?
+    let recurrence: RecurrenceJSON?
+}
+
+struct BatchCreateEvent: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "batch-create",
+        abstract: "Create multiple calendar events in a single transaction"
+    )
+
+    @Option(name: .long, help: "JSON array of events to create")
+    var json: String
+
+    func run() async throws {
+        try await requestCalendarAccess()
+
+        guard let data = json.data(using: .utf8),
+              let events = try? JSONDecoder().decode([BatchEventInput].self, from: data) else {
+            throw CLIError.invalidInput("Invalid JSON format for events array")
+        }
+
+        if events.isEmpty {
+            throw CLIError.invalidInput("Events array cannot be empty")
+        }
+
+        var createdEvents: [[String: Any]] = []
+        var errors: [[String: Any]] = []
+
+        for (index, eventInput) in events.enumerated() {
+            do {
+                guard let startDate = parseDate(eventInput.start) else {
+                    throw CLIError.invalidInput("Invalid start date: \(eventInput.start)")
+                }
+
+                let endDate: Date
+                if let endStr = eventInput.end {
+                    guard let parsed = parseDate(endStr) else {
+                        throw CLIError.invalidInput("Invalid end date: \(endStr)")
+                    }
+                    endDate = parsed
+                } else if let durationMinutes = eventInput.duration {
+                    endDate = Calendar.current.date(byAdding: .minute, value: durationMinutes, to: startDate) ?? startDate
+                } else {
+                    endDate = Calendar.current.date(byAdding: .hour, value: 1, to: startDate) ?? startDate
+                }
+
+                let event = EKEvent(eventStore: eventStore)
+                event.title = eventInput.title
+                event.startDate = startDate
+                event.endDate = endDate
+                event.isAllDay = eventInput.allDay ?? false
+
+                if let calendarName = eventInput.calendar {
+                    let calendars = eventStore.calendars(for: .event)
+                    guard let cal = calendars.first(where: { $0.calendarIdentifier == calendarName || $0.title.lowercased() == calendarName.lowercased() }) else {
+                        throw CLIError.notFound("Calendar not found: \(calendarName)")
+                    }
+                    event.calendar = cal
+                } else {
+                    event.calendar = eventStore.defaultCalendarForNewEvents
+                }
+
+                if let loc = eventInput.location {
+                    event.location = loc
+                }
+                if let n = eventInput.notes {
+                    event.notes = n
+                }
+                if let urlStr = eventInput.url, let eventUrl = URL(string: urlStr) {
+                    event.url = eventUrl
+                }
+
+                if let alarms = eventInput.alarm {
+                    for minutes in alarms {
+                        let alarm = EKAlarm(relativeOffset: TimeInterval(-minutes * 60))
+                        event.addAlarm(alarm)
+                    }
+                }
+
+                // Add recurrence rule if specified
+                if let recurrenceInput = eventInput.recurrence {
+                    let recurrenceJSON = try JSONEncoder().encode(recurrenceInput)
+                    if let recurrenceStr = String(data: recurrenceJSON, encoding: .utf8),
+                       let rule = parseRecurrenceRule(recurrenceStr) {
+                        event.addRecurrenceRule(rule)
+                    }
+                }
+
+                // Save with commit: false to batch changes
+                try eventStore.save(event, span: .thisEvent, commit: false)
+                createdEvents.append(eventToDict(event))
+            } catch {
+                errors.append([
+                    "index": index,
+                    "title": eventInput.title,
+                    "error": error.localizedDescription
+                ])
+            }
+        }
+
+        // Commit all changes at once
+        if !createdEvents.isEmpty {
+            try eventStore.commit()
+        }
+
+        outputJSON([
+            "success": errors.isEmpty,
+            "message": "Batch create completed",
+            "created": createdEvents,
+            "createdCount": createdEvents.count,
+            "errors": errors,
+            "errorCount": errors.count
         ])
     }
 }
