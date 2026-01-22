@@ -1,0 +1,16 @@
+{
+  "name": "apple-pim",
+  "owner": {
+    "name": "Omar Shahine"
+  },
+  "plugins": [
+    {
+      "name": "apple-pim",
+      "source": ".",
+      "description": "Native macOS integration for Calendar, Reminders, and Contacts using EventKit and Contacts frameworks",
+      "version": "1.1.0",
+      "keywords": ["calendar", "reminders", "contacts", "eventkit", "macos", "pim", "scheduling"],
+      "category": "productivity"
+    }
+  ]
+}
