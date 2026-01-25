@@ -882,7 +882,7 @@ async function handleTool(name, args) {
         if (!allowed) {
           throw new Error(
             `Calendar '${args.calendar}' is not in your allowed list.\n` +
-              `Edit ~/.claude/apple-pim.local.md to add it, then restart Claude Code.`
+              `Run /apple-pim:configure to add it, then restart Claude Code.`
           );
         }
       }
@@ -918,7 +918,7 @@ async function handleTool(name, args) {
         if (!allowed) {
           throw new Error(
             `This event belongs to calendar '${result.calendar}' which is not in your allowed list.\n` +
-              `Edit ~/.claude/apple-pim.local.md to add it, then restart Claude Code.`
+              `Run /apple-pim:configure to add it, then restart Claude Code.`
           );
         }
       }
@@ -932,7 +932,7 @@ async function handleTool(name, args) {
         if (!allowed) {
           throw new Error(
             `Calendar '${args.calendar}' is not in your allowed list.\n` +
-              `Edit ~/.claude/apple-pim.local.md to add it, then restart Claude Code.`
+              `Run /apple-pim:configure to add it, then restart Claude Code.`
           );
         }
       }
@@ -988,7 +988,7 @@ async function handleTool(name, args) {
         if (!allowed) {
           throw new Error(
             `This event belongs to calendar '${event.calendar}' which is not in your allowed list.\n` +
-              `Edit ~/.claude/apple-pim.local.md to add it, then restart Claude Code.`
+              `Run /apple-pim:configure to add it, then restart Claude Code.`
           );
         }
       }
@@ -1015,7 +1015,7 @@ async function handleTool(name, args) {
         if (!allowed) {
           throw new Error(
             `This event belongs to calendar '${event.calendar}' which is not in your allowed list.\n` +
-              `Edit ~/.claude/apple-pim.local.md to add it, then restart Claude Code.`
+              `Run /apple-pim:configure to add it, then restart Claude Code.`
           );
         }
       }
@@ -1068,7 +1068,7 @@ async function handleTool(name, args) {
         if (!allowed) {
           throw new Error(
             `Reminder list '${args.list}' is not in your allowed list.\n` +
-              `Edit ~/.claude/apple-pim.local.md to add it, then restart Claude Code.`
+              `Run /apple-pim:configure to add it, then restart Claude Code.`
           );
         }
       }
@@ -1094,7 +1094,7 @@ async function handleTool(name, args) {
         if (!allowed) {
           throw new Error(
             `This reminder belongs to list '${result.list}' which is not in your allowed list.\n` +
-              `Edit ~/.claude/apple-pim.local.md to add it, then restart Claude Code.`
+              `Run /apple-pim:configure to add it, then restart Claude Code.`
           );
         }
       }
@@ -1108,7 +1108,7 @@ async function handleTool(name, args) {
         if (!allowed) {
           throw new Error(
             `Reminder list '${args.list}' is not in your allowed list.\n` +
-              `Edit ~/.claude/apple-pim.local.md to add it, then restart Claude Code.`
+              `Run /apple-pim:configure to add it, then restart Claude Code.`
           );
         }
       }
@@ -1161,7 +1161,7 @@ async function handleTool(name, args) {
         if (!allowed) {
           throw new Error(
             `This reminder belongs to list '${reminder.list}' which is not in your allowed list.\n` +
-              `Edit ~/.claude/apple-pim.local.md to add it, then restart Claude Code.`
+              `Run /apple-pim:configure to add it, then restart Claude Code.`
           );
         }
       }
@@ -1179,7 +1179,7 @@ async function handleTool(name, args) {
         if (!allowed) {
           throw new Error(
             `This reminder belongs to list '${reminder.list}' which is not in your allowed list.\n` +
-              `Edit ~/.claude/apple-pim.local.md to add it, then restart Claude Code.`
+              `Run /apple-pim:configure to add it, then restart Claude Code.`
           );
         }
       }
@@ -1204,7 +1204,7 @@ async function handleTool(name, args) {
         if (!allowed) {
           throw new Error(
             `This reminder belongs to list '${reminder.list}' which is not in your allowed list.\n` +
-              `Edit ~/.claude/apple-pim.local.md to add it, then restart Claude Code.`
+              `Run /apple-pim:configure to add it, then restart Claude Code.`
           );
         }
       }

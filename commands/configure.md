@@ -5,6 +5,7 @@ allowed-tools:
   - mcp__plugin_apple-pim_apple-pim__reminder_lists
   - Write
   - Read
+  - Glob
   - AskUserQuestion
 ---
 
@@ -12,13 +13,25 @@ allowed-tools:
 
 Help the user configure which calendars and reminder lists the apple-pim plugin can access.
 
+## Finding the Plugin Path
+
+First, locate the plugin directory by searching for the plugin.json file:
+```
+Glob: ~/.claude/plugins/**/apple-pim/**/plugin.json
+```
+
+The config file goes in the `data/` folder next to where `plugin.json` is found.
+For example, if plugin.json is at `~/.claude/plugins/cache/apple-pim/apple-pim/1.0.0/plugin.json`,
+the config file goes at `~/.claude/plugins/cache/apple-pim/apple-pim/1.0.0/data/config.local.md`.
+
 ## Process
 
-1. **List available calendars and reminder lists** using the MCP tools
-2. **Read existing config** from `~/.claude/apple-pim.local.md` if it exists
-3. **Ask user which to allow** using AskUserQuestion with multi-select options
-4. **Write config file** to `~/.claude/apple-pim.local.md`
-5. **Remind user to restart** Claude Code for changes to take effect
+1. **Find plugin path** using Glob to locate plugin.json
+2. **List available calendars and reminder lists** using the MCP tools
+3. **Read existing config** from `<plugin_path>/data/config.local.md` if it exists
+4. **Ask user which to allow** using AskUserQuestion with multi-select options
+5. **Write config file** to `<plugin_path>/data/config.local.md`
+6. **Remind user to restart** Claude Code for changes to take effect
 
 ## Configuration File Format
 
@@ -65,7 +78,7 @@ Edit this file to modify access. Restart Claude Code after changes.
 ## Workflow
 
 1. First, call `calendar_list` and `reminder_lists` to get available options
-2. Check if `~/.claude/apple-pim.local.md` exists and read current settings
+2. Check if `<plugin_path>/data/config.local.md` exists and read current settings
 3. **Plan the questions carefully:**
    - AskUserQuestion allows max 4 options per question
    - Calculate how many questions needed: `ceil(item_count / 4)`

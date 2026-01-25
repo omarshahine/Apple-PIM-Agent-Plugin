@@ -88,7 +88,7 @@ This will:
 
 ### Manual Configuration
 
-Create `~/.claude/apple-pim.local.md` with YAML frontmatter:
+Create `data/config.local.md` in the plugin directory with YAML frontmatter:
 
 ```yaml
 ---
@@ -128,6 +128,7 @@ default_reminder_list: "Reminders"
 
 ### Notes
 
+- Config is stored in the plugin's `data/` folder (excluded from git via `.gitignore`)
 - Config is read when Claude Code starts - restart after changes
 - No config file = all calendars/lists accessible (backwards compatible)
 - Write operations to blocked calendars fail with a helpful error message

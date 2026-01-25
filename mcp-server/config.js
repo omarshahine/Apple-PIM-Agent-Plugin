@@ -1,14 +1,15 @@
 /**
  * Configuration module for apple-pim plugin
- * Loads user preferences from ~/.claude/apple-pim.local.md
+ * Loads user preferences from <plugin>/data/config.local.md
  */
 
 import { readFile } from "fs/promises";
-import { homedir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 import yaml from "js-yaml";
 
-const CONFIG_PATH = join(homedir(), ".claude", "apple-pim.local.md");
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const CONFIG_PATH = join(__dirname, "..", "data", "config.local.md");
 
 // Default config when no file exists or parsing fails
 const DEFAULT_CONFIG = {
@@ -22,7 +23,7 @@ const DEFAULT_CONFIG = {
 let cachedConfig = null;
 
 /**
- * Load and parse configuration from ~/.claude/apple-pim.local.md
+ * Load and parse configuration from <plugin>/data/config.local.md
  * Returns default config if file doesn't exist or can't be parsed
  */
 export async function loadConfig() {
@@ -252,7 +253,7 @@ export async function validateCalendarForWrite(name) {
   if (!allowed) {
     throw new Error(
       `Calendar '${name}' is not in your allowed list.\n` +
-        `Edit ~/.claude/apple-pim.local.md to add it, then restart Claude Code.`
+        `Run /apple-pim:configure to add it, then restart Claude Code.`
     );
   }
 }
@@ -269,7 +270,7 @@ export async function validateReminderListForWrite(name) {
   if (!allowed) {
     throw new Error(
       `Reminder list '${name}' is not in your allowed list.\n` +
-        `Edit ~/.claude/apple-pim.local.md to add it, then restart Claude Code.`
+        `Run /apple-pim:configure to add it, then restart Claude Code.`
     );
   }
 }
