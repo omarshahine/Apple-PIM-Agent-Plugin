@@ -243,7 +243,7 @@ export async function validateCalendarForWrite(name) {
   if (!allowed) {
     throw new Error(
       `Calendar '${name}' is not in your allowed list.\n` +
-        `Run /apple-pim:configure to add it, then restart Claude Code.`
+        `Run /apple-pim:configure to add it.`
     );
   }
 }
@@ -260,7 +260,7 @@ export async function validateReminderListForWrite(name) {
   if (!allowed) {
     throw new Error(
       `Reminder list '${name}' is not in your allowed list.\n` +
-        `Run /apple-pim:configure to add it, then restart Claude Code.`
+        `Run /apple-pim:configure to add it.`
     );
   }
 }

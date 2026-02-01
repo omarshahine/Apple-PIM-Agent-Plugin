@@ -31,7 +31,7 @@ the config file goes at `~/.claude/plugins/cache/apple-pim/apple-pim/1.0.0/data/
 3. **Read existing config** from `<plugin_path>/data/config.local.md` if it exists
 4. **Ask user which to allow** using AskUserQuestion with multi-select options
 5. **Write config file** to `<plugin_path>/data/config.local.md`
-6. **Remind user to restart** Claude Code for changes to take effect
+6. **Confirm changes** are effective immediately (no restart needed)
 
 ## Configuration File Format
 
@@ -72,7 +72,7 @@ events and reminders are created when no specific calendar/list is specified.
 
 ## Changes
 
-Edit this file to modify access. Restart Claude Code after changes.
+Edit this file to modify access. Changes take effect immediately.
 ```
 
 ## Workflow
@@ -92,7 +92,7 @@ Edit this file to modify access. Restart Claude Code after changes.
    - Which list should be the default for new reminders?
 5. **Verify before writing:** Double-check that user was asked about every calendar and reminder list
 6. Write the configuration file
-7. Display a summary and remind user to restart Claude Code
+7. Display a summary (changes take effect immediately)
 
 ## Important: Preventing Missed Items
 
