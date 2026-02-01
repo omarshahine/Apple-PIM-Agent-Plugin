@@ -1,6 +1,6 @@
 {
   "name": "apple-pim",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Native macOS integration for Calendar, Reminders, and Contacts using EventKit and Contacts frameworks",
   "author": {
     "name": "Omar Shahine",
