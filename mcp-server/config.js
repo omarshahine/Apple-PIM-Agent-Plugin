@@ -20,47 +20,37 @@ const DEFAULT_CONFIG = {
   default_reminder_list: null,
 };
 
-let cachedConfig = null;
-
 /**
  * Load and parse configuration from <plugin>/data/config.local.md
  * Returns default config if file doesn't exist or can't be parsed
+ * Note: Config is loaded fresh on each call to pick up file changes without restart
  */
 export async function loadConfig() {
-  if (cachedConfig) {
-    return cachedConfig;
-  }
-
   try {
     const content = await readFile(CONFIG_PATH, "utf-8");
 
     // Extract YAML frontmatter between --- markers
     const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
     if (!frontmatterMatch) {
-      cachedConfig = DEFAULT_CONFIG;
-      return cachedConfig;
+      return DEFAULT_CONFIG;
     }
 
     const parsed = yaml.load(frontmatterMatch[1]);
     if (!parsed || typeof parsed !== "object") {
-      cachedConfig = DEFAULT_CONFIG;
-      return cachedConfig;
+      return DEFAULT_CONFIG;
     }
 
     // Normalize config structure
-    cachedConfig = {
+    return {
       calendars: normalizeFilterConfig(parsed.calendars),
       reminders: normalizeFilterConfig(parsed.reminders),
       contacts: normalizeFilterConfig(parsed.contacts),
       default_calendar: parsed.default_calendar || null,
       default_reminder_list: parsed.default_reminder_list || null,
     };
-
-    return cachedConfig;
   } catch (error) {
     // File doesn't exist or can't be read - use defaults
-    cachedConfig = DEFAULT_CONFIG;
-    return cachedConfig;
+    return DEFAULT_CONFIG;
   }
 }
 
@@ -284,8 +274,9 @@ export function getConfigPath() {
 }
 
 /**
- * Clear the cached config (useful for testing or forcing reload)
+ * Clear the cached config (no-op, kept for backwards compatibility)
+ * Config is now loaded fresh on each call
  */
 export function clearConfigCache() {
-  cachedConfig = null;
+  // No-op - config is now loaded fresh on each call
 }
