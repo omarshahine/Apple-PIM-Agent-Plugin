@@ -106,7 +106,18 @@ export async function isContactGroupAllowed(name, id = null) {
 }
 
 /**
+ * Strip emoji prefixes from a string for fuzzy matching
+ * Handles common emoji-prefixed list names like "✈️ Travel" or "📦 Orders"
+ */
+function stripEmojiPrefix(str) {
+  if (!str) return "";
+  // Strip leading emojis and whitespace (Unicode emoji pattern)
+  return str.replace(/^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}\s]+/u, "").toLowerCase();
+}
+
+/**
  * Check if an item is allowed based on a filter config
+ * Supports exact match, ID match, and emoji-stripped fuzzy match
  */
 function isItemAllowed(filterConfig, name, id) {
   const { mode, items } = filterConfig;
@@ -115,12 +126,19 @@ function isItemAllowed(filterConfig, name, id) {
     return true;
   }
 
+  const normalizedName = stripEmojiPrefix(name);
+
   // Check if name or id matches any item in the list
-  const matches = items.some(
-    (item) =>
-      item.toLowerCase() === name?.toLowerCase() ||
-      item.toLowerCase() === id?.toLowerCase()
-  );
+  const matches = items.some((item) => {
+    const itemLower = item.toLowerCase();
+    const normalizedItem = stripEmojiPrefix(item);
+
+    return (
+      itemLower === name?.toLowerCase() ||       // Exact match (case-insensitive)
+      itemLower === id?.toLowerCase() ||          // ID match
+      normalizedItem === normalizedName           // Emoji-stripped match
+    );
+  });
 
   if (mode === "allowlist") {
     return matches;
