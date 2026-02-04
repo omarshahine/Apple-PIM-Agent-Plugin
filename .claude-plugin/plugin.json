@@ -1,6 +1,6 @@
 {
   "name": "apple-pim",
-  "version": "1.1.2",
+  "version": "1.0.2",
   "description": "Native macOS integration for Calendar, Reminders, and Contacts using EventKit and Contacts frameworks",
   "author": {
     "name": "Omar Shahine",
@@ -8,5 +8,12 @@
   },
   "license": "MIT",
   "keywords": ["calendar", "reminders", "contacts", "eventkit", "macos", "pim"],
-  "mcpServers": "./.mcp.json"
+  "mcpServers": {
+    "apple-pim": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/server.js"],
+      "env": {}
+    }
+  }
 }
