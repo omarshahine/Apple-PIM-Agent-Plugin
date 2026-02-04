@@ -20668,6 +20668,8 @@ var StdioServerTransport = class {
 import { spawn } from "child_process";
 import { dirname as dirname2, join as join2 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
+import { existsSync } from "fs";
+import { homedir } from "os";
 
 // config.js
 import { readFile } from "fs/promises";
@@ -23518,7 +23520,23 @@ Run /apple-pim:configure to add it.`
 
 // server.js
 var __dirname2 = dirname2(fileURLToPath2(import.meta.url));
-var SWIFT_BIN_DIR = join2(__dirname2, "..", "swift", ".build", "release");
+function findSwiftBinDir() {
+  const locations = [
+    // 1. Relative to bundled server (plugin cache)
+    join2(__dirname2, "..", "swift", ".build", "release"),
+    // 2. Plugin root swift folder (if not in dist/)
+    join2(__dirname2, "..", "..", "swift", ".build", "release"),
+    // 3. Source repo (fallback for development)
+    join2(homedir(), "GitHub", "Apple-PIM-Agent-Plugin", "swift", ".build", "release")
+  ];
+  for (const loc of locations) {
+    if (existsSync(join2(loc, "reminder-cli"))) {
+      return loc;
+    }
+  }
+  return locations[0];
+}
+var SWIFT_BIN_DIR = findSwiftBinDir();
 function relativeDateString(daysOffset) {
   const date4 = /* @__PURE__ */ new Date();
   date4.setDate(date4.getDate() + daysOffset);

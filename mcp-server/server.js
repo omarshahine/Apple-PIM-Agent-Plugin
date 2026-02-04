@@ -9,6 +9,8 @@ import {
 import { spawn } from "child_process";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
+import { existsSync } from "fs";
+import { homedir } from "os";
 import {
   loadConfig,
   filterCalendars,
@@ -24,7 +26,29 @@ import {
 } from "./config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SWIFT_BIN_DIR = join(__dirname, "..", "swift", ".build", "release");
+
+// Find Swift CLIs - check multiple locations in order of preference
+function findSwiftBinDir() {
+  const locations = [
+    // 1. Relative to bundled server (plugin cache)
+    join(__dirname, "..", "swift", ".build", "release"),
+    // 2. Plugin root swift folder (if not in dist/)
+    join(__dirname, "..", "..", "swift", ".build", "release"),
+    // 3. Source repo (fallback for development)
+    join(homedir(), "GitHub", "Apple-PIM-Agent-Plugin", "swift", ".build", "release"),
+  ];
+
+  for (const loc of locations) {
+    if (existsSync(join(loc, "reminder-cli"))) {
+      return loc;
+    }
+  }
+
+  // Return first location as default (will fail with helpful error)
+  return locations[0];
+}
+
+const SWIFT_BIN_DIR = findSwiftBinDir();
 
 // Helper to calculate relative date string from days offset
 function relativeDateString(daysOffset) {
