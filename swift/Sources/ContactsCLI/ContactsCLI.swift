@@ -105,12 +105,12 @@ func contactToDict(_ contact: CNContact, brief: Bool = false) -> [String: Any] {
     ]
 
     if brief {
-        // Include all emails and phones as flat arrays for brief listing
+        // Include primary email and phone as single strings for brief listing
         if !contact.emailAddresses.isEmpty {
-            dict["emails"] = contact.emailAddresses.map { $0.value as String }
+            dict["email"] = contact.emailAddresses[0].value as String
         }
         if !contact.phoneNumbers.isEmpty {
-            dict["phones"] = contact.phoneNumbers.map { $0.value.stringValue }
+            dict["phone"] = contact.phoneNumbers[0].value.stringValue
         }
         if !contact.organizationName.isEmpty {
             dict["organization"] = contact.organizationName

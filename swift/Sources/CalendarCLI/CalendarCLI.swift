@@ -183,7 +183,13 @@ func ruleToDict(_ rule: EKRecurrenceRule) -> [String: Any] {
         }
     }
     if let days = rule.daysOfTheWeek, !days.isEmpty {
-        dict["daysOfTheWeek"] = days.map { weekdayString($0.dayOfTheWeek) }
+        dict["daysOfTheWeek"] = days.map { day -> [String: Any] in
+            var dayDict: [String: Any] = ["day": weekdayString(day.dayOfTheWeek)]
+            if day.weekNumber != 0 {
+                dayDict["weekNumber"] = day.weekNumber
+            }
+            return dayDict
+        }
     }
     if let days = rule.daysOfTheMonth, !days.isEmpty {
         dict["daysOfTheMonth"] = days.map { $0.intValue }
