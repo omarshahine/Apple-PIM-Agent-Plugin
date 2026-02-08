@@ -178,8 +178,30 @@ try await contactStore.requestAccess(for: .contacts)
 ### Calendar Management
 1. **Use default calendar for new events** when user doesn't specify
 2. **Preserve recurrence rules** when updating recurring events
-3. **Handle `.thisEvent` vs `.futureEvents`** span for recurring event edits
+3. **Handle `.thisEvent` vs `.futureEvents`** span for recurring event edits (see EKSpan below)
 4. **Check `allowsContentModifications`** before attempting writes
+
+### EKSpan for Recurring Events
+
+EventKit uses `EKSpan` to control which occurrences are affected by save/delete operations:
+
+| Span | Effect | When to Use |
+|------|--------|-------------|
+| `.thisEvent` | Affects only the single occurrence | Default for delete and update. Use when cancelling one meeting. |
+| `.futureEvents` | Affects this and all future occurrences | Use when ending a series or changing the pattern going forward. |
+
+- **Delete**: Default is `.thisEvent`. Pass `--future-events` to use `.futureEvents`.
+- **Update**: Default is `.thisEvent`. Pass `--future-events` to apply changes to all future occurrences.
+- **Remove recurrence**: Pass `recurrence: { frequency: "none" }` with `--future-events` to convert a recurring event into a single event.
+
+### Recurrence Output
+
+When reading events/reminders, the `recurrence` array includes:
+- `frequency`: daily, weekly, monthly, yearly
+- `interval`: repeat every N periods
+- `daysOfTheWeek`: which days (e.g., `["monday", "wednesday", "friday"]`)
+- `daysOfTheMonth`: which days of month (e.g., `[1, 15]`)
+- `endDate` or `occurrenceCount`: when the series ends
 
 ### Reminder Management
 1. **Default to incomplete reminders** when listing

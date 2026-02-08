@@ -272,7 +272,8 @@ const tools = [
   },
   {
     name: "calendar_update",
-    description: "Update an existing calendar event",
+    description:
+      "Update an existing calendar event. For recurring events, use futureEvents to apply changes to all future occurrences. To remove recurrence and make it a single event, set recurrence.frequency to 'none'.",
     inputSchema: {
       type: "object",
       properties: {
@@ -306,12 +307,14 @@ const tools = [
         },
         recurrence: {
           type: "object",
-          description: "New recurrence rule (replaces existing)",
+          description:
+            "New recurrence rule (replaces existing). Set frequency to 'none' to remove recurrence entirely.",
           properties: {
             frequency: {
               type: "string",
-              enum: ["daily", "weekly", "monthly", "yearly"],
-              description: "How often the event repeats",
+              enum: ["daily", "weekly", "monthly", "yearly", "none"],
+              description:
+                "How often the event repeats. Use 'none' to remove recurrence.",
             },
             interval: {
               type: "number",
@@ -343,7 +346,7 @@ const tools = [
         futureEvents: {
           type: "boolean",
           description:
-            "Apply changes to all future events in a recurring series (default: true for recurring events)",
+            "Apply changes to all future events in a recurring series. Default: false (only updates this occurrence).",
         },
       },
       required: ["id"],
@@ -351,13 +354,19 @@ const tools = [
   },
   {
     name: "calendar_delete",
-    description: "Delete a calendar event",
+    description:
+      "Delete a calendar event. Safe for recurring events — by default, only the single occurrence identified by the event ID is removed; the rest of the series is untouched. To delete this and all future occurrences, set futureEvents to true.",
     inputSchema: {
       type: "object",
       properties: {
         id: {
           type: "string",
           description: "Event ID to delete",
+        },
+        futureEvents: {
+          type: "boolean",
+          description:
+            "Delete this and all future occurrences of a recurring event. Default: false (only deletes the single occurrence).",
         },
       },
       required: ["id"],
@@ -594,7 +603,8 @@ const tools = [
   },
   {
     name: "reminder_update",
-    description: "Update an existing reminder",
+    description:
+      "Update an existing reminder. To remove recurrence, set recurrence.frequency to 'none'.",
     inputSchema: {
       type: "object",
       properties: {
@@ -620,12 +630,14 @@ const tools = [
         },
         recurrence: {
           type: "object",
-          description: "New recurrence rule (replaces existing)",
+          description:
+            "New recurrence rule (replaces existing). Set frequency to 'none' to remove recurrence entirely.",
           properties: {
             frequency: {
               type: "string",
-              enum: ["daily", "weekly", "monthly", "yearly"],
-              description: "How often the reminder repeats",
+              enum: ["daily", "weekly", "monthly", "yearly", "none"],
+              description:
+                "How often the reminder repeats. Use 'none' to remove recurrence.",
             },
             interval: {
               type: "number",
@@ -1044,7 +1056,9 @@ async function handleTool(name, args) {
         }
       }
 
-      return await runCLI("calendar-cli", ["delete", "--id", args.id]);
+      const deleteArgs = ["delete", "--id", args.id];
+      if (args.futureEvents) deleteArgs.push("--future-events");
+      return await runCLI("calendar-cli", deleteArgs);
     }
 
     case "calendar_batch_create": {

@@ -114,6 +114,14 @@ When creating events or reminders, always confirm the interpreted date/time with
 4. **Handle errors gracefully**: If an operation fails, explain why and suggest alternatives
 5. **Respect privacy**: Never share contact information without explicit request
 
+### Recurring Events
+When working with recurring events:
+- **Default delete is single-occurrence safe**: `calendar_delete` with just an `id` only removes that one occurrence. No need to ask extra confirmation about the series.
+- **"Cancel next Tuesday's meeting"** → Delete that single occurrence (default behavior, no special flags needed)
+- **"Stop my weekly standup" or "Delete the series"** → Use `futureEvents: true` on the earliest upcoming occurrence to end the series going forward
+- **"Make this a one-time event"** → Update with `recurrence: { frequency: "none" }` and `futureEvents: true` to remove recurrence from the whole series
+- When reading back events, the `recurrence` field now includes `daysOfTheWeek` and `daysOfTheMonth` so you can describe the full pattern (e.g., "repeats weekly on Monday, Wednesday, Friday")
+
 ### Creating Events
 When creating calendar events:
 - Always ask for title and time if not provided
