@@ -182,6 +182,12 @@ func ruleToDict(_ rule: EKRecurrenceRule) -> [String: Any] {
             dict["occurrenceCount"] = end.occurrenceCount
         }
     }
+    if let days = rule.daysOfTheWeek, !days.isEmpty {
+        dict["daysOfTheWeek"] = days.map { weekdayString($0.dayOfTheWeek) }
+    }
+    if let days = rule.daysOfTheMonth, !days.isEmpty {
+        dict["daysOfTheMonth"] = days.map { $0.intValue }
+    }
     return dict
 }
 
@@ -238,12 +244,25 @@ func participantRoleString(_ role: EKParticipantRole) -> String {
 // MARK: - Recurrence Helpers
 
 struct RecurrenceJSON: Codable {
-    let frequency: String
+    let frequency: String?
     let interval: Int?
     let endDate: String?
     let occurrenceCount: Int?
     let daysOfTheWeek: [String]?
     let daysOfTheMonth: [Int]?
+}
+
+func weekdayString(_ weekday: EKWeekday) -> String {
+    switch weekday {
+    case .sunday: return "sunday"
+    case .monday: return "monday"
+    case .tuesday: return "tuesday"
+    case .wednesday: return "wednesday"
+    case .thursday: return "thursday"
+    case .friday: return "friday"
+    case .saturday: return "saturday"
+    @unknown default: return "unknown"
+    }
 }
 
 func dayStringToEKDay(_ day: String) -> EKRecurrenceDayOfWeek? {
@@ -265,9 +284,14 @@ func parseRecurrenceRule(_ json: String) -> EKRecurrenceRule? {
         return nil
     }
 
+    // A nil or "none" frequency means remove recurrence — return nil
+    guard let freqStr = recurrence.frequency?.lowercased(), freqStr != "none" else {
+        return nil
+    }
+
     // Parse frequency
     let frequency: EKRecurrenceFrequency
-    switch recurrence.frequency.lowercased() {
+    switch freqStr {
     case "daily": frequency = .daily
     case "weekly": frequency = .weekly
     case "monthly": frequency = .monthly
@@ -684,6 +708,9 @@ struct DeleteEvent: AsyncParsableCommand {
     @Option(name: .long, help: "Event ID to delete")
     var id: String
 
+    @Flag(name: .long, help: "Delete this and all future events in a recurring series")
+    var futureEvents: Bool = false
+
     func run() async throws {
         try await requestCalendarAccess()
 
@@ -692,11 +719,12 @@ struct DeleteEvent: AsyncParsableCommand {
         }
 
         let eventInfo = eventToDict(event)
-        try eventStore.remove(event, span: .thisEvent)
+        let span: EKSpan = futureEvents ? .futureEvents : .thisEvent
+        try eventStore.remove(event, span: span)
 
         outputJSON([
             "success": true,
-            "message": "Event deleted successfully",
+            "message": futureEvents ? "Event and future occurrences deleted successfully" : "Event deleted successfully",
             "deletedEvent": eventInfo
         ])
     }
