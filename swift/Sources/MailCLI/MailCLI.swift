@@ -184,7 +184,9 @@ func findMessageJXA(targetId: String, mailbox: String?, account: String?) -> Str
             for (let p = 0; p < priority.length; p++) {
                 const mbs = accounts[a].mailboxes.whose({name: priority[p]})();
                 for (let m = 0; m < mbs.length; m++) {
-                    searched.add(accounts[a].name() + '/' + mbs[m].name());
+                    const key = accounts[a].name() + '/' + mbs[m].name();
+                    if (searched.has(key)) continue;
+                    searched.add(key);
                     const r = searchInMailbox(mbs[m]);
                     if (r) return r;
                 }
