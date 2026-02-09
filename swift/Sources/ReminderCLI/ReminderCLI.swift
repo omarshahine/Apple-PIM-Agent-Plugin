@@ -206,26 +206,37 @@ func alarmToDict(_ alarm: EKAlarm) -> [String: Any] {
     ]
 
     if let location = alarm.structuredLocation {
-        var locDict: [String: Any] = [:]
-        if let title = location.title {
-            locDict["name"] = title
-        }
-        if let geoLocation = location.geoLocation {
-            locDict["latitude"] = geoLocation.coordinate.latitude
-            locDict["longitude"] = geoLocation.coordinate.longitude
-        }
-        locDict["radius"] = location.radius
+        // Only include location if proximity is .enter or .leave
+        // (.none proximity means no geofence trigger, so no location alarm)
         switch alarm.proximity {
         case .enter:
+            var locDict: [String: Any] = [:]
+            if let title = location.title {
+                locDict["name"] = title
+            }
+            if let geoLocation = location.geoLocation {
+                locDict["latitude"] = geoLocation.coordinate.latitude
+                locDict["longitude"] = geoLocation.coordinate.longitude
+            }
+            locDict["radius"] = location.radius
             locDict["proximity"] = "arrive"
+            dict["location"] = locDict
         case .leave:
+            var locDict: [String: Any] = [:]
+            if let title = location.title {
+                locDict["name"] = title
+            }
+            if let geoLocation = location.geoLocation {
+                locDict["latitude"] = geoLocation.coordinate.latitude
+                locDict["longitude"] = geoLocation.coordinate.longitude
+            }
+            locDict["radius"] = location.radius
             locDict["proximity"] = "depart"
-        case .none:
-            locDict["proximity"] = "none"
-        @unknown default:
-            locDict["proximity"] = "unknown"
+            dict["location"] = locDict
+        case .none, @unknown default:
+            // Skip location output for .none or unknown proximity
+            break
         }
-        dict["location"] = locDict
     }
 
     return dict
