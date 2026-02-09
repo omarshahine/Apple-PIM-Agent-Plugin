@@ -738,6 +738,212 @@ const tools = [
     },
   },
 
+  // Mail tools
+  {
+    name: "mail_accounts",
+    description:
+      "List all mail accounts configured in Mail.app. Requires Mail.app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "mail_mailboxes",
+    description:
+      "List mailboxes with unread and total message counts. Requires Mail.app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account: {
+          type: "string",
+          description: "Filter by account name (optional)",
+        },
+      },
+    },
+  },
+  {
+    name: "mail_messages",
+    description:
+      "List messages in a mailbox with optional filters. Requires Mail.app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        mailbox: {
+          type: "string",
+          description: "Mailbox name (default: INBOX)",
+        },
+        account: {
+          type: "string",
+          description: "Account name (searches all accounts if omitted)",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum messages to return (default: 25)",
+        },
+        filter: {
+          type: "string",
+          enum: ["unread", "flagged", "all"],
+          description: "Filter messages: unread, flagged, or all (default: all)",
+        },
+      },
+    },
+  },
+  {
+    name: "mail_get",
+    description:
+      "Get a single message by RFC 2822 message ID, including full body content. Requires Mail.app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "RFC 2822 message ID",
+        },
+        mailbox: {
+          type: "string",
+          description:
+            "Mailbox name hint to speed up lookup (from prior list/search results)",
+        },
+        account: {
+          type: "string",
+          description:
+            "Account name hint to speed up lookup (from prior list/search results)",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "mail_search",
+    description:
+      "Search messages by subject, sender, or content. Requires Mail.app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Search query",
+        },
+        field: {
+          type: "string",
+          enum: ["subject", "sender", "content", "all"],
+          description:
+            "Search field: subject, sender, content (message body), or all (default: all). Note: content search is slower as it fetches each message body.",
+        },
+        mailbox: {
+          type: "string",
+          description: "Mailbox name to search in (searches all if omitted)",
+        },
+        account: {
+          type: "string",
+          description: "Account name",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum results (default: 25)",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "mail_update",
+    description:
+      "Update message flags: read/unread, flagged/unflagged, junk. Requires Mail.app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "RFC 2822 message ID",
+        },
+        read: {
+          type: "boolean",
+          description: "Set read status",
+        },
+        flagged: {
+          type: "boolean",
+          description: "Set flagged status",
+        },
+        junk: {
+          type: "boolean",
+          description: "Set junk status",
+        },
+        mailbox: {
+          type: "string",
+          description:
+            "Mailbox name hint to speed up lookup (from prior list/search results)",
+        },
+        account: {
+          type: "string",
+          description:
+            "Account name hint to speed up lookup (from prior list/search results)",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "mail_move",
+    description:
+      "Move a message to a different mailbox. Requires Mail.app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "RFC 2822 message ID",
+        },
+        toMailbox: {
+          type: "string",
+          description: "Destination mailbox name",
+        },
+        toAccount: {
+          type: "string",
+          description:
+            "Destination account name (uses same account if omitted)",
+        },
+        mailbox: {
+          type: "string",
+          description:
+            "Source mailbox name hint to speed up lookup (from prior list/search results)",
+        },
+        account: {
+          type: "string",
+          description:
+            "Source account name hint to speed up lookup (from prior list/search results)",
+        },
+      },
+      required: ["id", "toMailbox"],
+    },
+  },
+  {
+    name: "mail_delete",
+    description:
+      "Delete a message (moves to Trash). Requires Mail.app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "RFC 2822 message ID",
+        },
+        mailbox: {
+          type: "string",
+          description:
+            "Mailbox name hint to speed up lookup (from prior list/search results)",
+        },
+        account: {
+          type: "string",
+          description:
+            "Account name hint to speed up lookup (from prior list/search results)",
+        },
+      },
+      required: ["id"],
+    },
+  },
+
   // Contact tools
   {
     name: "contact_groups",
@@ -1280,6 +1486,70 @@ async function handleTool(name, args) {
         "--json",
         JSON.stringify(remindersWithDefaults),
       ]);
+    }
+
+    // Mail tools (no config filtering — Mail.app handles its own accounts)
+    case "mail_accounts":
+      return await runCLI("mail-cli", ["accounts"]);
+
+    case "mail_mailboxes":
+      cliArgs.push("mailboxes");
+      if (args.account) cliArgs.push("--account", args.account);
+      return await runCLI("mail-cli", cliArgs);
+
+    case "mail_messages":
+      cliArgs.push("messages");
+      if (args.mailbox) cliArgs.push("--mailbox", args.mailbox);
+      if (args.account) cliArgs.push("--account", args.account);
+      if (args.limit) cliArgs.push("--limit", String(args.limit));
+      if (args.filter) cliArgs.push("--filter", args.filter);
+      return await runCLI("mail-cli", cliArgs);
+
+    case "mail_get": {
+      const getArgs = ["get", "--id", args.id];
+      if (args.mailbox) getArgs.push("--mailbox", args.mailbox);
+      if (args.account) getArgs.push("--account", args.account);
+      return await runCLI("mail-cli", getArgs);
+    }
+
+    case "mail_search":
+      cliArgs.push("search", args.query);
+      if (args.field) cliArgs.push("--field", args.field);
+      if (args.mailbox) cliArgs.push("--mailbox", args.mailbox);
+      if (args.account) cliArgs.push("--account", args.account);
+      if (args.limit) cliArgs.push("--limit", String(args.limit));
+      return await runCLI("mail-cli", cliArgs);
+
+    case "mail_update": {
+      const updateArgs = ["update", "--id", args.id];
+      if (args.read !== undefined) updateArgs.push("--read", String(args.read));
+      if (args.flagged !== undefined)
+        updateArgs.push("--flagged", String(args.flagged));
+      if (args.junk !== undefined) updateArgs.push("--junk", String(args.junk));
+      if (args.mailbox) updateArgs.push("--mailbox", args.mailbox);
+      if (args.account) updateArgs.push("--account", args.account);
+      return await runCLI("mail-cli", updateArgs);
+    }
+
+    case "mail_move": {
+      const moveArgs = [
+        "move",
+        "--id",
+        args.id,
+        "--to-mailbox",
+        args.toMailbox,
+      ];
+      if (args.toAccount) moveArgs.push("--to-account", args.toAccount);
+      if (args.mailbox) moveArgs.push("--mailbox", args.mailbox);
+      if (args.account) moveArgs.push("--account", args.account);
+      return await runCLI("mail-cli", moveArgs);
+    }
+
+    case "mail_delete": {
+      const delArgs = ["delete", "--id", args.id];
+      if (args.mailbox) delArgs.push("--mailbox", args.mailbox);
+      if (args.account) delArgs.push("--account", args.account);
+      return await runCLI("mail-cli", delArgs);
     }
 
     // Contact tools (no filtering for contacts by default, but groups could be filtered)
