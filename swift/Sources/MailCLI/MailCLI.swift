@@ -49,12 +49,15 @@ func outputJSON(_ value: Any) {
     }
 }
 
-/// Escape a string for safe interpolation into a JXA single-quoted string literal.
-/// Escapes backslashes first, then single quotes — prevents injection via trailing backslash.
+/// Escape a string for safe interpolation into JXA string literals (both single and double quoted).
+/// Escapes backslashes first, then quotes and control characters — prevents injection and syntax errors.
 func escapeForJXA(_ s: String) -> String {
     return s
         .replacingOccurrences(of: "\\", with: "\\\\")
         .replacingOccurrences(of: "'", with: "\\'")
+        .replacingOccurrences(of: "\"", with: "\\\"")
+        .replacingOccurrences(of: "\n", with: "\\n")
+        .replacingOccurrences(of: "\r", with: "\\r")
 }
 
 func ensureMailRunning() throws {

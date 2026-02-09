@@ -827,9 +827,9 @@ const tools = [
         },
         field: {
           type: "string",
-          enum: ["subject", "sender", "all"],
+          enum: ["subject", "sender", "content", "all"],
           description:
-            "Search field: subject, sender, or all (default: all)",
+            "Search field: subject, sender, content, or all (default: all)",
         },
         mailbox: {
           type: "string",
