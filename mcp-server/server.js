@@ -659,35 +659,46 @@ const tools = [
             "New URL (pass empty string to remove existing URL)",
         },
         location: {
-          type: "object",
           description:
             "Location-based alarm (replaces existing location alarm). Pass empty object to remove.",
-          properties: {
-            name: {
-              type: "string",
-              description: "Name of the location (e.g., 'Home', 'Office')",
+          oneOf: [
+            {
+              type: "object",
+              properties: {},
+              additionalProperties: false,
+              description: "Empty object to remove location alarm",
             },
-            latitude: {
-              type: "number",
-              description: "Latitude of the location",
+            {
+              type: "object",
+              properties: {
+                name: {
+                  type: "string",
+                  description: "Name of the location (e.g., 'Home', 'Office')",
+                },
+                latitude: {
+                  type: "number",
+                  description: "Latitude of the location",
+                },
+                longitude: {
+                  type: "number",
+                  description: "Longitude of the location",
+                },
+                radius: {
+                  type: "number",
+                  description:
+                    "Geofence radius in meters (default: 100)",
+                },
+                proximity: {
+                  type: "string",
+                  enum: ["arrive", "depart"],
+                  description:
+                    "Trigger when arriving at or departing from the location",
+                },
+              },
+              required: ["latitude", "longitude", "proximity"],
+              description: "Complete location object with required fields",
             },
-            longitude: {
-              type: "number",
-              description: "Longitude of the location",
-            },
-            radius: {
-              type: "number",
-              description:
-                "Geofence radius in meters (default: 100)",
-            },
-            proximity: {
-              type: "string",
-              enum: ["arrive", "depart"],
-              description:
-                "Trigger when arriving at or departing from the location",
-            },
-          },
-          required: ["latitude", "longitude", "proximity"],
+          ],
         },
         recurrence: {
           type: "object",
