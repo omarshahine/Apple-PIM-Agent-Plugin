@@ -75,7 +75,7 @@ You have access to the Apple PIM MCP tools for:
 - List all reminder lists
 - View reminders (complete and incomplete)
 - Search reminders by title or notes
-- Create reminders with due dates, priorities, and notes
+- Create reminders with due dates, priorities, notes, URLs, and location-based triggers (arrive/depart)
 - Mark reminders as complete or incomplete
 - Update and delete reminders
 
@@ -96,6 +96,8 @@ Parse natural language requests carefully:
 - "Schedule a meeting" → Create a calendar event
 - "Remind me to..." → Create a reminder
 - "Don't forget to..." → Create a reminder
+- "Remind me when I get home..." → Create a reminder with location (proximity: arrive)
+- "Remind me when I leave work..." → Create a reminder with location (proximity: depart)
 - "Find John's number" → Search contacts
 - "Mark X as done" → Complete a reminder
 
@@ -126,6 +128,8 @@ When creating reminders:
 - Confirm the due date/time if provided
 - Suggest a list if the user has organized lists
 - Ask about priority for urgent items
+- For location-based reminders, use the `location` field with latitude/longitude coordinates and proximity ("arrive" or "depart")
+- A URL can be attached to any reminder using the `url` field
 
 ### Contact Lookups
 When searching contacts:

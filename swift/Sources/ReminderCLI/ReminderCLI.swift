@@ -1,4 +1,5 @@
 import ArgumentParser
+import CoreLocation
 import EventKit
 import Foundation
 
@@ -200,9 +201,34 @@ func frequencyString(_ freq: EKRecurrenceFrequency) -> String {
 }
 
 func alarmToDict(_ alarm: EKAlarm) -> [String: Any] {
-    return [
+    var dict: [String: Any] = [
         "relativeOffset": alarm.relativeOffset
     ]
+
+    if let location = alarm.structuredLocation {
+        var locDict: [String: Any] = [:]
+        if let title = location.title {
+            locDict["name"] = title
+        }
+        if let geoLocation = location.geoLocation {
+            locDict["latitude"] = geoLocation.coordinate.latitude
+            locDict["longitude"] = geoLocation.coordinate.longitude
+        }
+        locDict["radius"] = location.radius
+        switch alarm.proximity {
+        case .enter:
+            locDict["proximity"] = "arrive"
+        case .leave:
+            locDict["proximity"] = "depart"
+        case .none:
+            locDict["proximity"] = "none"
+        @unknown default:
+            locDict["proximity"] = "unknown"
+        }
+        dict["location"] = locDict
+    }
+
+    return dict
 }
 
 // MARK: - Recurrence Helpers
@@ -285,6 +311,33 @@ func parseRecurrenceRule(_ json: String) -> EKRecurrenceRule? {
         setPositions: nil,
         end: recurrenceEnd
     )
+}
+
+// MARK: - Location Helpers
+
+struct LocationJSON: Codable {
+    let name: String?
+    let latitude: Double
+    let longitude: Double
+    let radius: Double?
+    let proximity: String  // "arrive" or "depart"
+}
+
+func parseLocationAlarm(_ json: String) -> EKAlarm? {
+    guard let data = json.data(using: .utf8),
+          let location = try? JSONDecoder().decode(LocationJSON.self, from: data) else {
+        return nil
+    }
+
+    let structuredLocation = EKStructuredLocation(title: location.name ?? "Location")
+    structuredLocation.geoLocation = CLLocation(latitude: location.latitude, longitude: location.longitude)
+    structuredLocation.radius = location.radius ?? 100.0
+
+    let alarm = EKAlarm()
+    alarm.structuredLocation = structuredLocation
+    alarm.proximity = location.proximity.lowercased() == "depart" ? .leave : .enter
+
+    return alarm
 }
 
 // MARK: - Commands
@@ -468,6 +521,9 @@ struct CreateReminder: AsyncParsableCommand {
     @Option(name: .long, help: "Recurrence rule as JSON (e.g., '{\"frequency\":\"monthly\",\"interval\":1}')")
     var recurrence: String?
 
+    @Option(name: .long, help: "Location-based alarm as JSON (e.g., '{\"name\":\"Home\",\"latitude\":37.33,\"longitude\":-122.03,\"radius\":100,\"proximity\":\"arrive\"}')")
+    var location: String?
+
     func run() async throws {
         try await requestReminderAccess()
 
@@ -501,6 +557,11 @@ struct CreateReminder: AsyncParsableCommand {
         for minutes in alarm {
             let alarm = EKAlarm(relativeOffset: TimeInterval(-minutes * 60))
             reminder.addAlarm(alarm)
+        }
+
+        // Add location-based alarm if specified
+        if let locationJSON = location, let locationAlarm = parseLocationAlarm(locationJSON) {
+            reminder.addAlarm(locationAlarm)
         }
 
         // Add recurrence rule if specified
@@ -578,6 +639,12 @@ struct UpdateReminder: AsyncParsableCommand {
     @Option(name: .long, help: "Recurrence rule as JSON (e.g., '{\"frequency\":\"monthly\",\"interval\":1}')")
     var recurrence: String?
 
+    @Option(name: .long, help: "New URL")
+    var url: String?
+
+    @Option(name: .long, help: "Location-based alarm as JSON (e.g., '{\"name\":\"Home\",\"latitude\":37.33,\"longitude\":-122.03,\"radius\":100,\"proximity\":\"arrive\"}')")
+    var location: String?
+
     func run() async throws {
         try await requestReminderAccess()
 
@@ -599,6 +666,13 @@ struct UpdateReminder: AsyncParsableCommand {
         if let newPriority = priority {
             reminder.priority = newPriority
         }
+        if let newUrl = url {
+            if newUrl.isEmpty {
+                reminder.url = nil
+            } else if let reminderUrl = URL(string: newUrl) {
+                reminder.url = reminderUrl
+            }
+        }
 
         // Update recurrence rule if specified
         if let recurrenceJSON = recurrence {
@@ -611,6 +685,22 @@ struct UpdateReminder: AsyncParsableCommand {
             // Add new recurrence rule
             if let rule = parseRecurrenceRule(recurrenceJSON) {
                 reminder.addRecurrenceRule(rule)
+            }
+        }
+
+        // Update location-based alarm if specified
+        if let locationJSON = location {
+            // Remove existing location-based alarms
+            if let existingAlarms = reminder.alarms {
+                for alarm in existingAlarms {
+                    if alarm.structuredLocation != nil {
+                        reminder.removeAlarm(alarm)
+                    }
+                }
+            }
+            // Add new location alarm (unless empty string to clear)
+            if !locationJSON.isEmpty, let locationAlarm = parseLocationAlarm(locationJSON) {
+                reminder.addAlarm(locationAlarm)
             }
         }
 
@@ -662,6 +752,7 @@ struct BatchReminderInput: Codable {
     let url: String?
     let alarm: [Int]?
     let recurrence: RecurrenceJSON?
+    let location: LocationJSON?
 }
 
 struct BatchCreateReminder: AsyncParsableCommand {
@@ -723,6 +814,15 @@ struct BatchCreateReminder: AsyncParsableCommand {
                     for minutes in alarms {
                         let alarm = EKAlarm(relativeOffset: TimeInterval(-minutes * 60))
                         reminder.addAlarm(alarm)
+                    }
+                }
+
+                // Add location-based alarm if specified
+                if let locationInput = reminderInput.location {
+                    let locationData = try JSONEncoder().encode(locationInput)
+                    if let locationStr = String(data: locationData, encoding: .utf8),
+                       let locationAlarm = parseLocationAlarm(locationStr) {
+                        reminder.addAlarm(locationAlarm)
                     }
                 }
 

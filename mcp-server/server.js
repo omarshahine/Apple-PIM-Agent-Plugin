@@ -529,10 +529,45 @@ const tools = [
           type: "number",
           description: "Priority (0=none, 1=high, 5=medium, 9=low)",
         },
+        url: {
+          type: "string",
+          description: "URL associated with the reminder",
+        },
         alarm: {
           type: "array",
           items: { type: "number" },
           description: "Alarm minutes before due",
+        },
+        location: {
+          type: "object",
+          description:
+            "Location-based alarm that triggers when arriving at or departing from a place",
+          properties: {
+            name: {
+              type: "string",
+              description: "Name of the location (e.g., 'Home', 'Office')",
+            },
+            latitude: {
+              type: "number",
+              description: "Latitude of the location",
+            },
+            longitude: {
+              type: "number",
+              description: "Longitude of the location",
+            },
+            radius: {
+              type: "number",
+              description:
+                "Geofence radius in meters (default: 100)",
+            },
+            proximity: {
+              type: "string",
+              enum: ["arrive", "depart"],
+              description:
+                "Trigger when arriving at or departing from the location",
+            },
+          },
+          required: ["latitude", "longitude", "proximity"],
         },
         recurrence: {
           type: "object",
@@ -618,6 +653,42 @@ const tools = [
           type: "number",
           description: "New priority",
         },
+        url: {
+          type: "string",
+          description:
+            "New URL (pass empty string to remove existing URL)",
+        },
+        location: {
+          type: "object",
+          description:
+            "Location-based alarm (replaces existing location alarm). Pass empty object to remove.",
+          properties: {
+            name: {
+              type: "string",
+              description: "Name of the location (e.g., 'Home', 'Office')",
+            },
+            latitude: {
+              type: "number",
+              description: "Latitude of the location",
+            },
+            longitude: {
+              type: "number",
+              description: "Longitude of the location",
+            },
+            radius: {
+              type: "number",
+              description:
+                "Geofence radius in meters (default: 100)",
+            },
+            proximity: {
+              type: "string",
+              enum: ["arrive", "depart"],
+              description:
+                "Trigger when arriving at or departing from the location",
+            },
+          },
+          required: ["latitude", "longitude", "proximity"],
+        },
         recurrence: {
           type: "object",
           description: "New recurrence rule (replaces existing)",
@@ -701,6 +772,26 @@ const tools = [
                 type: "array",
                 items: { type: "number" },
                 description: "Alarm minutes before due",
+              },
+              location: {
+                type: "object",
+                description:
+                  "Location-based alarm (arrive/depart)",
+                properties: {
+                  name: { type: "string", description: "Location name" },
+                  latitude: { type: "number", description: "Latitude" },
+                  longitude: { type: "number", description: "Longitude" },
+                  radius: {
+                    type: "number",
+                    description: "Geofence radius in meters (default: 100)",
+                  },
+                  proximity: {
+                    type: "string",
+                    enum: ["arrive", "depart"],
+                    description: "Trigger on arrive or depart",
+                  },
+                },
+                required: ["latitude", "longitude", "proximity"],
               },
               recurrence: {
                 type: "object",
@@ -1166,10 +1257,14 @@ async function handleTool(name, args) {
       if (args.notes) cliArgs.push("--notes", args.notes);
       if (args.priority !== undefined)
         cliArgs.push("--priority", String(args.priority));
+      if (args.url) cliArgs.push("--url", args.url);
       if (args.alarm) {
         for (const minutes of args.alarm) {
           cliArgs.push("--alarm", String(minutes));
         }
+      }
+      if (args.location) {
+        cliArgs.push("--location", JSON.stringify(args.location));
       }
       if (args.recurrence) {
         cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
@@ -1214,6 +1309,10 @@ async function handleTool(name, args) {
       if (args.notes) cliArgs.push("--notes", args.notes);
       if (args.priority !== undefined)
         cliArgs.push("--priority", String(args.priority));
+      if (args.url !== undefined) cliArgs.push("--url", args.url);
+      if (args.location) {
+        cliArgs.push("--location", JSON.stringify(args.location));
+      }
       if (args.recurrence) {
         cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
       }
