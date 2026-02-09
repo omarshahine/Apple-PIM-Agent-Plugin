@@ -163,7 +163,7 @@ func findMessageJXA(targetId: String, mailbox: String?, account: String?) -> Str
             return null;
         }
 
-        // If mailbox hint given, search only there
+        // If mailbox hint given, try there first
         if (mboxHint) {
             const accounts = acctHint ? Mail.accounts.whose({name: acctHint})() : Mail.accounts();
             for (let a = 0; a < accounts.length; a++) {
@@ -173,7 +173,7 @@ func findMessageJXA(targetId: String, mailbox: String?, account: String?) -> Str
                     if (r) return r;
                 }
             }
-            return null;
+            // Not found in hint — fall through to full search
         }
 
         // Search priority mailboxes first, then remaining mailboxes
