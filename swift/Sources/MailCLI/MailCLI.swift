@@ -58,6 +58,14 @@ func ensureMailRunning() throws {
     }
 }
 
+func escapeJXAString(_ str: String) -> String {
+    return str
+        .replacingOccurrences(of: "\\", with: "\\\\")
+        .replacingOccurrences(of: "'", with: "\\'")
+        .replacingOccurrences(of: "\n", with: "\\n")
+        .replacingOccurrences(of: "\r", with: "\\r")
+}
+
 func runJXA(_ script: String) throws -> Any {
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
@@ -67,6 +75,19 @@ func runJXA(_ script: String) throws -> Any {
     let stderrPipe = Pipe()
     proc.standardOutput = stdoutPipe
     proc.standardError = stderrPipe
+
+    // Read pipes asynchronously to avoid deadlock on large output
+    var stdoutData = Data()
+    var stderrData = Data()
+    let stdoutHandle = stdoutPipe.fileHandleForReading
+    let stderrHandle = stderrPipe.fileHandleForReading
+    
+    stdoutHandle.readabilityHandler = { handle in
+        stdoutData.append(handle.availableData)
+    }
+    stderrHandle.readabilityHandler = { handle in
+        stderrData.append(handle.availableData)
+    }
 
     try proc.run()
 
@@ -81,10 +102,17 @@ func runJXA(_ script: String) throws -> Any {
     let result = group.wait(timeout: deadline)
     if result == .timedOut {
         proc.terminate()
+        stdoutHandle.readabilityHandler = nil
+        stderrHandle.readabilityHandler = nil
         throw CLIError.timeout("Mail.app did not respond within 30 seconds")
     }
 
-    let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+    // Clean up handlers and read any remaining data
+    stdoutHandle.readabilityHandler = nil
+    stderrHandle.readabilityHandler = nil
+    stdoutData.append(stdoutHandle.readDataToEndOfFile())
+    stderrData.append(stderrHandle.readDataToEndOfFile())
+
     let stderrStr = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
     guard proc.terminationStatus == 0 else {
@@ -94,7 +122,6 @@ func runJXA(_ script: String) throws -> Any {
         throw CLIError.jxaError(stderrStr.isEmpty ? "JXA script failed with exit code \(proc.terminationStatus)" : stderrStr)
     }
 
-    let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
     let stdoutStr = String(data: stdoutData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
     guard !stdoutStr.isEmpty else {
@@ -113,9 +140,9 @@ func runJXA(_ script: String) throws -> Any {
 // Accepts optional mailbox/account to narrow the search.
 // Priority order: specified mailbox > INBOX/Sent/Archive/Drafts > all mailboxes.
 func findMessageJXA(targetId: String, mailbox: String?, account: String?) -> String {
-    let escapedId = targetId.replacingOccurrences(of: "'", with: "\\'")
-    let mailboxFilter = mailbox.map { "'\($0.replacingOccurrences(of: "'", with: "\\'"))'" } ?? "null"
-    let accountFilter = account.map { "'\($0.replacingOccurrences(of: "'", with: "\\'"))'" } ?? "null"
+    let escapedId = escapeJXAString(targetId)
+    let mailboxFilter = mailbox.map { "'\(escapeJXAString($0))'" } ?? "null"
+    let accountFilter = account.map { "'\(escapeJXAString($0))'" } ?? "null"
 
     return """
     function findMessage() {
@@ -220,7 +247,7 @@ struct ListMailboxes: AsyncParsableCommand {
     func run() async throws {
         try ensureMailRunning()
 
-        let accountFilter = account.map { "'\($0.replacingOccurrences(of: "'", with: "\\'"))'" } ?? "null"
+        let accountFilter = account.map { "'\(escapeJXAString($0))'" } ?? "null"
 
         let script = """
         const Mail = Application("Mail");
@@ -292,8 +319,8 @@ struct ListMessages: AsyncParsableCommand {
     func run() async throws {
         try ensureMailRunning()
 
-        let accountFilter = account.map { "'\($0.replacingOccurrences(of: "'", with: "\\'"))'" } ?? "null"
-        let mailboxName = mailbox.replacingOccurrences(of: "'", with: "\\'")
+        let accountFilter = account.map { "'\(escapeJXAString($0))'" } ?? "null"
+        let mailboxName = escapeJXAString(mailbox)
         let filterVal = filter.map { "'\($0)'" } ?? "null"
 
         let script = """
@@ -323,11 +350,10 @@ struct ListMessages: AsyncParsableCommand {
             if (count === 0) {
                 JSON.stringify({messages: [], mailbox: mailboxName, totalInMailbox: 0});
             } else {
-                const fetchCount = Math.min(count, limit);
                 const results = [];
 
-                // Per-message fetching with error handling (batch .slice can fail on null dates)
-                for (let i = 0; i < fetchCount; i++) {
+                // Scan all messages but stop when we have enough results
+                for (let i = 0; i < count && results.length < limit; i++) {
                     try {
                         const m = msgs[i];
                         const isRead = m.readStatus();
@@ -397,13 +423,14 @@ struct GetMessage: AsyncParsableCommand {
         try ensureMailRunning()
 
         let findHelper = findMessageJXA(targetId: id, mailbox: mailbox, account: account)
+        let escapedId = escapeJXAString(id)
 
         let script = """
         \(findHelper)
 
         const msg = findMessage();
         if (!msg) {
-            JSON.stringify({error: "Message not found: \(id.replacingOccurrences(of: "'", with: "\\'"))"});
+            JSON.stringify({error: "Message not found: \(escapedId)"});
         } else {
             const result = {
                 messageId: msg.messageId(),
@@ -477,10 +504,10 @@ struct SearchMessages: AsyncParsableCommand {
     func run() async throws {
         try ensureMailRunning()
 
-        let escapedQuery = query.replacingOccurrences(of: "'", with: "\\'").lowercased()
-        let accountFilter = account.map { "'\($0.replacingOccurrences(of: "'", with: "\\'"))'" } ?? "null"
-        let mailboxFilter = mailbox.map { "'\($0.replacingOccurrences(of: "'", with: "\\'"))'" } ?? "null"
-        let escapedField = field.replacingOccurrences(of: "'", with: "\\'")
+        let escapedQuery = escapeJXAString(query.lowercased())
+        let accountFilter = account.map { "'\(escapeJXAString($0))'" } ?? "null"
+        let mailboxFilter = mailbox.map { "'\(escapeJXAString($0))'" } ?? "null"
+        let escapedField = escapeJXAString(field)
 
         let script = """
         const Mail = Application("Mail");
@@ -505,9 +532,17 @@ struct SearchMessages: AsyncParsableCommand {
                     const sndr = (m.sender() || '').toLowerCase();
 
                     let match = false;
-                    if (searchField === 'subject') match = subj.includes(query);
-                    else if (searchField === 'sender') match = sndr.includes(query);
-                    else match = subj.includes(query) || sndr.includes(query);
+                    if (searchField === 'subject') {
+                        match = subj.includes(query);
+                    } else if (searchField === 'sender') {
+                        match = sndr.includes(query);
+                    } else if (searchField === 'content') {
+                        const content = (m.content() || '').toLowerCase();
+                        match = content.includes(query);
+                    } else {
+                        const content = (m.content() || '').toLowerCase();
+                        match = subj.includes(query) || sndr.includes(query) || content.includes(query);
+                    }
 
                     if (match) {
                         const dr = m.dateReceived();
@@ -600,13 +635,14 @@ struct UpdateMessage: AsyncParsableCommand {
 
         let updateCode = updates.joined(separator: "\n            ")
         let findHelper = findMessageJXA(targetId: id, mailbox: mailbox, account: account)
+        let escapedId = escapeJXAString(id)
 
         let script = """
         \(findHelper)
 
         const msg = findMessage();
         if (!msg) {
-            JSON.stringify({error: "Message not found: \(id.replacingOccurrences(of: "'", with: "\\'"))"});
+            JSON.stringify({error: "Message not found: \(escapedId)"});
         } else {
             \(updateCode)
             JSON.stringify({
@@ -657,9 +693,10 @@ struct MoveMessage: AsyncParsableCommand {
     func run() async throws {
         try ensureMailRunning()
 
-        let escapedMailbox = toMailbox.replacingOccurrences(of: "'", with: "\\'")
-        let toAccountFilter = toAccount.map { "'\($0.replacingOccurrences(of: "'", with: "\\'"))'" } ?? "null"
+        let escapedMailbox = escapeJXAString(toMailbox)
+        let toAccountFilter = toAccount.map { "'\(escapeJXAString($0))'" } ?? "null"
         let findHelper = findMessageJXA(targetId: id, mailbox: mailbox, account: account)
+        let escapedId = escapeJXAString(id)
 
         let script = """
         \(findHelper)
@@ -681,7 +718,7 @@ struct MoveMessage: AsyncParsableCommand {
 
         const msg = findMessage();
         if (!msg) {
-            JSON.stringify({error: "Message not found: \(id.replacingOccurrences(of: "'", with: "\\'"))"});
+            JSON.stringify({error: "Message not found: \(escapedId)"});
         } else {
             const sourceAccount = msg.mailbox().account();
             const destMbox = findDestMailbox(sourceAccount);
@@ -691,7 +728,7 @@ struct MoveMessage: AsyncParsableCommand {
                 const fromMailbox = msg.mailbox().name();
                 Mail.move(msg, {to: destMbox});
                 JSON.stringify({
-                    messageId: '\(id.replacingOccurrences(of: "'", with: "\\'"))',
+                    messageId: '\(escapedId)',
                     from: fromMailbox,
                     to: destMailboxName,
                     moved: true
@@ -733,6 +770,7 @@ struct DeleteMessage: AsyncParsableCommand {
         try ensureMailRunning()
 
         let findHelper = findMessageJXA(targetId: id, mailbox: mailbox, account: account)
+        let escapedId = escapeJXAString(id)
 
         let script = """
         \(findHelper)
@@ -740,13 +778,13 @@ struct DeleteMessage: AsyncParsableCommand {
         const Mail = Application("Mail");
         const msg = findMessage();
         if (!msg) {
-            JSON.stringify({error: "Message not found: \(id.replacingOccurrences(of: "'", with: "\\'"))"});
+            JSON.stringify({error: "Message not found: \(escapedId)"});
         } else {
             const subject = msg.subject();
             const mboxName = msg.mailbox().name();
             Mail.delete(msg);
             JSON.stringify({
-                messageId: '\(id.replacingOccurrences(of: "'", with: "\\'"))',
+                messageId: '\(escapedId)',
                 subject: subject,
                 fromMailbox: mboxName,
                 deleted: true
