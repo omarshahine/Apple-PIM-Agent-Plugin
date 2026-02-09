@@ -10,6 +10,7 @@ let package = Package(
         .executable(name: "calendar-cli", targets: ["CalendarCLI"]),
         .executable(name: "reminder-cli", targets: ["ReminderCLI"]),
         .executable(name: "contacts-cli", targets: ["ContactsCLI"]),
+        .executable(name: "mail-cli", targets: ["MailCLI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
@@ -35,6 +36,13 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             path: "Sources/ContactsCLI"
+        ),
+        .executableTarget(
+            name: "MailCLI",
+            dependencies: [
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ],
+            path: "Sources/MailCLI"
         ),
     ]
 )
