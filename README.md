@@ -1,21 +1,24 @@
 # Apple PIM Plugin for Claude Code
 
-Native macOS integration for Calendar, Reminders, and Contacts using EventKit and Contacts frameworks.
+Native macOS integration for Calendar, Reminders, Contacts, and Mail using EventKit, Contacts, and JXA frameworks.
 
 ## Features
 
 - **Calendar Management**: List calendars, create/read/update/delete events, search by date/title
 - **Reminder Management**: List reminder lists, create/complete/update/delete reminders, search
 - **Contact Management**: List groups, create/read/update/delete contacts, search by name/email/phone
+- **Mail Integration**: List accounts/mailboxes, read/search/move/delete messages, update flags (via Apple Mail.app + JXA)
 - **Recurrence Rules**: Create recurring events and reminders (daily, weekly, monthly, yearly)
 - **Batch Operations**: Create multiple events or reminders in a single efficient transaction
-- **Proactive Agent**: The `pim-assistant` agent triggers automatically when you mention scheduling, reminders, or contacts
+- **Per-Domain Control**: Enable or disable entire domains (calendars, reminders, contacts, mail) independently
+- **Proactive Agent**: The `pim-assistant` agent triggers automatically when you mention scheduling, reminders, contacts, or email
 
 ## Prerequisites
 
 - macOS 13.0 or later
 - Swift 5.9 or later (comes with Xcode 15+)
 - Node.js 18+ (for MCP server)
+- **Mail.app** must be running for mail commands (it is not launched automatically)
 
 ## Installation
 
@@ -54,6 +57,10 @@ claude plugin install apple-pim@omarshahine-agent-plugins
 
 **Grant permissions**: On first use, macOS will prompt for Calendar, Reminders, and Contacts access. Grant these permissions in System Settings > Privacy & Security.
 
+**Mail.app Automation**: For mail features, you also need to grant Automation permission:
+- System Settings > Privacy & Security > Automation
+- Allow Terminal (or your IDE) to control **Mail.app**
+
 ### Development Installation
 
 ```bash
@@ -70,7 +77,10 @@ claude --plugin-dir .
 
 ## Configuration
 
-You can optionally restrict which calendars and reminder lists the plugin can access. This is useful for privacy or to reduce noise from calendars you don't need Claude to see.
+You can optionally restrict which domains and items the plugin can access. This is useful for:
+- Privacy — hide calendars you don't need Claude to see
+- Reducing noise — only show relevant reminder lists
+- Avoiding conflicts — disable mail here if you use Fastmail MCP for email
 
 ### Interactive Setup
 
@@ -81,10 +91,11 @@ Run the configure command to interactively set up access:
 ```
 
 This will:
-1. List your available calendars and reminder lists
-2. Let you select which ones to allow
-3. Set default calendars for new events/reminders
-4. Write the config file
+1. Ask which domains to enable (Calendars, Reminders, Contacts, Mail)
+2. For enabled domains, list available calendars and reminder lists
+3. Let you select which ones to allow
+4. Set default calendars for new events/reminders
+5. Write the config file
 
 ### Manual Configuration
 
@@ -93,17 +104,22 @@ Create `data/config.local.md` in the plugin directory with YAML frontmatter:
 ```yaml
 ---
 calendars:
+  enabled: true
   mode: allowlist  # allowlist | blocklist | all
   items:
     - "Personal"
     - "Work"
 reminders:
+  enabled: true
   mode: allowlist
   items:
     - "Reminders"
     - "Shopping"
 contacts:
+  enabled: true
   mode: all
+mail:
+  enabled: true
 default_calendar: "Personal"
 default_reminder_list: "Reminders"
 ---
@@ -115,12 +131,22 @@ default_reminder_list: "Reminders"
 
 | Option | Values | Description |
 |--------|--------|-------------|
-| `mode` | `allowlist`, `blocklist`, `all` | How to filter items |
+| `enabled` | `true`, `false` | Enable or disable an entire domain |
+| `mode` | `allowlist`, `blocklist`, `all` | How to filter items (calendars/reminders/contacts) |
 | `items` | List of names | Calendar/list names to allow or block |
 | `default_calendar` | Calendar name | Where new events are created |
 | `default_reminder_list` | List name | Where new reminders are created |
 
-### Modes
+### Domain Enable/Disable
+
+Set `enabled: false` on any domain to completely hide its tools from Claude Code. This is useful when you have another MCP server handling the same domain (e.g., Fastmail MCP for email).
+
+When a domain is disabled:
+- Its tools don't appear in the tool list
+- Any attempt to call its tools returns an error
+- No data from that domain is accessible
+
+### Filter Modes
 
 - **allowlist**: Only listed calendars/lists are accessible
 - **blocklist**: All EXCEPT listed items are accessible
@@ -129,8 +155,8 @@ default_reminder_list: "Reminders"
 ### Notes
 
 - Config is stored in the plugin's `data/` folder (excluded from git via `.gitignore`)
-- Config is read when Claude Code starts - restart after changes
-- No config file = all calendars/lists accessible (backwards compatible)
+- Changes take effect immediately (config is read fresh on each tool call)
+- No config file = all domains enabled, all items accessible (backwards compatible)
 - Write operations to blocked calendars fail with a helpful error message
 
 ## Usage
@@ -172,6 +198,20 @@ Manage contacts.
 /apple-pim:contacts create --name "Jane Doe" --email "jane@example.com"
 ```
 
+#### `/apple-pim:mail`
+
+Manage Apple Mail.app messages. Requires Mail.app to be running.
+
+```
+/apple-pim:mail accounts                     # List mail accounts
+/apple-pim:mail mailboxes                    # List mailboxes with counts
+/apple-pim:mail messages --mailbox INBOX     # List recent messages
+/apple-pim:mail messages --filter unread     # Unread messages only
+/apple-pim:mail search "invoice"             # Search by subject/sender/content
+/apple-pim:mail get --id <message-id>        # Read full message
+/apple-pim:mail move --id <id> --to-mailbox Archive
+```
+
 ### Natural Language (via Agent)
 
 The `pim-assistant` agent triggers proactively for natural language requests:
@@ -181,16 +221,19 @@ The `pim-assistant` agent triggers proactively for natural language requests:
 - "Remind me to call the dentist tomorrow"
 - "What's John's email address?"
 - "Mark the grocery shopping reminder as done"
+- "Check my inbox for unread messages"
+- "Search my email for the shipping confirmation"
 
 ## MCP Tools
 
-The plugin exposes 24 MCP tools:
+The plugin exposes 32 MCP tools:
 
-| Category | Tools |
-|----------|-------|
-| **Calendar** | `calendar_list`, `calendar_events`, `calendar_get`, `calendar_search`, `calendar_create`, `calendar_update`, `calendar_delete`, `calendar_batch_create` |
-| **Reminders** | `reminder_lists`, `reminder_items`, `reminder_get`, `reminder_search`, `reminder_create`, `reminder_complete`, `reminder_update`, `reminder_delete`, `reminder_batch_create` |
-| **Contacts** | `contact_groups`, `contact_list`, `contact_search`, `contact_get`, `contact_create`, `contact_update`, `contact_delete` |
+| Category | Tools | Count |
+|----------|-------|-------|
+| **Calendar** | `calendar_list`, `calendar_events`, `calendar_get`, `calendar_search`, `calendar_create`, `calendar_update`, `calendar_delete`, `calendar_batch_create` | 8 |
+| **Reminders** | `reminder_lists`, `reminder_items`, `reminder_get`, `reminder_search`, `reminder_create`, `reminder_complete`, `reminder_update`, `reminder_delete`, `reminder_batch_create` | 9 |
+| **Contacts** | `contact_groups`, `contact_list`, `contact_search`, `contact_get`, `contact_create`, `contact_update`, `contact_delete` | 7 |
+| **Mail** | `mail_accounts`, `mail_mailboxes`, `mail_messages`, `mail_get`, `mail_search`, `mail_update`, `mail_move`, `mail_delete` | 8 |
 
 ### Recurrence Rules
 
@@ -239,10 +282,12 @@ apple-pim/
 │   ├── Sources/
 │   │   ├── CalendarCLI/      # EventKit calendar operations
 │   │   ├── ReminderCLI/      # EventKit reminder operations
-│   │   └── ContactsCLI/      # Contacts framework operations
+│   │   ├── ContactsCLI/      # Contacts framework operations
+│   │   └── MailCLI/          # Mail.app via JXA (osascript)
 │   └── Package.swift
 ├── mcp-server/               # Node.js MCP server wrapper
 │   ├── server.js             # Shells out to Swift CLIs
+│   ├── config.js             # Per-domain enable/disable + filtering
 │   └── package.json
 ├── commands/                 # Slash commands
 ├── agents/                   # pim-assistant agent
@@ -260,6 +305,13 @@ If you get permission errors, check System Settings > Privacy & Security:
 - **Contacts**: Ensure Terminal/Claude Code has access
 
 You may need to restart Claude Code after granting permissions.
+
+### Mail.app Issues
+
+- **Mail.app must be running** — the plugin does not launch it automatically. Open Mail.app before using mail commands.
+- **Automation permission** — System Settings > Privacy & Security > Automation: allow Terminal (or your IDE) to control Mail.app.
+- **30-second timeout** — JXA scripts have a 30-second timeout. Large mailbox operations may time out; use `--limit` to reduce result count.
+- **Message IDs** — Mail tools use RFC 2822 `messageId` (stable across moves), not Mail.app internal IDs. Pass `--mailbox` and `--account` hints from prior search results to speed up lookups.
 
 ### MCP Server Not Connecting
 
@@ -323,6 +375,14 @@ cd swift/.build/release
 # Contacts
 ./contacts-cli search "John"
 ./contacts-cli groups
+
+# Mail (requires Mail.app to be running)
+./mail-cli accounts
+./mail-cli mailboxes
+./mail-cli messages --mailbox INBOX --limit 10
+./mail-cli messages --filter unread
+./mail-cli search "invoice" --field subject
+./mail-cli get --id "<message-id>"
 ```
 
 ### Rebuilding After Changes

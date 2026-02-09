@@ -23378,9 +23378,10 @@ var jsYaml = {
 var __dirname = dirname(fileURLToPath(import.meta.url));
 var CONFIG_PATH = join(__dirname, "..", "data", "config.local.md");
 var DEFAULT_CONFIG = {
-  calendars: { mode: "all", items: [] },
-  reminders: { mode: "all", items: [] },
-  contacts: { mode: "all", items: [] },
+  calendars: { enabled: true, mode: "all", items: [] },
+  reminders: { enabled: true, mode: "all", items: [] },
+  contacts: { enabled: true, mode: "all", items: [] },
+  mail: { enabled: true },
   default_calendar: null,
   default_reminder_list: null
 };
@@ -23399,6 +23400,7 @@ async function loadConfig() {
       calendars: normalizeFilterConfig(parsed.calendars),
       reminders: normalizeFilterConfig(parsed.reminders),
       contacts: normalizeFilterConfig(parsed.contacts),
+      mail: normalizeDomainConfig(parsed.mail),
       default_calendar: parsed.default_calendar || null,
       default_reminder_list: parsed.default_reminder_list || null
     };
@@ -23406,16 +23408,23 @@ async function loadConfig() {
     return DEFAULT_CONFIG;
   }
 }
+function normalizeDomainConfig(config2) {
+  if (!config2 || typeof config2 !== "object") {
+    return { enabled: true };
+  }
+  return { enabled: config2.enabled !== false };
+}
 function normalizeFilterConfig(config2) {
   if (!config2 || typeof config2 !== "object") {
-    return { mode: "all", items: [] };
+    return { enabled: true, mode: "all", items: [] };
   }
+  const enabled = config2.enabled !== false;
   const mode = config2.mode || "all";
   if (!["allowlist", "blocklist", "all"].includes(mode)) {
-    return { mode: "all", items: [] };
+    return { enabled, mode: "all", items: [] };
   }
   const items = Array.isArray(config2.items) ? config2.items : [];
-  return { mode, items };
+  return { enabled, mode, items };
 }
 async function isCalendarAllowed(name, id = null) {
   const config2 = await loadConfig();
@@ -23424,6 +23433,12 @@ async function isCalendarAllowed(name, id = null) {
 async function isReminderListAllowed(name, id = null) {
   const config2 = await loadConfig();
   return isItemAllowed(config2.reminders, name, id);
+}
+async function isDomainEnabled(domain2) {
+  const config2 = await loadConfig();
+  if (!config2[domain2])
+    return true;
+  return config2[domain2].enabled !== false;
 }
 function stripEmojiPrefix(str2) {
   if (!str2)
@@ -23744,7 +23759,7 @@ var tools = [
   },
   {
     name: "calendar_update",
-    description: "Update an existing calendar event",
+    description: "Update an existing calendar event. For recurring events, use futureEvents to apply changes to all future occurrences. To remove recurrence and make it a single event, set recurrence.frequency to 'none'.",
     inputSchema: {
       type: "object",
       properties: {
@@ -23778,12 +23793,12 @@ var tools = [
         },
         recurrence: {
           type: "object",
-          description: "New recurrence rule (replaces existing)",
+          description: "New recurrence rule (replaces existing). Set frequency to 'none' to remove recurrence entirely.",
           properties: {
             frequency: {
               type: "string",
-              enum: ["daily", "weekly", "monthly", "yearly"],
-              description: "How often the event repeats"
+              enum: ["daily", "weekly", "monthly", "yearly", "none"],
+              description: "How often the event repeats. Use 'none' to remove recurrence."
             },
             interval: {
               type: "number",
@@ -23812,7 +23827,7 @@ var tools = [
         },
         futureEvents: {
           type: "boolean",
-          description: "Apply changes to all future events in a recurring series (default: true for recurring events)"
+          description: "Apply changes to all future events in a recurring series. Default: false (only updates this occurrence)."
         }
       },
       required: ["id"]
@@ -23820,13 +23835,17 @@ var tools = [
   },
   {
     name: "calendar_delete",
-    description: "Delete a calendar event",
+    description: "Delete a calendar event. Safe for recurring events \u2014 by default, only the single occurrence identified by the event ID is removed; the rest of the series is untouched. To delete this and all future occurrences, set futureEvents to true.",
     inputSchema: {
       type: "object",
       properties: {
         id: {
           type: "string",
           description: "Event ID to delete"
+        },
+        futureEvents: {
+          type: "boolean",
+          description: "Delete this and all future occurrences of a recurring event. Default: false (only deletes the single occurrence)."
         }
       },
       required: ["id"]
@@ -24057,7 +24076,7 @@ var tools = [
   },
   {
     name: "reminder_update",
-    description: "Update an existing reminder",
+    description: "Update an existing reminder. To remove recurrence, set recurrence.frequency to 'none'.",
     inputSchema: {
       type: "object",
       properties: {
@@ -24083,12 +24102,12 @@ var tools = [
         },
         recurrence: {
           type: "object",
-          description: "New recurrence rule (replaces existing)",
+          description: "New recurrence rule (replaces existing). Set frequency to 'none' to remove recurrence entirely.",
           properties: {
             frequency: {
               type: "string",
-              enum: ["daily", "weekly", "monthly", "yearly"],
-              description: "How often the reminder repeats"
+              enum: ["daily", "weekly", "monthly", "yearly", "none"],
+              description: "How often the reminder repeats. Use 'none' to remove recurrence."
             },
             interval: {
               type: "number",
@@ -24183,6 +24202,193 @@ var tools = [
         }
       },
       required: ["reminders"]
+    }
+  },
+  // Mail tools
+  {
+    name: "mail_accounts",
+    description: "List all mail accounts configured in Mail.app. Requires Mail.app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {}
+    }
+  },
+  {
+    name: "mail_mailboxes",
+    description: "List mailboxes with unread and total message counts. Requires Mail.app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account: {
+          type: "string",
+          description: "Filter by account name (optional)"
+        }
+      }
+    }
+  },
+  {
+    name: "mail_messages",
+    description: "List messages in a mailbox with optional filters. Requires Mail.app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        mailbox: {
+          type: "string",
+          description: "Mailbox name (default: INBOX)"
+        },
+        account: {
+          type: "string",
+          description: "Account name (searches all accounts if omitted)"
+        },
+        limit: {
+          type: "number",
+          description: "Maximum messages to return (default: 25)"
+        },
+        filter: {
+          type: "string",
+          enum: ["unread", "flagged", "all"],
+          description: "Filter messages: unread, flagged, or all (default: all)"
+        }
+      }
+    }
+  },
+  {
+    name: "mail_get",
+    description: "Get a single message by RFC 2822 message ID, including full body content. Requires Mail.app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "RFC 2822 message ID"
+        },
+        mailbox: {
+          type: "string",
+          description: "Mailbox name hint to speed up lookup (from prior list/search results)"
+        },
+        account: {
+          type: "string",
+          description: "Account name hint to speed up lookup (from prior list/search results)"
+        }
+      },
+      required: ["id"]
+    }
+  },
+  {
+    name: "mail_search",
+    description: "Search messages by subject, sender, or content. Requires Mail.app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Search query"
+        },
+        field: {
+          type: "string",
+          enum: ["subject", "sender", "content", "all"],
+          description: "Search field: subject, sender, content (message body), or all (default: all). Note: content search is slower as it fetches each message body."
+        },
+        mailbox: {
+          type: "string",
+          description: "Mailbox name to search in (searches all if omitted)"
+        },
+        account: {
+          type: "string",
+          description: "Account name"
+        },
+        limit: {
+          type: "number",
+          description: "Maximum results (default: 25)"
+        }
+      },
+      required: ["query"]
+    }
+  },
+  {
+    name: "mail_update",
+    description: "Update message flags: read/unread, flagged/unflagged, junk. Requires Mail.app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "RFC 2822 message ID"
+        },
+        read: {
+          type: "boolean",
+          description: "Set read status"
+        },
+        flagged: {
+          type: "boolean",
+          description: "Set flagged status"
+        },
+        junk: {
+          type: "boolean",
+          description: "Set junk status"
+        },
+        mailbox: {
+          type: "string",
+          description: "Mailbox name hint to speed up lookup (from prior list/search results)"
+        },
+        account: {
+          type: "string",
+          description: "Account name hint to speed up lookup (from prior list/search results)"
+        }
+      },
+      required: ["id"]
+    }
+  },
+  {
+    name: "mail_move",
+    description: "Move a message to a different mailbox. Requires Mail.app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "RFC 2822 message ID"
+        },
+        toMailbox: {
+          type: "string",
+          description: "Destination mailbox name"
+        },
+        toAccount: {
+          type: "string",
+          description: "Destination account name (uses same account if omitted)"
+        },
+        mailbox: {
+          type: "string",
+          description: "Source mailbox name hint to speed up lookup (from prior list/search results)"
+        },
+        account: {
+          type: "string",
+          description: "Source account name hint to speed up lookup (from prior list/search results)"
+        }
+      },
+      required: ["id", "toMailbox"]
+    }
+  },
+  {
+    name: "mail_delete",
+    description: "Delete a message (moves to Trash). Requires Mail.app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "RFC 2822 message ID"
+        },
+        mailbox: {
+          type: "string",
+          description: "Mailbox name hint to speed up lookup (from prior list/search results)"
+        },
+        account: {
+          type: "string",
+          description: "Account name hint to speed up lookup (from prior list/search results)"
+        }
+      },
+      required: ["id"]
     }
   },
   // Contact tools
@@ -24493,7 +24699,10 @@ Run /apple-pim:configure to add it.`
           );
         }
       }
-      return await runCLI("calendar-cli", ["delete", "--id", args.id]);
+      const deleteArgs = ["delete", "--id", args.id];
+      if (args.futureEvents)
+        deleteArgs.push("--future-events");
+      return await runCLI("calendar-cli", deleteArgs);
     }
     case "calendar_batch_create": {
       if (!args.events || !Array.isArray(args.events) || args.events.length === 0) {
@@ -24680,6 +24889,81 @@ Run /apple-pim:configure to add it.`
         JSON.stringify(remindersWithDefaults)
       ]);
     }
+    case "mail_accounts":
+      return await runCLI("mail-cli", ["accounts"]);
+    case "mail_mailboxes":
+      cliArgs.push("mailboxes");
+      if (args.account)
+        cliArgs.push("--account", args.account);
+      return await runCLI("mail-cli", cliArgs);
+    case "mail_messages":
+      cliArgs.push("messages");
+      if (args.mailbox)
+        cliArgs.push("--mailbox", args.mailbox);
+      if (args.account)
+        cliArgs.push("--account", args.account);
+      if (args.limit)
+        cliArgs.push("--limit", String(args.limit));
+      if (args.filter)
+        cliArgs.push("--filter", args.filter);
+      return await runCLI("mail-cli", cliArgs);
+    case "mail_get": {
+      const getArgs = ["get", "--id", args.id];
+      if (args.mailbox)
+        getArgs.push("--mailbox", args.mailbox);
+      if (args.account)
+        getArgs.push("--account", args.account);
+      return await runCLI("mail-cli", getArgs);
+    }
+    case "mail_search":
+      cliArgs.push("search", args.query);
+      if (args.field)
+        cliArgs.push("--field", args.field);
+      if (args.mailbox)
+        cliArgs.push("--mailbox", args.mailbox);
+      if (args.account)
+        cliArgs.push("--account", args.account);
+      if (args.limit)
+        cliArgs.push("--limit", String(args.limit));
+      return await runCLI("mail-cli", cliArgs);
+    case "mail_update": {
+      const updateArgs = ["update", "--id", args.id];
+      if (args.read !== void 0)
+        updateArgs.push("--read", String(args.read));
+      if (args.flagged !== void 0)
+        updateArgs.push("--flagged", String(args.flagged));
+      if (args.junk !== void 0)
+        updateArgs.push("--junk", String(args.junk));
+      if (args.mailbox)
+        updateArgs.push("--mailbox", args.mailbox);
+      if (args.account)
+        updateArgs.push("--account", args.account);
+      return await runCLI("mail-cli", updateArgs);
+    }
+    case "mail_move": {
+      const moveArgs = [
+        "move",
+        "--id",
+        args.id,
+        "--to-mailbox",
+        args.toMailbox
+      ];
+      if (args.toAccount)
+        moveArgs.push("--to-account", args.toAccount);
+      if (args.mailbox)
+        moveArgs.push("--mailbox", args.mailbox);
+      if (args.account)
+        moveArgs.push("--account", args.account);
+      return await runCLI("mail-cli", moveArgs);
+    }
+    case "mail_delete": {
+      const delArgs = ["delete", "--id", args.id];
+      if (args.mailbox)
+        delArgs.push("--mailbox", args.mailbox);
+      if (args.account)
+        delArgs.push("--account", args.account);
+      return await runCLI("mail-cli", delArgs);
+    }
     case "contact_groups":
       return await runCLI("contacts-cli", ["groups"]);
     case "contact_list":
@@ -24738,10 +25022,21 @@ Run /apple-pim:configure to add it.`
       throw new Error(`Unknown tool: ${name}`);
   }
 }
+function toolDomain(toolName) {
+  if (toolName.startsWith("calendar_"))
+    return "calendars";
+  if (toolName.startsWith("reminder_"))
+    return "reminders";
+  if (toolName.startsWith("contact_"))
+    return "contacts";
+  if (toolName.startsWith("mail_"))
+    return "mail";
+  return null;
+}
 var server = new Server(
   {
     name: "apple-pim",
-    version: "1.1.0"
+    version: "2.0.0"
   },
   {
     capabilities: {
@@ -24749,12 +25044,26 @@ var server = new Server(
     }
   }
 );
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools
-}));
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  const enabledTools = [];
+  for (const tool of tools) {
+    const domain2 = toolDomain(tool.name);
+    if (!domain2 || await isDomainEnabled(domain2)) {
+      enabledTools.push(tool);
+    }
+  }
+  return { tools: enabledTools };
+});
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   try {
+    const domain2 = toolDomain(name);
+    if (domain2 && !await isDomainEnabled(domain2)) {
+      throw new Error(
+        `The ${domain2} domain is disabled in your configuration.
+Run /apple-pim:configure to enable it.`
+      );
+    }
     const result = await handleTool(name, args || {});
     return {
       content: [

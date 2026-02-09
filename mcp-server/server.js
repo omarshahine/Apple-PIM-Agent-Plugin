@@ -13,6 +13,7 @@ import { existsSync } from "fs";
 import { homedir } from "os";
 import {
   loadConfig,
+  isDomainEnabled,
   filterCalendars,
   filterReminderLists,
   filterEvents,
@@ -1601,11 +1602,20 @@ async function handleTool(name, args) {
   }
 }
 
+// Map tool name prefix to config domain
+function toolDomain(toolName) {
+  if (toolName.startsWith("calendar_")) return "calendars";
+  if (toolName.startsWith("reminder_")) return "reminders";
+  if (toolName.startsWith("contact_")) return "contacts";
+  if (toolName.startsWith("mail_")) return "mail";
+  return null;
+}
+
 // Create and run server
 const server = new Server(
   {
     name: "apple-pim",
-    version: "1.1.0",
+    version: "2.0.0",
   },
   {
     capabilities: {
@@ -1614,14 +1624,31 @@ const server = new Server(
   }
 );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools,
-}));
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  // Filter out tools whose domain is disabled
+  const enabledTools = [];
+  for (const tool of tools) {
+    const domain = toolDomain(tool.name);
+    if (!domain || (await isDomainEnabled(domain))) {
+      enabledTools.push(tool);
+    }
+  }
+  return { tools: enabledTools };
+});
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
+    // Check if tool's domain is enabled
+    const domain = toolDomain(name);
+    if (domain && !(await isDomainEnabled(domain))) {
+      throw new Error(
+        `The ${domain} domain is disabled in your configuration.\n` +
+          `Run /apple-pim:configure to enable it.`
+      );
+    }
+
     const result = await handleTool(name, args || {});
     return {
       content: [

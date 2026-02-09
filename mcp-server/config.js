@@ -13,9 +13,10 @@ const CONFIG_PATH = join(__dirname, "..", "data", "config.local.md");
 
 // Default config when no file exists or parsing fails
 const DEFAULT_CONFIG = {
-  calendars: { mode: "all", items: [] },
-  reminders: { mode: "all", items: [] },
-  contacts: { mode: "all", items: [] },
+  calendars: { enabled: true, mode: "all", items: [] },
+  reminders: { enabled: true, mode: "all", items: [] },
+  contacts: { enabled: true, mode: "all", items: [] },
+  mail: { enabled: true },
   default_calendar: null,
   default_reminder_list: null,
 };
@@ -45,6 +46,7 @@ export async function loadConfig() {
       calendars: normalizeFilterConfig(parsed.calendars),
       reminders: normalizeFilterConfig(parsed.reminders),
       contacts: normalizeFilterConfig(parsed.contacts),
+      mail: normalizeDomainConfig(parsed.mail),
       default_calendar: parsed.default_calendar || null,
       default_reminder_list: parsed.default_reminder_list || null,
     };
@@ -55,21 +57,32 @@ export async function loadConfig() {
 }
 
 /**
+ * Normalize a simple domain config (just enabled flag, no filtering)
+ */
+function normalizeDomainConfig(config) {
+  if (!config || typeof config !== "object") {
+    return { enabled: true };
+  }
+  return { enabled: config.enabled !== false };
+}
+
+/**
  * Normalize a filter config section
  */
 function normalizeFilterConfig(config) {
   if (!config || typeof config !== "object") {
-    return { mode: "all", items: [] };
+    return { enabled: true, mode: "all", items: [] };
   }
 
+  const enabled = config.enabled !== false; // default true if absent
   const mode = config.mode || "all";
   if (!["allowlist", "blocklist", "all"].includes(mode)) {
-    return { mode: "all", items: [] };
+    return { enabled, mode: "all", items: [] };
   }
 
   const items = Array.isArray(config.items) ? config.items : [];
 
-  return { mode, items };
+  return { enabled, mode, items };
 }
 
 /**
@@ -103,6 +116,17 @@ export async function isReminderListAllowed(name, id = null) {
 export async function isContactGroupAllowed(name, id = null) {
   const config = await loadConfig();
   return isItemAllowed(config.contacts, name, id);
+}
+
+/**
+ * Check if a domain is enabled in config
+ * @param {string} domain - Domain name (calendars, reminders, contacts, mail)
+ * @returns {Promise<boolean>}
+ */
+export async function isDomainEnabled(domain) {
+  const config = await loadConfig();
+  if (!config[domain]) return true; // unknown domains default to enabled
+  return config[domain].enabled !== false;
 }
 
 /**
