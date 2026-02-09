@@ -687,7 +687,6 @@ const tools = [
                 "Trigger when arriving at or departing from the location",
             },
           },
-          required: ["latitude", "longitude", "proximity"],
         },
         recurrence: {
           type: "object",
