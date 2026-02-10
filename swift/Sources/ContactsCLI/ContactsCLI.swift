@@ -55,6 +55,22 @@ enum CLIError: Error, LocalizedError {
     }
 }
 
+/// Parse a birthday string into DateComponents.
+/// Accepts "YYYY-MM-DD" (with year) or "MM-DD" (without year).
+func parseBirthday(_ string: String) throws -> DateComponents {
+    let parts = string.split(separator: "-").compactMap { Int($0) }
+    switch parts.count {
+    case 3:
+        // YYYY-MM-DD
+        return DateComponents(year: parts[0], month: parts[1], day: parts[2])
+    case 2:
+        // MM-DD (no year)
+        return DateComponents(month: parts[0], day: parts[1])
+    default:
+        throw CLIError.invalidInput("Invalid birthday format '\(string)'. Use YYYY-MM-DD or MM-DD.")
+    }
+}
+
 func outputJSON(_ value: Any) {
     if let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys]),
        let string = String(data: data, encoding: .utf8) {
@@ -114,6 +130,13 @@ func contactToDict(_ contact: CNContact, brief: Bool = false) -> [String: Any] {
         }
         if !contact.organizationName.isEmpty {
             dict["organization"] = contact.organizationName
+        }
+        if let birthday = contact.birthday {
+            var birthdayDict: [String: Any] = [:]
+            if let year = birthday.year { birthdayDict["year"] = year }
+            if let month = birthday.month { birthdayDict["month"] = month }
+            if let day = birthday.day { birthdayDict["day"] = day }
+            dict["birthday"] = birthdayDict
         }
         return dict
     }
@@ -421,6 +444,9 @@ struct CreateContact: AsyncParsableCommand {
     @Option(name: .long, help: "Notes")
     var notes: String?
 
+    @Option(name: .long, help: "Birthday (YYYY-MM-DD or MM-DD)")
+    var birthday: String?
+
     func run() async throws {
         try await requestContactsAccess()
 
@@ -458,6 +484,10 @@ struct CreateContact: AsyncParsableCommand {
 
         if let note = notes {
             contact.note = note
+        }
+
+        if let birthdayStr = birthday {
+            contact.birthday = try parseBirthday(birthdayStr)
         }
 
         let saveRequest = CNSaveRequest()
@@ -502,6 +532,9 @@ struct UpdateContact: AsyncParsableCommand {
     @Option(name: .long, help: "New notes")
     var notes: String?
 
+    @Option(name: .long, help: "New birthday (YYYY-MM-DD or MM-DD)")
+    var birthday: String?
+
     func run() async throws {
         try await requestContactsAccess()
 
@@ -519,6 +552,10 @@ struct UpdateContact: AsyncParsableCommand {
         if let org = organization { contact.organizationName = org }
         if let title = jobTitle { contact.jobTitle = title }
         if let note = notes { contact.note = note }
+
+        if let birthdayStr = birthday {
+            contact.birthday = try parseBirthday(birthdayStr)
+        }
 
         if let emailAddr = email {
             // Replace primary email or add new

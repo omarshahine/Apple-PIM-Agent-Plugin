@@ -1042,6 +1042,11 @@ const tools = [
           type: "string",
           description: "Notes",
         },
+        birthday: {
+          type: "string",
+          description:
+            "Birthday in YYYY-MM-DD format (with year) or MM-DD format (without year)",
+        },
       },
     },
   },
@@ -1082,6 +1087,11 @@ const tools = [
         notes: {
           type: "string",
           description: "New notes",
+        },
+        birthday: {
+          type: "string",
+          description:
+            "New birthday in YYYY-MM-DD format (with year) or MM-DD format (without year)",
         },
       },
       required: ["id"],
@@ -1581,6 +1591,7 @@ async function handleTool(name, args) {
       if (args.organization) cliArgs.push("--organization", args.organization);
       if (args.jobTitle) cliArgs.push("--job-title", args.jobTitle);
       if (args.notes) cliArgs.push("--notes", args.notes);
+      if (args.birthday) cliArgs.push("--birthday", args.birthday);
       return await runCLI("contacts-cli", cliArgs);
 
     case "contact_update":
@@ -1592,6 +1603,7 @@ async function handleTool(name, args) {
       if (args.organization) cliArgs.push("--organization", args.organization);
       if (args.jobTitle) cliArgs.push("--job-title", args.jobTitle);
       if (args.notes) cliArgs.push("--notes", args.notes);
+      if (args.birthday) cliArgs.push("--birthday", args.birthday);
       return await runCLI("contacts-cli", cliArgs);
 
     case "contact_delete":
