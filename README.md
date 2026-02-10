@@ -1,12 +1,17 @@
 # Apple PIM Plugin for Claude Code
 
-Native macOS integration for Calendar, Reminders, Contacts, and Mail using EventKit, Contacts, and JXA frameworks.
+[![GitHub](https://img.shields.io/github/v/release/omarshahine/Apple-PIM-Agent-Plugin)](https://github.com/omarshahine/Apple-PIM-Agent-Plugin)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/omarshahine/Apple-PIM-Agent-Plugin/blob/main/LICENSE)
+
+**GitHub**: [github.com/omarshahine/Apple-PIM-Agent-Plugin](https://github.com/omarshahine/Apple-PIM-Agent-Plugin)
+
+Native macOS integration for Calendar, Reminders, Contacts, and Mail using EventKit, Contacts, and JXA frameworks. Built as a [Claude Code plugin](https://code.claude.com/docs/en/plugins.md).
 
 ## Features
 
 - **Calendar Management**: List calendars, create/read/update/delete events, search by date/title
 - **Reminder Management**: List reminder lists, create/complete/update/delete reminders, search
-- **Contact Management**: List groups, create/read/update/delete contacts, search by name/email/phone
+- **Contact Management**: List groups, create/read/update/delete contacts, search by name/email/phone, birthday support (with or without year)
 - **Mail Integration**: List accounts/mailboxes, read/search/move/delete messages, update flags (via Apple Mail.app + JXA)
 - **Recurrence Rules**: Create recurring events and reminders (daily, weekly, monthly, yearly)
 - **Batch Operations**: Create multiple events or reminders in a single efficient transaction
@@ -195,7 +200,7 @@ Manage contacts.
 /apple-pim:contacts groups                   # List contact groups
 /apple-pim:contacts search "John"
 /apple-pim:contacts get --id <id>
-/apple-pim:contacts create --name "Jane Doe" --email "jane@example.com"
+/apple-pim:contacts create --name "Jane Doe" --email "jane@example.com" --birthday "1990-03-15"
 ```
 
 #### `/apple-pim:mail`
@@ -232,7 +237,7 @@ The plugin exposes 32 MCP tools:
 |----------|-------|-------|
 | **Calendar** | `calendar_list`, `calendar_events`, `calendar_get`, `calendar_search`, `calendar_create`, `calendar_update`, `calendar_delete`, `calendar_batch_create` | 8 |
 | **Reminders** | `reminder_lists`, `reminder_items`, `reminder_get`, `reminder_search`, `reminder_create`, `reminder_complete`, `reminder_update`, `reminder_delete`, `reminder_batch_create` | 9 |
-| **Contacts** | `contact_groups`, `contact_list`, `contact_search`, `contact_get`, `contact_create`, `contact_update`, `contact_delete` | 7 |
+| **Contacts** | `contact_groups`, `contact_list`, `contact_search`, `contact_get`, `contact_create`, `contact_update`, `contact_delete` (birthday support in create/update/get) | 7 |
 | **Mail** | `mail_accounts`, `mail_mailboxes`, `mail_messages`, `mail_get`, `mail_search`, `mail_update`, `mail_move`, `mail_delete` | 8 |
 
 ### Recurrence Rules
@@ -375,6 +380,8 @@ cd swift/.build/release
 # Contacts
 ./contacts-cli search "John"
 ./contacts-cli groups
+./contacts-cli create --name "Jane Doe" --email "jane@example.com" --birthday "1990-03-15"
+./contacts-cli create --name "Baby Doe" --birthday "03-15"  # birthday without year
 
 # Mail (requires Mail.app to be running)
 ./mail-cli accounts
