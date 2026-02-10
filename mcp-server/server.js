@@ -1627,7 +1627,7 @@ function toolDomain(toolName) {
 const server = new Server(
   {
     name: "apple-pim",
-    version: "2.0.0",
+    version: "2.1.0",
   },
   {
     capabilities: {

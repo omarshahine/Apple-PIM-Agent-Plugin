@@ -24486,6 +24486,10 @@ var tools = [
         notes: {
           type: "string",
           description: "Notes"
+        },
+        birthday: {
+          type: "string",
+          description: "Birthday in YYYY-MM-DD format (with year) or MM-DD format (without year)"
         }
       }
     }
@@ -24527,6 +24531,10 @@ var tools = [
         notes: {
           type: "string",
           description: "New notes"
+        },
+        birthday: {
+          type: "string",
+          description: "New birthday in YYYY-MM-DD format (with year) or MM-DD format (without year)"
         }
       },
       required: ["id"]
@@ -24998,6 +25006,8 @@ Run /apple-pim:configure to add it.`
         cliArgs.push("--job-title", args.jobTitle);
       if (args.notes)
         cliArgs.push("--notes", args.notes);
+      if (args.birthday)
+        cliArgs.push("--birthday", args.birthday);
       return await runCLI("contacts-cli", cliArgs);
     case "contact_update":
       cliArgs.push("update", "--id", args.id);
@@ -25015,6 +25025,8 @@ Run /apple-pim:configure to add it.`
         cliArgs.push("--job-title", args.jobTitle);
       if (args.notes)
         cliArgs.push("--notes", args.notes);
+      if (args.birthday)
+        cliArgs.push("--birthday", args.birthday);
       return await runCLI("contacts-cli", cliArgs);
     case "contact_delete":
       return await runCLI("contacts-cli", ["delete", "--id", args.id]);
@@ -25036,7 +25048,7 @@ function toolDomain(toolName) {
 var server = new Server(
   {
     name: "apple-pim",
-    version: "2.0.0"
+    version: "2.1.0"
   },
   {
     capabilities: {
