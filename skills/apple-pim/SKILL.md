@@ -49,7 +49,9 @@ Reminders are represented by `EKReminder`:
 | `startDateComponents` | DateComponents? | Start date |
 | `priority` | Int | 0=none, 1=high, 5=medium, 9=low |
 | `notes` | String? | Notes text |
+| `url` | URL? | Associated URL |
 | `calendar` | EKCalendar | Parent reminder list |
+| `alarms` | [EKAlarm]? | Time-based and location-based alarms |
 
 ### Calendars and Lists
 
@@ -101,6 +103,24 @@ let alarm = EKAlarm(relativeOffset: -15 * 60)
 // At specific time
 let alarm = EKAlarm(absoluteDate: alertDate)
 ```
+
+### Location-Based Alarms
+
+`EKAlarm` can trigger based on arriving at or departing from a geofenced location:
+
+```swift
+let location = EKStructuredLocation(title: "Home")
+location.geoLocation = CLLocation(latitude: 37.33, longitude: -122.03)
+location.radius = 100.0 // meters
+
+let alarm = EKAlarm()
+alarm.structuredLocation = location
+alarm.proximity = .enter // .enter = arriving, .leave = departing
+
+reminder.addAlarm(alarm)
+```
+
+This enables "Remind me when I arrive home" or "Remind me when I leave the office" style reminders.
 
 ## Contacts Framework
 

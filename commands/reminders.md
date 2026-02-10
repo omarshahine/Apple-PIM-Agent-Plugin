@@ -35,7 +35,7 @@ Use `reminder_search` to find reminders by title or notes:
 ### Create Reminder
 Use `reminder_create` to create a new reminder:
 - Required: `title`
-- Optional: `list`, `due` (date/time), `notes`, `priority` (0=none, 1=high, 5=medium, 9=low), `alarm`
+- Optional: `list`, `due` (date/time), `notes`, `priority` (0=none, 1=high, 5=medium, 9=low), `url`, `alarm`, `location`, `recurrence`
 
 ### Complete Reminder
 Use `reminder_complete` to mark a reminder as done:
@@ -45,7 +45,7 @@ Use `reminder_complete` to mark a reminder as done:
 ### Update Reminder
 Use `reminder_update` to modify an existing reminder:
 - Required: `id` (reminder ID)
-- Optional: `title`, `due`, `notes`, `priority`
+- Optional: `title`, `due`, `notes`, `priority`, `url`, `location`, `recurrence`
 
 ### Delete Reminder
 Use `reminder_delete` to remove a reminder:
@@ -82,6 +82,8 @@ Use `reminder_delete` to remove a reminder:
 /apple-pim:reminders create "Buy milk"
 /apple-pim:reminders create "Call dentist" --due "tomorrow 9am" --list "Personal"
 /apple-pim:reminders create "Submit report" --due "Friday 5pm" --priority 1
+/apple-pim:reminders create "Buy groceries" --location {"name":"Home","latitude":37.33,"longitude":-122.03,"proximity":"arrive"}
+/apple-pim:reminders create "Check docs" --url "https://example.com/docs"
 ```
 
 **Complete a reminder:**
@@ -109,3 +111,5 @@ When a user provides natural language, map to the appropriate operation:
 - "Remind me to buy flowers tomorrow" → `reminder_create` with title and due date
 - "Mark the milk reminder as done" → First `reminder_search` for "milk", then `reminder_complete`
 - "I finished the report" → Infer reminder, then `reminder_complete`
+- "Remind me when I get home to take out the trash" → `reminder_create` with title and location (proximity: "arrive")
+- "Remind me when I leave the office to call mom" → `reminder_create` with title and location (proximity: "depart")
