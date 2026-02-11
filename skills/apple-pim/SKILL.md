@@ -1,6 +1,6 @@
 ---
 description: |
-  Provides knowledge about Apple's EventKit, Contacts, and Mail.app scripting for managing calendars, reminders, contacts, and local mail on macOS. Use this skill when discussing EventKit APIs, calendar data models, reminder structures, contact fields, Mail.app JXA scripting, or best practices for personal information management.
+  Provides knowledge about Apple's EventKit, Contacts, and Mail.app scripting for managing calendars, reminders, contacts, and local mail on macOS. Use this skill when discussing EventKit APIs, calendar data models, reminder structures, contact fields, Mail.app JXA scripting, authorization/permissions, or best practices for personal information management.
 ---
 
 # Apple PIM (EventKit, Contacts & Mail)
@@ -13,6 +13,55 @@ Apple provides frameworks and scripting interfaces for personal information mana
 - **Mail.app**: Local email via JXA (JavaScript for Automation)
 
 EventKit and Contacts require explicit user permission via privacy prompts. Mail.app requires Automation permission and must be running.
+
+## Authorization & Permissions
+
+### Permission Model
+
+Each PIM domain requires separate macOS authorization:
+
+| Domain | Framework | Permission Section |
+|--------|-----------|-------------------|
+| Calendars | EventKit | Privacy & Security > Calendars |
+| Reminders | EventKit | Privacy & Security > Reminders |
+| Contacts | Contacts | Privacy & Security > Contacts |
+| Mail | Automation (JXA) | Privacy & Security > Automation |
+
+### Authorization States
+
+| State | Meaning | Action |
+|-------|---------|--------|
+| `notDetermined` | Never requested | Run `pim_authorize` to trigger prompt |
+| `authorized` | Full access granted | Ready to use |
+| `denied` | User refused access | Must enable in System Settings manually |
+| `restricted` | System policy (MDM, parental) | Cannot override |
+| `writeOnly` | Limited write access (macOS 17+) | Upgrade to Full Access in Settings |
+
+### macOS 14+ (Sonoma)
+
+EventKit requires full access:
+```swift
+try await eventStore.requestFullAccessToEvents()
+try await eventStore.requestFullAccessToReminders()
+```
+
+### Earlier macOS Versions
+
+```swift
+try await eventStore.requestAccess(to: .event)
+try await eventStore.requestAccess(to: .reminder)
+```
+
+### Contacts
+
+```swift
+let status = CNContactStore.authorizationStatus(for: .contacts)
+try await contactStore.requestAccess(for: .contacts)
+```
+
+### SSH Sessions
+
+Permissions must be granted on the Mac where the CLI runs. SSH does not inherit GUI-level permission dialogs. Grant permissions locally first.
 
 ## EventKit Framework
 
@@ -52,6 +101,22 @@ Reminders are represented by `EKReminder`:
 | `url` | URL? | Associated URL |
 | `calendar` | EKCalendar | Parent reminder list |
 | `alarms` | [EKAlarm]? | Time-based and location-based alarms |
+
+### Reminder Filtering
+
+The MCP server supports date-based filtering at the server level:
+
+| Filter | Behavior |
+|--------|----------|
+| `overdue` | Incomplete reminders with due date before today |
+| `today` | Due today + overdue (incomplete with due <= end of today) |
+| `tomorrow` | Due date falls on tomorrow |
+| `week` | Due date falls within current calendar week |
+| `upcoming` | All incomplete reminders with any due date |
+| `completed` | Finished reminders |
+| `all` | Everything |
+
+Results are sorted by due date (earliest first), with undated items last.
 
 ### Calendars and Lists
 
@@ -170,30 +235,6 @@ CNLabelEmailiCloud
 | `identifier` | String | Unique identifier |
 | `name` | String | Group name |
 
-## Permissions
-
-### macOS 14+ (Sonoma)
-
-EventKit requires full access:
-```swift
-try await eventStore.requestFullAccessToEvents()
-try await eventStore.requestFullAccessToReminders()
-```
-
-### Earlier macOS Versions
-
-```swift
-try await eventStore.requestAccess(to: .event)
-try await eventStore.requestAccess(to: .reminder)
-```
-
-### Contacts
-
-```swift
-let status = CNContactStore.authorizationStatus(for: .contacts)
-try await contactStore.requestAccess(for: .contacts)
-```
-
 ## Best Practices
 
 ### Calendar Management
@@ -201,6 +242,7 @@ try await contactStore.requestAccess(for: .contacts)
 2. **Preserve recurrence rules** when updating recurring events
 3. **Handle `.thisEvent` vs `.futureEvents`** span for recurring event edits (see EKSpan below)
 4. **Check `allowsContentModifications`** before attempting writes
+5. **Use `calendar_batch_create`** when creating multiple events for efficiency
 
 ### EKSpan for Recurring Events
 
@@ -226,9 +268,11 @@ When reading events/reminders, the `recurrence` array includes:
 
 ### Reminder Management
 1. **Default to incomplete reminders** when listing
-2. **Set completionDate** when marking complete
-3. **Respect priority levels** (1=high is flagged in UI)
-4. **Use dueDateComponents** not absolute dates for better handling
+2. **Use filters for focused views**: `overdue` for urgent items, `today` for daily planning, `week` for weekly review
+3. **Set completionDate** when marking complete
+4. **Respect priority levels** (1=high is flagged in UI)
+5. **Use dueDateComponents** not absolute dates for better handling
+6. **Use batch operations** (`reminder_batch_complete`, `reminder_batch_delete`) when acting on multiple items
 
 ### Contact Management
 1. **Use unified contacts** for consistent view across accounts
@@ -236,11 +280,20 @@ When reading events/reminders, the `recurrence` array includes:
 3. **Handle labeled values carefully** - don't lose non-primary entries
 4. **Request minimum necessary keys** for performance
 
+### Mail Management
+1. **Mail.app must be running** for all operations
+2. **Use batch operations** (`mail_batch_update`, `mail_batch_delete`) for inbox triage
+3. **Use filters** (unread, flagged) for efficient message listing
+4. **Message IDs are RFC 2822** - stable across mailbox moves
+5. **Use mailbox/account hints** when available for faster lookups
+
 ### Error Handling
-1. **Handle permission denial gracefully**
-2. **Validate dates** before creating events/reminders
-3. **Check for conflicts** when scheduling
-4. **Provide clear feedback** on operation success/failure
+1. **Check authorization first** with `pim_status` when encountering errors
+2. **Use `pim_authorize`** to request access for `notDetermined` domains
+3. **Guide users to System Settings** for `denied` domains
+4. **Validate dates** before creating events/reminders
+5. **Check for conflicts** when scheduling
+6. **Provide clear feedback** on operation success/failure
 
 ## Common Patterns
 
@@ -263,6 +316,8 @@ Support flexible input:
 ## Troubleshooting
 
 ### Permission Issues
+- Use `pim_status` to check all domains at once
+- Use `pim_authorize` to trigger permission prompts
 - Check System Settings > Privacy & Security
 - Terminal/app must be granted access
 - Restart app after granting permission
@@ -276,6 +331,7 @@ Support flexible input:
 - Limit date ranges for event queries
 - Use predicates to filter server-side
 - Fetch only needed contact keys
+- Use batch operations for multi-item actions
 
 ## Mail.app via JXA
 
@@ -309,7 +365,7 @@ The Swift CLI (`mail-cli`) wraps JXA via `Process` calling `osascript -l JavaScr
 
 ### Batch Property Fetching
 
-JXA's scripting bridge supports array-level property access — much faster than per-message iteration:
+JXA's scripting bridge supports array-level property access -- much faster than per-message iteration:
 
 ```javascript
 // FAST: One IPC call per property, returns array
@@ -347,3 +403,5 @@ Mail.app requires Automation permission:
 | Folder management | No | Yes |
 | "On My Mac" mailboxes | Yes | No |
 | Offline access | Yes | No |
+| Batch flag updates | Yes | Yes |
+| Batch delete | Yes | Yes |
