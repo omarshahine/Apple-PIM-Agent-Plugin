@@ -25,6 +25,10 @@ import {
   getDefaultCalendar,
   getDefaultReminderList,
 } from "./config.js";
+import {
+  markToolResult,
+  getDatamarkingPreamble,
+} from "./sanitize.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1772,11 +1776,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     const result = await handleTool(name, args || {});
+
+    // Apply datamarking to untrusted PIM content fields
+    const markedResult = markToolResult(result, name);
+    const preamble = getDatamarkingPreamble();
+
     return {
       content: [
         {
           type: "text",
-          text: JSON.stringify(result, null, 2),
+          text: `${preamble}\n\n${JSON.stringify(markedResult, null, 2)}`,
         },
       ],
     };
