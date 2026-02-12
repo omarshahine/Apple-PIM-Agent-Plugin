@@ -18,6 +18,8 @@ struct ReminderCLI: AsyncParsableCommand {
             UpdateReminder.self,
             DeleteReminder.self,
             BatchCreateReminder.self,
+            BatchCompleteReminder.self,
+            BatchDeleteReminder.self,
         ]
     )
 }
@@ -397,6 +399,9 @@ struct ListReminders: AsyncParsableCommand {
     @Flag(name: .long, help: "Include completed reminders")
     var completed: Bool = false
 
+    @Option(name: .long, help: "Filter: overdue, today, tomorrow, week, upcoming, completed, all")
+    var filter: String?
+
     @Option(name: .long, help: "Maximum number of reminders")
     var limit: Int = 100
 
@@ -422,16 +427,80 @@ struct ListReminders: AsyncParsableCommand {
             }
         }
 
-        let filtered = reminders
-            .filter { completed || !$0.isCompleted }
+        // Determine include-completed based on filter or flag
+        let includeCompleted = completed || filter == "completed" || filter == "all"
+
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfToday = calendar.startOfDay(for: now)
+        let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
+        let endOfTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
+        let endOfWeek: Date = {
+            let weekday = calendar.component(.weekday, from: startOfToday)
+            let daysUntilSunday = weekday == 1 ? 7 : (8 - weekday)
+            return calendar.date(byAdding: .day, value: daysUntilSunday, to: startOfToday)!
+        }()
+
+        let filtered: [[String: Any]] = reminders
+            .filter { reminder in
+                // First apply completion filter
+                if !includeCompleted && reminder.isCompleted { return false }
+
+                // Then apply date filter if specified
+                guard let filterType = filter?.lowercased() else { return true }
+
+                let dueDate: Date? = {
+                    guard let components = reminder.dueDateComponents else { return nil }
+                    return calendar.date(from: components)
+                }()
+
+                switch filterType {
+                case "overdue":
+                    guard let due = dueDate else { return false }
+                    return due < startOfToday && !reminder.isCompleted
+                case "today":
+                    // Today includes overdue + due today
+                    guard let due = dueDate else { return false }
+                    return due < startOfTomorrow && !reminder.isCompleted
+                case "tomorrow":
+                    guard let due = dueDate else { return false }
+                    return due >= startOfTomorrow && due < endOfTomorrow
+                case "week":
+                    guard let due = dueDate else { return false }
+                    return due >= startOfToday && due < endOfWeek
+                case "upcoming":
+                    guard dueDate != nil else { return false }
+                    return !reminder.isCompleted
+                case "completed":
+                    return reminder.isCompleted
+                case "all":
+                    return true
+                default:
+                    return true
+                }
+            }
+            .sorted { a, b in
+                // Sort by due date (earliest first), undated last
+                let dateA = a.dueDateComponents.flatMap { calendar.date(from: $0) }
+                let dateB = b.dueDateComponents.flatMap { calendar.date(from: $0) }
+                if dateA == nil && dateB == nil { return false }
+                if dateA == nil { return false }
+                if dateB == nil { return true }
+                return dateA! < dateB!
+            }
             .prefix(limit)
             .map { reminderToDict($0) }
 
-        outputJSON([
+        var result: [String: Any] = [
             "success": true,
             "reminders": Array(filtered),
             "count": filtered.count
-        ])
+        ]
+        if let f = filter {
+            result["filter"] = f
+        }
+
+        outputJSON(result)
     }
 }
 
@@ -881,6 +950,137 @@ struct BatchCreateReminder: AsyncParsableCommand {
             "message": "Batch create completed",
             "created": createdReminders,
             "createdCount": createdReminders.count,
+            "errors": errors,
+            "errorCount": errors.count
+        ])
+    }
+}
+
+struct BatchCompleteReminder: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "batch-complete",
+        abstract: "Mark multiple reminders as complete in a single transaction"
+    )
+
+    @Option(name: .long, help: "JSON array of reminder IDs to complete")
+    var json: String
+
+    @Flag(name: .long, help: "Mark as incomplete instead")
+    var undo: Bool = false
+
+    func run() async throws {
+        try await requestReminderAccess()
+
+        guard let data = json.data(using: .utf8),
+              let ids = try? JSONDecoder().decode([String].self, from: data) else {
+            throw CLIError.invalidInput("Invalid JSON format. Expected an array of reminder ID strings.")
+        }
+
+        if ids.isEmpty {
+            throw CLIError.invalidInput("IDs array cannot be empty")
+        }
+
+        var completed: [[String: Any]] = []
+        var errors: [[String: Any]] = []
+
+        for id in ids {
+            guard let reminder = eventStore.calendarItem(withIdentifier: id) as? EKReminder else {
+                errors.append([
+                    "id": id,
+                    "error": "Reminder not found: \(id)"
+                ])
+                continue
+            }
+
+            reminder.isCompleted = !undo
+            if !undo {
+                reminder.completionDate = Date()
+            } else {
+                reminder.completionDate = nil
+            }
+
+            do {
+                try eventStore.save(reminder, commit: false)
+                completed.append(reminderToDict(reminder))
+            } catch {
+                errors.append([
+                    "id": id,
+                    "error": error.localizedDescription
+                ])
+            }
+        }
+
+        // Commit all changes at once
+        if !completed.isEmpty {
+            try eventStore.commit()
+        }
+
+        outputJSON([
+            "success": errors.isEmpty,
+            "message": undo ? "Batch incomplete completed" : "Batch complete completed",
+            "completed": completed,
+            "completedCount": completed.count,
+            "errors": errors,
+            "errorCount": errors.count
+        ])
+    }
+}
+
+struct BatchDeleteReminder: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "batch-delete",
+        abstract: "Delete multiple reminders in a single transaction"
+    )
+
+    @Option(name: .long, help: "JSON array of reminder IDs to delete")
+    var json: String
+
+    func run() async throws {
+        try await requestReminderAccess()
+
+        guard let data = json.data(using: .utf8),
+              let ids = try? JSONDecoder().decode([String].self, from: data) else {
+            throw CLIError.invalidInput("Invalid JSON format. Expected an array of reminder ID strings.")
+        }
+
+        if ids.isEmpty {
+            throw CLIError.invalidInput("IDs array cannot be empty")
+        }
+
+        var deleted: [[String: Any]] = []
+        var errors: [[String: Any]] = []
+
+        for id in ids {
+            guard let reminder = eventStore.calendarItem(withIdentifier: id) as? EKReminder else {
+                errors.append([
+                    "id": id,
+                    "error": "Reminder not found: \(id)"
+                ])
+                continue
+            }
+
+            let info = reminderToDict(reminder)
+            do {
+                try eventStore.remove(reminder, commit: false)
+                deleted.append(info)
+            } catch {
+                errors.append([
+                    "id": id,
+                    "error": error.localizedDescription
+                ])
+            }
+        }
+
+        // Commit all changes at once
+        if !deleted.isEmpty {
+            try eventStore.commit()
+        }
+
+        outputJSON([
+            "success": errors.isEmpty,
+            "message": "Batch delete completed",
+            "deleted": deleted,
+            "deletedCount": deleted.count,
             "errors": errors,
             "errorCount": errors.count
         ])

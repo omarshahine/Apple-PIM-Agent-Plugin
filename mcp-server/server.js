@@ -1872,67 +1872,16 @@ async function handleTool(name, args) {
       cliArgs.push("items");
       if (args.list) cliArgs.push("--list", args.list);
 
-      // Determine whether to fetch completed reminders based on filter
-      const filter = args.filter;
-      if (filter === "completed" || filter === "all" || args.completed) {
-        cliArgs.push("--completed");
-      }
+      // Pass filter directly to CLI (native filtering + sorting)
+      if (args.filter) cliArgs.push("--filter", args.filter);
+      // Legacy completed flag (overridden by filter if both set)
+      if (!args.filter && args.completed) cliArgs.push("--completed");
       if (args.limit) cliArgs.push("--limit", String(args.limit));
 
       const result = await runCLI("reminder-cli", cliArgs);
       // Filter reminders based on config (in case no specific list was requested)
       if (result.reminders) {
         result.reminders = await filterReminders(result.reminders);
-      }
-
-      // Apply date-based filtering if a filter is specified
-      if (filter && result.reminders) {
-        const now = new Date();
-        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const startOfTomorrow = new Date(startOfToday);
-        startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
-        const endOfTomorrow = new Date(startOfTomorrow);
-        endOfTomorrow.setDate(endOfTomorrow.getDate() + 1);
-
-        // Get end of current week (Sunday)
-        const endOfWeek = new Date(startOfToday);
-        const dayOfWeek = endOfWeek.getDay();
-        const daysUntilSunday = dayOfWeek === 0 ? 7 : 7 - dayOfWeek;
-        endOfWeek.setDate(endOfWeek.getDate() + daysUntilSunday);
-
-        result.reminders = result.reminders.filter((r) => {
-          const due = r.due ? new Date(r.due) : null;
-          switch (filter) {
-            case "overdue":
-              return due && due < startOfToday && !r.completed;
-            case "today":
-              // Today includes overdue + due today
-              return due && due < startOfTomorrow && !r.completed;
-            case "tomorrow":
-              return due && due >= startOfTomorrow && due < endOfTomorrow;
-            case "week":
-              return due && due >= startOfToday && due < endOfWeek;
-            case "upcoming":
-              return due && !r.completed;
-            case "completed":
-              return r.completed;
-            case "all":
-              return true;
-            default:
-              return true;
-          }
-        });
-
-        // Sort by due date (earliest first), undated last
-        result.reminders.sort((a, b) => {
-          if (!a.due && !b.due) return 0;
-          if (!a.due) return 1;
-          if (!b.due) return -1;
-          return new Date(a.due) - new Date(b.due);
-        });
-
-        result.filter = filter;
-        result.count = result.reminders.length;
       }
 
       return result;
@@ -2394,45 +2343,15 @@ async function handleTool(name, args) {
       return { results };
     }
 
-    // Batch reminder operations
+    // Batch reminder operations (native CLI — single process, single EventKit commit)
     case "reminder_batch_complete": {
       if (!args.ids || !Array.isArray(args.ids) || args.ids.length === 0) {
         throw new Error("IDs array is required and cannot be empty");
       }
 
-      const results = [];
-      const errors = [];
-
-      for (const id of args.ids) {
-        try {
-          // Check list access
-          const reminder = await runCLI("reminder-cli", ["get", "--id", id]);
-          if (reminder.list) {
-            const allowed = await isReminderListAllowed(reminder.list);
-            if (!allowed) {
-              errors.push({
-                id,
-                error: `Reminder belongs to list '${reminder.list}' which is not in your allowed list.`,
-              });
-              continue;
-            }
-          }
-
-          const completeArgs = ["complete", "--id", id];
-          if (args.undo) completeArgs.push("--undo");
-          const result = await runCLI("reminder-cli", completeArgs);
-          results.push({ id, success: true, ...result });
-        } catch (err) {
-          errors.push({ id, error: err.message });
-        }
-      }
-
-      return {
-        completed: results.length,
-        failed: errors.length,
-        results,
-        errors: errors.length > 0 ? errors : undefined,
-      };
+      const completeArgs = ["batch-complete", "--json", JSON.stringify(args.ids)];
+      if (args.undo) completeArgs.push("--undo");
+      return await runCLI("reminder-cli", completeArgs);
     }
 
     case "reminder_batch_delete": {
@@ -2440,72 +2359,32 @@ async function handleTool(name, args) {
         throw new Error("IDs array is required and cannot be empty");
       }
 
-      const results = [];
-      const errors = [];
-
-      for (const id of args.ids) {
-        try {
-          // Check list access
-          const reminder = await runCLI("reminder-cli", ["get", "--id", id]);
-          if (reminder.list) {
-            const allowed = await isReminderListAllowed(reminder.list);
-            if (!allowed) {
-              errors.push({
-                id,
-                error: `Reminder belongs to list '${reminder.list}' which is not in your allowed list.`,
-              });
-              continue;
-            }
-          }
-
-          const result = await runCLI("reminder-cli", ["delete", "--id", id]);
-          results.push({ id, success: true, ...result });
-        } catch (err) {
-          errors.push({ id, error: err.message });
-        }
-      }
-
-      return {
-        deleted: results.length,
-        failed: errors.length,
-        results,
-        errors: errors.length > 0 ? errors : undefined,
-      };
+      return await runCLI("reminder-cli", [
+        "batch-delete",
+        "--json",
+        JSON.stringify(args.ids),
+      ]);
     }
 
-    // Batch mail operations
+    // Batch mail operations (native CLI — single JXA call)
     case "mail_batch_update": {
       if (!args.ids || !Array.isArray(args.ids) || args.ids.length === 0) {
         throw new Error("IDs array is required and cannot be empty");
       }
 
-      const results = [];
-      const errors = [];
+      // Build update objects for the native CLI
+      const updates = args.ids.map((id) => {
+        const obj = { id };
+        if (args.read !== undefined) obj.read = args.read;
+        if (args.flagged !== undefined) obj.flagged = args.flagged;
+        if (args.junk !== undefined) obj.junk = args.junk;
+        return obj;
+      });
 
-      for (const id of args.ids) {
-        try {
-          const updateArgs = ["update", "--id", id];
-          if (args.read !== undefined)
-            updateArgs.push("--read", String(args.read));
-          if (args.flagged !== undefined)
-            updateArgs.push("--flagged", String(args.flagged));
-          if (args.junk !== undefined)
-            updateArgs.push("--junk", String(args.junk));
-          if (args.mailbox) updateArgs.push("--mailbox", args.mailbox);
-          if (args.account) updateArgs.push("--account", args.account);
-          const result = await runCLI("mail-cli", updateArgs);
-          results.push({ id, success: true, ...result });
-        } catch (err) {
-          errors.push({ id, error: err.message });
-        }
-      }
-
-      return {
-        updated: results.length,
-        failed: errors.length,
-        results,
-        errors: errors.length > 0 ? errors : undefined,
-      };
+      const batchArgs = ["batch-update", "--json", JSON.stringify(updates)];
+      if (args.mailbox) batchArgs.push("--mailbox", args.mailbox);
+      if (args.account) batchArgs.push("--account", args.account);
+      return await runCLI("mail-cli", batchArgs);
     }
 
     case "mail_batch_delete": {
@@ -2513,27 +2392,14 @@ async function handleTool(name, args) {
         throw new Error("IDs array is required and cannot be empty");
       }
 
-      const results = [];
-      const errors = [];
-
-      for (const id of args.ids) {
-        try {
-          const delArgs = ["delete", "--id", id];
-          if (args.mailbox) delArgs.push("--mailbox", args.mailbox);
-          if (args.account) delArgs.push("--account", args.account);
-          const result = await runCLI("mail-cli", delArgs);
-          results.push({ id, success: true, ...result });
-        } catch (err) {
-          errors.push({ id, error: err.message });
-        }
-      }
-
-      return {
-        deleted: results.length,
-        failed: errors.length,
-        results,
-        errors: errors.length > 0 ? errors : undefined,
-      };
+      const batchArgs = [
+        "batch-delete",
+        "--json",
+        JSON.stringify(args.ids),
+      ];
+      if (args.mailbox) batchArgs.push("--mailbox", args.mailbox);
+      if (args.account) batchArgs.push("--account", args.account);
+      return await runCLI("mail-cli", batchArgs);
     }
 
     default:
