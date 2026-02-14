@@ -225,6 +225,18 @@ func outputJSON(_ value: Any) {
     }
 }
 
+/// Check if an error (or any of its underlying errors) is a CoreData merge conflict (code 134092).
+func isMergeConflict(_ error: Error) -> Bool {
+    var current: NSError? = error as NSError
+    while let err = current {
+        if err.code == 134092 {
+            return true
+        }
+        current = err.userInfo[NSUnderlyingErrorKey] as? NSError
+    }
+    return false
+}
+
 let keysToFetch: [CNKeyDescriptor] = [
     CNContactIdentifierKey as CNKeyDescriptor,
     CNContactGivenNameKey as CNKeyDescriptor,
@@ -889,98 +901,117 @@ struct UpdateContact: AsyncParsableCommand {
     func run() async throws {
         try await requestContactsAccess()
 
-        let predicate = CNContact.predicateForContacts(withIdentifiers: [id])
-        let contacts = try contactStore.unifiedContacts(matching: predicate, keysToFetch: keysToFetch)
+        let maxAttempts = 3
+        var attempts = 0
 
-        guard let existingContact = contacts.first else {
-            throw CLIError.notFound("Contact not found: \(id)")
-        }
+        while true {
+            attempts += 1
 
-        let contact = existingContact.mutableCopy() as! CNMutableContact
+            let predicate = CNContact.predicateForContacts(withIdentifiers: [id])
+            let contacts = try contactStore.unifiedContacts(matching: predicate, keysToFetch: keysToFetch)
 
-        // Name fields
-        if let first = firstName { contact.givenName = first }
-        if let last = lastName { contact.familyName = last }
-        if let v = middleName { contact.middleName = v }
-        if let v = namePrefix { contact.namePrefix = v }
-        if let v = nameSuffix { contact.nameSuffix = v }
-        if let v = nickname { contact.nickname = v }
-        if let v = previousFamilyName { contact.previousFamilyName = v }
-
-        // Phonetic
-        if let v = phoneticGivenName { contact.phoneticGivenName = v }
-        if let v = phoneticMiddleName { contact.phoneticMiddleName = v }
-        if let v = phoneticFamilyName { contact.phoneticFamilyName = v }
-        if let v = phoneticOrganizationName { contact.phoneticOrganizationName = v }
-
-        // Organization
-        if let org = organization { contact.organizationName = org }
-        if let title = jobTitle { contact.jobTitle = title }
-        if let dept = department { contact.departmentName = dept }
-
-        // Contact type
-        if let ct = contactType?.lowercased() {
-            contact.contactType = ct == "organization" ? .organization : .person
-        }
-
-        // Emails (JSON array replaces all; simple --email replaces primary)
-        if let emailsJSON = emails {
-            contact.emailAddresses = try parseEmails(emailsJSON)
-        } else if let emailAddr = email {
-            if contact.emailAddresses.isEmpty {
-                contact.emailAddresses = [CNLabeledValue(label: CNLabelWork, value: emailAddr as NSString)]
-            } else {
-                var existing = contact.emailAddresses.map { $0.mutableCopy() as! CNLabeledValue<NSString> }
-                existing[0] = CNLabeledValue(label: existing[0].label, value: emailAddr as NSString)
-                contact.emailAddresses = existing
+            guard let existingContact = contacts.first else {
+                throw CLIError.notFound("Contact not found: \(id)")
             }
-        }
 
-        // Phones (JSON array replaces all; simple --phone replaces primary)
-        if let phonesJSON = phones {
-            contact.phoneNumbers = try parsePhones(phonesJSON)
-        } else if let phoneNum = phone {
-            if contact.phoneNumbers.isEmpty {
-                contact.phoneNumbers = [CNLabeledValue(label: CNLabelPhoneNumberMain, value: CNPhoneNumber(stringValue: phoneNum))]
-            } else {
-                var existing = contact.phoneNumbers.map { $0.mutableCopy() as! CNLabeledValue<CNPhoneNumber> }
-                existing[0] = CNLabeledValue(label: existing[0].label, value: CNPhoneNumber(stringValue: phoneNum))
-                contact.phoneNumbers = existing
+            let contact = existingContact.mutableCopy() as! CNMutableContact
+
+            // Name fields
+            if let first = firstName { contact.givenName = first }
+            if let last = lastName { contact.familyName = last }
+            if let v = middleName { contact.middleName = v }
+            if let v = namePrefix { contact.namePrefix = v }
+            if let v = nameSuffix { contact.nameSuffix = v }
+            if let v = nickname { contact.nickname = v }
+            if let v = previousFamilyName { contact.previousFamilyName = v }
+
+            // Phonetic
+            if let v = phoneticGivenName { contact.phoneticGivenName = v }
+            if let v = phoneticMiddleName { contact.phoneticMiddleName = v }
+            if let v = phoneticFamilyName { contact.phoneticFamilyName = v }
+            if let v = phoneticOrganizationName { contact.phoneticOrganizationName = v }
+
+            // Organization
+            if let org = organization { contact.organizationName = org }
+            if let title = jobTitle { contact.jobTitle = title }
+            if let dept = department { contact.departmentName = dept }
+
+            // Contact type
+            if let ct = contactType?.lowercased() {
+                contact.contactType = ct == "organization" ? .organization : .person
             }
-        }
 
-        // Structured arrays (replace all when provided)
-        if let json = addresses { contact.postalAddresses = try parseAddresses(json) }
-        if let json = urls { contact.urlAddresses = try parseURLs(json) }
-        if let json = socialProfiles { contact.socialProfiles = try parseSocialProfiles(json) }
-        if let json = instantMessages { contact.instantMessageAddresses = try parseInstantMessages(json) }
-        if let json = relations { contact.contactRelations = try parseRelations(json) }
-        if let json = dates { contact.dates = try parseDates(json) }
-
-        // Birthday
-        if let birthdayStr = birthday {
-            contact.birthday = try parseBirthday(birthdayStr)
-        }
-
-        // Notes (guarded: macOS may restrict note access via TCC)
-        if let note = notes {
-            if existingContact.isKeyAvailable(CNContactNoteKey) {
-                contact.note = note
-            } else {
-                // Note property not available — warn but don't crash
-                fputs("Warning: Cannot set notes — Contacts note access not available. Check System Settings > Privacy & Security > Contacts.\n", stderr)
+            // Emails (JSON array replaces all; simple --email replaces primary)
+            if let emailsJSON = emails {
+                contact.emailAddresses = try parseEmails(emailsJSON)
+            } else if let emailAddr = email {
+                if contact.emailAddresses.isEmpty {
+                    contact.emailAddresses = [CNLabeledValue(label: CNLabelWork, value: emailAddr as NSString)]
+                } else {
+                    var existing = contact.emailAddresses.map { $0.mutableCopy() as! CNLabeledValue<NSString> }
+                    existing[0] = CNLabeledValue(label: existing[0].label, value: emailAddr as NSString)
+                    contact.emailAddresses = existing
+                }
             }
+
+            // Phones (JSON array replaces all; simple --phone replaces primary)
+            if let phonesJSON = phones {
+                contact.phoneNumbers = try parsePhones(phonesJSON)
+            } else if let phoneNum = phone {
+                if contact.phoneNumbers.isEmpty {
+                    contact.phoneNumbers = [CNLabeledValue(label: CNLabelPhoneNumberMain, value: CNPhoneNumber(stringValue: phoneNum))]
+                } else {
+                    var existing = contact.phoneNumbers.map { $0.mutableCopy() as! CNLabeledValue<CNPhoneNumber> }
+                    existing[0] = CNLabeledValue(label: existing[0].label, value: CNPhoneNumber(stringValue: phoneNum))
+                    contact.phoneNumbers = existing
+                }
+            }
+
+            // Structured arrays (replace all when provided)
+            if let json = addresses { contact.postalAddresses = try parseAddresses(json) }
+            if let json = urls { contact.urlAddresses = try parseURLs(json) }
+            if let json = socialProfiles { contact.socialProfiles = try parseSocialProfiles(json) }
+            if let json = instantMessages { contact.instantMessageAddresses = try parseInstantMessages(json) }
+            if let json = relations { contact.contactRelations = try parseRelations(json) }
+            if let json = dates { contact.dates = try parseDates(json) }
+
+            // Birthday
+            if let birthdayStr = birthday {
+                contact.birthday = try parseBirthday(birthdayStr)
+            }
+
+            // Notes (guarded: macOS may restrict note access via TCC)
+            if let note = notes {
+                if existingContact.isKeyAvailable(CNContactNoteKey) {
+                    contact.note = note
+                } else {
+                    fputs("Warning: Cannot set notes — Contacts note access not available. Check System Settings > Privacy & Security > Contacts.\n", stderr)
+                }
+            }
+
+            let saveRequest = CNSaveRequest()
+            saveRequest.update(contact)
+
+            do {
+                try contactStore.execute(saveRequest)
+            } catch {
+                // CoreData 134092 = NSManagedObjectMergeError (iCloud sync conflict)
+                // May appear at top level or nested in underlyingErrors
+                if isMergeConflict(error) && attempts < maxAttempts {
+                    fputs("Warning: Merge conflict (attempt \(attempts)/\(maxAttempts)). Re-fetching and retrying...\n", stderr)
+                    try await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+                    continue
+                }
+                throw error
+            }
+
+            outputJSON([
+                "success": true,
+                "message": "Contact updated successfully",
+                "contact": contactToDict(contact, brief: false)
+            ])
+            return
         }
-
-        let saveRequest = CNSaveRequest()
-        saveRequest.update(contact)
-        try contactStore.execute(saveRequest)
-
-        outputJSON([
-            "success": true,
-            "message": "Contact updated successfully",
-            "contact": contactToDict(contact, brief: false)
-        ])
     }
 }
 
