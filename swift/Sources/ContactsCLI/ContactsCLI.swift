@@ -71,6 +71,153 @@ func parseBirthday(_ string: String) throws -> DateComponents {
     }
 }
 
+/// Map a user-friendly label string to a CNLabel constant.
+func labelConstant(_ label: String?) -> String {
+    guard let label = label?.lowercased() else { return CNLabelOther }
+    switch label {
+    case "home": return CNLabelHome
+    case "work": return CNLabelWork
+    case "school": return CNLabelSchool
+    case "other": return CNLabelOther
+    case "main": return CNLabelPhoneNumberMain
+    case "mobile": return CNLabelPhoneNumberMobile
+    case "iphone": return CNLabelPhoneNumberiPhone
+    case "home fax": return CNLabelPhoneNumberHomeFax
+    case "work fax": return CNLabelPhoneNumberWorkFax
+    case "pager": return CNLabelPhoneNumberPager
+    case "homepage": return CNLabelURLAddressHomePage
+    case "icloud": return CNLabelEmailiCloud
+    case "anniversary": return CNLabelDateAnniversary
+    default: return label
+    }
+}
+
+/// Map a user-friendly relation label to a CNLabel constant.
+func relationLabelConstant(_ label: String?) -> String {
+    guard let label = label?.lowercased() else { return CNLabelOther }
+    switch label {
+    case "assistant": return CNLabelContactRelationAssistant
+    case "manager": return CNLabelContactRelationManager
+    case "colleague": return CNLabelContactRelationColleague
+    case "teacher": return CNLabelContactRelationTeacher
+    case "spouse": return CNLabelContactRelationSpouse
+    case "partner": return CNLabelContactRelationPartner
+    case "parent": return CNLabelContactRelationParent
+    case "mother": return CNLabelContactRelationMother
+    case "father": return CNLabelContactRelationFather
+    case "child": return CNLabelContactRelationChild
+    case "daughter": return CNLabelContactRelationDaughter
+    case "son": return CNLabelContactRelationSon
+    case "sibling": return CNLabelContactRelationSibling
+    case "sister": return CNLabelContactRelationSister
+    case "brother": return CNLabelContactRelationBrother
+    case "friend": return CNLabelContactRelationFriend
+    case "wife": return CNLabelContactRelationWife
+    case "husband": return CNLabelContactRelationHusband
+    default: return labelConstant(label)
+    }
+}
+
+/// Parse a JSON string into an array of dictionaries.
+func parseJSONArray(_ json: String) throws -> [[String: Any]] {
+    guard let data = json.data(using: .utf8),
+          let parsed = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+        throw CLIError.invalidInput("Invalid JSON array: \(json)")
+    }
+    return parsed
+}
+
+/// Parse JSON addresses into CNLabeledValue<CNPostalAddress> array.
+func parseAddresses(_ json: String) throws -> [CNLabeledValue<CNPostalAddress>] {
+    let items = try parseJSONArray(json)
+    return items.map { item in
+        let addr = CNMutablePostalAddress()
+        addr.street = item["street"] as? String ?? ""
+        addr.city = item["city"] as? String ?? ""
+        addr.state = item["state"] as? String ?? ""
+        addr.postalCode = item["postalCode"] as? String ?? ""
+        addr.country = item["country"] as? String ?? ""
+        addr.isoCountryCode = item["isoCountryCode"] as? String ?? ""
+        addr.subLocality = item["subLocality"] as? String ?? ""
+        addr.subAdministrativeArea = item["subAdministrativeArea"] as? String ?? ""
+        return CNLabeledValue(label: labelConstant(item["label"] as? String), value: addr as CNPostalAddress)
+    }
+}
+
+/// Parse JSON URLs into CNLabeledValue<NSString> array.
+func parseURLs(_ json: String) throws -> [CNLabeledValue<NSString>] {
+    let items = try parseJSONArray(json)
+    return items.map { item in
+        let value = item["value"] as? String ?? ""
+        return CNLabeledValue(label: labelConstant(item["label"] as? String), value: value as NSString)
+    }
+}
+
+/// Parse JSON social profiles into CNLabeledValue<CNSocialProfile> array.
+func parseSocialProfiles(_ json: String) throws -> [CNLabeledValue<CNSocialProfile>] {
+    let items = try parseJSONArray(json)
+    return items.map { item in
+        let profile = CNSocialProfile(
+            urlString: item["url"] as? String ?? "",
+            username: item["username"] as? String ?? "",
+            userIdentifier: item["userIdentifier"] as? String ?? "",
+            service: item["service"] as? String ?? ""
+        )
+        return CNLabeledValue(label: labelConstant(item["label"] as? String), value: profile)
+    }
+}
+
+/// Parse JSON instant messages into CNLabeledValue<CNInstantMessageAddress> array.
+func parseInstantMessages(_ json: String) throws -> [CNLabeledValue<CNInstantMessageAddress>] {
+    let items = try parseJSONArray(json)
+    return items.map { item in
+        let im = CNInstantMessageAddress(
+            username: item["username"] as? String ?? "",
+            service: item["service"] as? String ?? ""
+        )
+        return CNLabeledValue(label: labelConstant(item["label"] as? String), value: im)
+    }
+}
+
+/// Parse JSON relations into CNLabeledValue<CNContactRelation> array.
+func parseRelations(_ json: String) throws -> [CNLabeledValue<CNContactRelation>] {
+    let items = try parseJSONArray(json)
+    return items.map { item in
+        let name = item["name"] as? String ?? ""
+        return CNLabeledValue(label: relationLabelConstant(item["label"] as? String), value: CNContactRelation(name: name))
+    }
+}
+
+/// Parse JSON dates into CNLabeledValue<NSDateComponents> array.
+func parseDates(_ json: String) throws -> [CNLabeledValue<NSDateComponents>] {
+    let items = try parseJSONArray(json)
+    return items.map { item in
+        let comps = NSDateComponents()
+        if let year = item["year"] as? Int { comps.year = year }
+        if let month = item["month"] as? Int { comps.month = month }
+        if let day = item["day"] as? Int { comps.day = day }
+        return CNLabeledValue(label: labelConstant(item["label"] as? String), value: comps)
+    }
+}
+
+/// Parse JSON emails into CNLabeledValue<NSString> array.
+func parseEmails(_ json: String) throws -> [CNLabeledValue<NSString>] {
+    let items = try parseJSONArray(json)
+    return items.map { item in
+        let value = item["value"] as? String ?? ""
+        return CNLabeledValue(label: labelConstant(item["label"] as? String), value: value as NSString)
+    }
+}
+
+/// Parse JSON phones into CNLabeledValue<CNPhoneNumber> array.
+func parsePhones(_ json: String) throws -> [CNLabeledValue<CNPhoneNumber>] {
+    let items = try parseJSONArray(json)
+    return items.map { item in
+        let value = item["value"] as? String ?? ""
+        return CNLabeledValue(label: labelConstant(item["label"] as? String), value: CNPhoneNumber(stringValue: value))
+    }
+}
+
 func outputJSON(_ value: Any) {
     if let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys]),
        let string = String(data: data, encoding: .utf8) {
@@ -102,6 +249,13 @@ let keysToFetch: [CNKeyDescriptor] = [
     CNContactRelationsKey as CNKeyDescriptor,
     CNContactSocialProfilesKey as CNKeyDescriptor,
     CNContactInstantMessageAddressesKey as CNKeyDescriptor,
+    CNContactPhoneticGivenNameKey as CNKeyDescriptor,
+    CNContactPhoneticMiddleNameKey as CNKeyDescriptor,
+    CNContactPhoneticFamilyNameKey as CNKeyDescriptor,
+    CNContactPhoneticOrganizationNameKey as CNKeyDescriptor,
+    CNContactPreviousFamilyNameKey as CNKeyDescriptor,
+    CNContactNonGregorianBirthdayKey as CNKeyDescriptor,
+    CNContactDatesKey as CNKeyDescriptor,
     CNContactFormatter.descriptorForRequiredKeys(for: .fullName),
 ]
 
@@ -146,6 +300,11 @@ func contactToDict(_ contact: CNContact, brief: Bool = false) -> [String: Any] {
     if !contact.namePrefix.isEmpty { dict["namePrefix"] = contact.namePrefix }
     if !contact.nameSuffix.isEmpty { dict["nameSuffix"] = contact.nameSuffix }
     if !contact.nickname.isEmpty { dict["nickname"] = contact.nickname }
+    if !contact.previousFamilyName.isEmpty { dict["previousFamilyName"] = contact.previousFamilyName }
+    if !contact.phoneticGivenName.isEmpty { dict["phoneticGivenName"] = contact.phoneticGivenName }
+    if !contact.phoneticMiddleName.isEmpty { dict["phoneticMiddleName"] = contact.phoneticMiddleName }
+    if !contact.phoneticFamilyName.isEmpty { dict["phoneticFamilyName"] = contact.phoneticFamilyName }
+    if !contact.phoneticOrganizationName.isEmpty { dict["phoneticOrganizationName"] = contact.phoneticOrganizationName }
     if !contact.organizationName.isEmpty { dict["organization"] = contact.organizationName }
     if !contact.jobTitle.isEmpty { dict["jobTitle"] = contact.jobTitle }
     if !contact.departmentName.isEmpty { dict["department"] = contact.departmentName }
@@ -191,12 +350,46 @@ func contactToDict(_ contact: CNContact, brief: Bool = false) -> [String: Any] {
         }
     }
 
+    if !contact.instantMessageAddresses.isEmpty {
+        dict["instantMessages"] = contact.instantMessageAddresses.map { labeled in
+            [
+                "label": CNLabeledValue<CNInstantMessageAddress>.localizedString(forLabel: labeled.label ?? ""),
+                "service": labeled.value.service,
+                "username": labeled.value.username
+            ]
+        }
+    }
+
     if let birthday = contact.birthday {
         var birthdayDict: [String: Any] = [:]
         if let year = birthday.year { birthdayDict["year"] = year }
         if let month = birthday.month { birthdayDict["month"] = month }
         if let day = birthday.day { birthdayDict["day"] = day }
         dict["birthday"] = birthdayDict
+    }
+
+    if let nonGregorianBirthday = contact.nonGregorianBirthday {
+        var bdayDict: [String: Any] = [:]
+        if let year = nonGregorianBirthday.year { bdayDict["year"] = year }
+        if let month = nonGregorianBirthday.month { bdayDict["month"] = month }
+        if let day = nonGregorianBirthday.day { bdayDict["day"] = day }
+        if let cal = nonGregorianBirthday.calendar {
+            bdayDict["calendar"] = "\(cal.identifier)"
+        }
+        dict["nonGregorianBirthday"] = bdayDict
+    }
+
+    if !contact.dates.isEmpty {
+        dict["dates"] = contact.dates.map { labeled in
+            var dateDict: [String: Any] = [
+                "label": CNLabeledValue<NSDateComponents>.localizedString(forLabel: labeled.label ?? "")
+            ]
+            let comps = labeled.value as DateComponents
+            if let year = comps.year { dateDict["year"] = year }
+            if let month = comps.month { dateDict["month"] = month }
+            if let day = comps.day { dateDict["day"] = day }
+            return dateDict
+        }
     }
 
     // Notes may not be available due to macOS privacy restrictions
@@ -420,6 +613,7 @@ struct CreateContact: AsyncParsableCommand {
         abstract: "Create a new contact"
     )
 
+    // Name fields
     @Option(name: .long, help: "First name")
     var firstName: String?
 
@@ -429,31 +623,95 @@ struct CreateContact: AsyncParsableCommand {
     @Option(name: .long, help: "Full name (alternative to first/last)")
     var name: String?
 
-    @Option(name: .long, help: "Email address")
-    var email: String?
+    @Option(name: .long, help: "Middle name")
+    var middleName: String?
 
-    @Option(name: .long, help: "Phone number")
-    var phone: String?
+    @Option(name: .long, help: "Name prefix (e.g. Dr., Mr.)")
+    var namePrefix: String?
 
+    @Option(name: .long, help: "Name suffix (e.g. Jr., III)")
+    var nameSuffix: String?
+
+    @Option(name: .long, help: "Nickname")
+    var nickname: String?
+
+    @Option(name: .long, help: "Previous family name (maiden name)")
+    var previousFamilyName: String?
+
+    // Phonetic names
+    @Option(name: .long, help: "Phonetic first name")
+    var phoneticGivenName: String?
+
+    @Option(name: .long, help: "Phonetic middle name")
+    var phoneticMiddleName: String?
+
+    @Option(name: .long, help: "Phonetic last name")
+    var phoneticFamilyName: String?
+
+    @Option(name: .long, help: "Phonetic organization name")
+    var phoneticOrganizationName: String?
+
+    // Organization
     @Option(name: .long, help: "Organization/company name")
     var organization: String?
 
     @Option(name: .long, help: "Job title")
     var jobTitle: String?
 
-    @Option(name: .long, help: "Notes")
-    var notes: String?
+    @Option(name: .long, help: "Department name")
+    var department: String?
 
+    // Contact type
+    @Option(name: .long, help: "Contact type: person or organization")
+    var contactType: String?
+
+    // Simple communication (backward compatible)
+    @Option(name: .long, help: "Email address (simple, uses 'work' label)")
+    var email: String?
+
+    @Option(name: .long, help: "Phone number (simple, uses 'main' label)")
+    var phone: String?
+
+    // Rich labeled arrays (JSON)
+    @Option(name: .long, help: "Emails as JSON array: [{\"label\":\"work\",\"value\":\"user@example.com\"}]")
+    var emails: String?
+
+    @Option(name: .long, help: "Phones as JSON array: [{\"label\":\"mobile\",\"value\":\"555-0100\"}]")
+    var phones: String?
+
+    @Option(name: .long, help: "Addresses as JSON array: [{\"label\":\"home\",\"street\":\"...\",\"city\":\"...\",\"state\":\"...\",\"postalCode\":\"...\",\"country\":\"...\"}]")
+    var addresses: String?
+
+    @Option(name: .long, help: "URLs as JSON array: [{\"label\":\"homepage\",\"value\":\"https://...\"}]")
+    var urls: String?
+
+    @Option(name: .long, help: "Social profiles as JSON array: [{\"service\":\"Twitter\",\"username\":\"...\",\"url\":\"...\"}]")
+    var socialProfiles: String?
+
+    @Option(name: .long, help: "Instant messages as JSON array: [{\"service\":\"Skype\",\"username\":\"...\"}]")
+    var instantMessages: String?
+
+    @Option(name: .long, help: "Relations as JSON array: [{\"label\":\"spouse\",\"name\":\"...\"}]")
+    var relations: String?
+
+    // Dates
     @Option(name: .long, help: "Birthday (YYYY-MM-DD or MM-DD)")
     var birthday: String?
+
+    @Option(name: .long, help: "Dates as JSON array: [{\"label\":\"anniversary\",\"month\":6,\"day\":15,\"year\":2020}]")
+    var dates: String?
+
+    // Notes
+    @Option(name: .long, help: "Notes")
+    var notes: String?
 
     func run() async throws {
         try await requestContactsAccess()
 
         let contact = CNMutableContact()
 
+        // Name
         if let fullName = name {
-            // Parse full name into parts
             let parts = fullName.split(separator: " ")
             if parts.count == 1 {
                 contact.givenName = String(parts[0])
@@ -466,29 +724,57 @@ struct CreateContact: AsyncParsableCommand {
             if let last = lastName { contact.familyName = last }
         }
 
-        if let emailAddr = email {
+        if let v = middleName { contact.middleName = v }
+        if let v = namePrefix { contact.namePrefix = v }
+        if let v = nameSuffix { contact.nameSuffix = v }
+        if let v = nickname { contact.nickname = v }
+        if let v = previousFamilyName { contact.previousFamilyName = v }
+
+        // Phonetic
+        if let v = phoneticGivenName { contact.phoneticGivenName = v }
+        if let v = phoneticMiddleName { contact.phoneticMiddleName = v }
+        if let v = phoneticFamilyName { contact.phoneticFamilyName = v }
+        if let v = phoneticOrganizationName { contact.phoneticOrganizationName = v }
+
+        // Organization
+        if let org = organization { contact.organizationName = org }
+        if let title = jobTitle { contact.jobTitle = title }
+        if let dept = department { contact.departmentName = dept }
+
+        // Contact type
+        if let ct = contactType?.lowercased() {
+            contact.contactType = ct == "organization" ? .organization : .person
+        }
+
+        // Emails (JSON array takes priority over simple --email)
+        if let emailsJSON = emails {
+            contact.emailAddresses = try parseEmails(emailsJSON)
+        } else if let emailAddr = email {
             contact.emailAddresses = [CNLabeledValue(label: CNLabelWork, value: emailAddr as NSString)]
         }
 
-        if let phoneNum = phone {
+        // Phones (JSON array takes priority over simple --phone)
+        if let phonesJSON = phones {
+            contact.phoneNumbers = try parsePhones(phonesJSON)
+        } else if let phoneNum = phone {
             contact.phoneNumbers = [CNLabeledValue(label: CNLabelPhoneNumberMain, value: CNPhoneNumber(stringValue: phoneNum))]
         }
 
-        if let org = organization {
-            contact.organizationName = org
-        }
+        // Structured arrays
+        if let json = addresses { contact.postalAddresses = try parseAddresses(json) }
+        if let json = urls { contact.urlAddresses = try parseURLs(json) }
+        if let json = socialProfiles { contact.socialProfiles = try parseSocialProfiles(json) }
+        if let json = instantMessages { contact.instantMessageAddresses = try parseInstantMessages(json) }
+        if let json = relations { contact.contactRelations = try parseRelations(json) }
+        if let json = dates { contact.dates = try parseDates(json) }
 
-        if let title = jobTitle {
-            contact.jobTitle = title
-        }
-
-        if let note = notes {
-            contact.note = note
-        }
-
+        // Birthday
         if let birthdayStr = birthday {
             contact.birthday = try parseBirthday(birthdayStr)
         }
+
+        // Notes
+        if let note = notes { contact.note = note }
 
         let saveRequest = CNSaveRequest()
         saveRequest.add(contact, toContainerWithIdentifier: nil)
@@ -511,29 +797,94 @@ struct UpdateContact: AsyncParsableCommand {
     @Option(name: .long, help: "Contact ID to update")
     var id: String
 
+    // Name fields
     @Option(name: .long, help: "New first name")
     var firstName: String?
 
     @Option(name: .long, help: "New last name")
     var lastName: String?
 
-    @Option(name: .long, help: "New email (replaces primary)")
-    var email: String?
+    @Option(name: .long, help: "New middle name")
+    var middleName: String?
 
-    @Option(name: .long, help: "New phone (replaces primary)")
-    var phone: String?
+    @Option(name: .long, help: "New name prefix (e.g. Dr., Mr.)")
+    var namePrefix: String?
 
+    @Option(name: .long, help: "New name suffix (e.g. Jr., III)")
+    var nameSuffix: String?
+
+    @Option(name: .long, help: "New nickname")
+    var nickname: String?
+
+    @Option(name: .long, help: "New previous family name (maiden name)")
+    var previousFamilyName: String?
+
+    // Phonetic names
+    @Option(name: .long, help: "New phonetic first name")
+    var phoneticGivenName: String?
+
+    @Option(name: .long, help: "New phonetic middle name")
+    var phoneticMiddleName: String?
+
+    @Option(name: .long, help: "New phonetic last name")
+    var phoneticFamilyName: String?
+
+    @Option(name: .long, help: "New phonetic organization name")
+    var phoneticOrganizationName: String?
+
+    // Organization
     @Option(name: .long, help: "New organization")
     var organization: String?
 
     @Option(name: .long, help: "New job title")
     var jobTitle: String?
 
-    @Option(name: .long, help: "New notes")
-    var notes: String?
+    @Option(name: .long, help: "New department name")
+    var department: String?
 
+    // Contact type
+    @Option(name: .long, help: "Contact type: person or organization")
+    var contactType: String?
+
+    // Simple communication (backward compatible - replaces primary)
+    @Option(name: .long, help: "New email (replaces primary)")
+    var email: String?
+
+    @Option(name: .long, help: "New phone (replaces primary)")
+    var phone: String?
+
+    // Rich labeled arrays (JSON - replaces ALL entries)
+    @Option(name: .long, help: "Replace all emails: [{\"label\":\"work\",\"value\":\"user@example.com\"}]")
+    var emails: String?
+
+    @Option(name: .long, help: "Replace all phones: [{\"label\":\"mobile\",\"value\":\"555-0100\"}]")
+    var phones: String?
+
+    @Option(name: .long, help: "Replace all addresses: [{\"label\":\"home\",\"street\":\"...\",\"city\":\"...\",\"state\":\"...\",\"postalCode\":\"...\",\"country\":\"...\"}]")
+    var addresses: String?
+
+    @Option(name: .long, help: "Replace all URLs: [{\"label\":\"homepage\",\"value\":\"https://...\"}]")
+    var urls: String?
+
+    @Option(name: .long, help: "Replace all social profiles: [{\"service\":\"Twitter\",\"username\":\"...\",\"url\":\"...\"}]")
+    var socialProfiles: String?
+
+    @Option(name: .long, help: "Replace all instant messages: [{\"service\":\"Skype\",\"username\":\"...\"}]")
+    var instantMessages: String?
+
+    @Option(name: .long, help: "Replace all relations: [{\"label\":\"spouse\",\"name\":\"...\"}]")
+    var relations: String?
+
+    // Dates
     @Option(name: .long, help: "New birthday (YYYY-MM-DD or MM-DD)")
     var birthday: String?
+
+    @Option(name: .long, help: "Replace all dates: [{\"label\":\"anniversary\",\"month\":6,\"day\":15,\"year\":2020}]")
+    var dates: String?
+
+    // Notes
+    @Option(name: .long, help: "New notes")
+    var notes: String?
 
     func run() async throws {
         try await requestContactsAccess()
@@ -547,34 +898,77 @@ struct UpdateContact: AsyncParsableCommand {
 
         let contact = existingContact.mutableCopy() as! CNMutableContact
 
+        // Name fields
         if let first = firstName { contact.givenName = first }
         if let last = lastName { contact.familyName = last }
+        if let v = middleName { contact.middleName = v }
+        if let v = namePrefix { contact.namePrefix = v }
+        if let v = nameSuffix { contact.nameSuffix = v }
+        if let v = nickname { contact.nickname = v }
+        if let v = previousFamilyName { contact.previousFamilyName = v }
+
+        // Phonetic
+        if let v = phoneticGivenName { contact.phoneticGivenName = v }
+        if let v = phoneticMiddleName { contact.phoneticMiddleName = v }
+        if let v = phoneticFamilyName { contact.phoneticFamilyName = v }
+        if let v = phoneticOrganizationName { contact.phoneticOrganizationName = v }
+
+        // Organization
         if let org = organization { contact.organizationName = org }
         if let title = jobTitle { contact.jobTitle = title }
-        if let note = notes { contact.note = note }
+        if let dept = department { contact.departmentName = dept }
 
+        // Contact type
+        if let ct = contactType?.lowercased() {
+            contact.contactType = ct == "organization" ? .organization : .person
+        }
+
+        // Emails (JSON array replaces all; simple --email replaces primary)
+        if let emailsJSON = emails {
+            contact.emailAddresses = try parseEmails(emailsJSON)
+        } else if let emailAddr = email {
+            if contact.emailAddresses.isEmpty {
+                contact.emailAddresses = [CNLabeledValue(label: CNLabelWork, value: emailAddr as NSString)]
+            } else {
+                var existing = contact.emailAddresses.map { $0.mutableCopy() as! CNLabeledValue<NSString> }
+                existing[0] = CNLabeledValue(label: existing[0].label, value: emailAddr as NSString)
+                contact.emailAddresses = existing
+            }
+        }
+
+        // Phones (JSON array replaces all; simple --phone replaces primary)
+        if let phonesJSON = phones {
+            contact.phoneNumbers = try parsePhones(phonesJSON)
+        } else if let phoneNum = phone {
+            if contact.phoneNumbers.isEmpty {
+                contact.phoneNumbers = [CNLabeledValue(label: CNLabelPhoneNumberMain, value: CNPhoneNumber(stringValue: phoneNum))]
+            } else {
+                var existing = contact.phoneNumbers.map { $0.mutableCopy() as! CNLabeledValue<CNPhoneNumber> }
+                existing[0] = CNLabeledValue(label: existing[0].label, value: CNPhoneNumber(stringValue: phoneNum))
+                contact.phoneNumbers = existing
+            }
+        }
+
+        // Structured arrays (replace all when provided)
+        if let json = addresses { contact.postalAddresses = try parseAddresses(json) }
+        if let json = urls { contact.urlAddresses = try parseURLs(json) }
+        if let json = socialProfiles { contact.socialProfiles = try parseSocialProfiles(json) }
+        if let json = instantMessages { contact.instantMessageAddresses = try parseInstantMessages(json) }
+        if let json = relations { contact.contactRelations = try parseRelations(json) }
+        if let json = dates { contact.dates = try parseDates(json) }
+
+        // Birthday
         if let birthdayStr = birthday {
             contact.birthday = try parseBirthday(birthdayStr)
         }
 
-        if let emailAddr = email {
-            // Replace primary email or add new
-            if contact.emailAddresses.isEmpty {
-                contact.emailAddresses = [CNLabeledValue(label: CNLabelWork, value: emailAddr as NSString)]
+        // Notes (guarded: macOS may restrict note access via TCC)
+        if let note = notes {
+            if existingContact.isKeyAvailable(CNContactNoteKey) {
+                contact.note = note
             } else {
-                var emails = contact.emailAddresses.map { $0.mutableCopy() as! CNLabeledValue<NSString> }
-                emails[0] = CNLabeledValue(label: emails[0].label, value: emailAddr as NSString)
-                contact.emailAddresses = emails
-            }
-        }
-
-        if let phoneNum = phone {
-            if contact.phoneNumbers.isEmpty {
-                contact.phoneNumbers = [CNLabeledValue(label: CNLabelPhoneNumberMain, value: CNPhoneNumber(stringValue: phoneNum))]
-            } else {
-                var phones = contact.phoneNumbers.map { $0.mutableCopy() as! CNLabeledValue<CNPhoneNumber> }
-                phones[0] = CNLabeledValue(label: phones[0].label, value: CNPhoneNumber(stringValue: phoneNum))
-                contact.phoneNumbers = phones
+                // Note property not available — warn but don't crash
+                fputs("Warning: Cannot set notes — Contacts note access not available. Check System Settings > Privacy & Security > Contacts.\n", stderr)
             }
         }
 
