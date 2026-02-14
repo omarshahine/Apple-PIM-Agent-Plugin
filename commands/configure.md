@@ -144,8 +144,8 @@ Glob: ~/.claude/plugins/**/apple-pim/**/plugin.json
 ```
 
 The config file goes in the `data/` folder next to where `plugin.json` is found.
-For example, if plugin.json is at `~/.claude/plugins/cache/marketplace/apple-pim/2.1.0/.claude-plugin/plugin.json`,
-the config file goes at `~/.claude/plugins/cache/marketplace/apple-pim/2.1.0/.claude-plugin/data/config.local.md`.
+For example, if plugin.json is at `~/.claude/plugins/cache/<marketplace>/apple-pim/<version>/.claude-plugin/plugin.json`,
+the config file goes at `~/.claude/plugins/cache/<marketplace>/apple-pim/<version>/.claude-plugin/data/config.local.md`.
 
 ### Process
 

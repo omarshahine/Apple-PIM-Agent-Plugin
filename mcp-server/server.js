@@ -1249,6 +1249,7 @@ const tools = [
           items: {
             type: "object",
             properties: {
+              label: { type: "string", description: "Label (e.g. home, work, other)" },
               service: { type: "string", description: "Service name (e.g. Twitter, LinkedIn, Facebook)" },
               username: { type: "string" },
               url: { type: "string", description: "Profile URL" },
@@ -1262,6 +1263,7 @@ const tools = [
           items: {
             type: "object",
             properties: {
+              label: { type: "string", description: "Label (e.g. home, work, other)" },
               service: { type: "string", description: "Service name (e.g. Skype, Jabber, GoogleTalk)" },
               username: { type: "string" },
             },
@@ -1443,6 +1445,7 @@ const tools = [
           items: {
             type: "object",
             properties: {
+              label: { type: "string", description: "Label (e.g. home, work, other)" },
               service: { type: "string", description: "Service name (e.g. Twitter, LinkedIn, Facebook)" },
               username: { type: "string" },
               url: { type: "string", description: "Profile URL" },
@@ -1456,6 +1459,7 @@ const tools = [
           items: {
             type: "object",
             properties: {
+              label: { type: "string", description: "Label (e.g. home, work, other)" },
               service: { type: "string", description: "Service name (e.g. Skype, Jabber, GoogleTalk)" },
               username: { type: "string" },
             },
