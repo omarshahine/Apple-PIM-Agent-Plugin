@@ -673,10 +673,10 @@ struct CreateContact: AsyncParsableCommand {
     var phone: String?
 
     // Rich labeled arrays (JSON)
-    @Option(name: .long, help: "Emails as JSON array: [{\"label\":\"work\",\"value\":\"a@b.com\"}]")
+    @Option(name: .long, help: "Emails as JSON array: [{\"label\":\"work\",\"value\":\"user@example.com\"}]")
     var emails: String?
 
-    @Option(name: .long, help: "Phones as JSON array: [{\"label\":\"mobile\",\"value\":\"555-1234\"}]")
+    @Option(name: .long, help: "Phones as JSON array: [{\"label\":\"mobile\",\"value\":\"555-0123\"}]")
     var phones: String?
 
     @Option(name: .long, help: "Addresses as JSON array: [{\"label\":\"home\",\"street\":\"...\",\"city\":\"...\",\"state\":\"...\",\"postalCode\":\"...\",\"country\":\"...\"}]")
@@ -854,10 +854,10 @@ struct UpdateContact: AsyncParsableCommand {
     var phone: String?
 
     // Rich labeled arrays (JSON - replaces ALL entries)
-    @Option(name: .long, help: "Replace all emails: [{\"label\":\"work\",\"value\":\"a@b.com\"}]")
+    @Option(name: .long, help: "Replace all emails: [{\"label\":\"work\",\"value\":\"user@example.com\"}]")
     var emails: String?
 
-    @Option(name: .long, help: "Replace all phones: [{\"label\":\"mobile\",\"value\":\"555-1234\"}]")
+    @Option(name: .long, help: "Replace all phones: [{\"label\":\"mobile\",\"value\":\"555-0123\"}]")
     var phones: String?
 
     @Option(name: .long, help: "Replace all addresses: [{\"label\":\"home\",\"street\":\"...\",\"city\":\"...\",\"state\":\"...\",\"postalCode\":\"...\",\"country\":\"...\"}]")
