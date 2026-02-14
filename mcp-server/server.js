@@ -1112,13 +1112,13 @@ const tools = [
   },
   {
     name: "contact_create",
-    description: "Create a new contact",
+    description: "Create a new contact with full support for all Contacts framework fields",
     inputSchema: {
       type: "object",
       properties: {
         name: {
           type: "string",
-          description: "Full name",
+          description: "Full name (parsed into first/last)",
         },
         firstName: {
           type: "string",
@@ -1128,13 +1128,41 @@ const tools = [
           type: "string",
           description: "Last name (alternative to name)",
         },
-        email: {
+        middleName: {
           type: "string",
-          description: "Email address",
+          description: "Middle name",
         },
-        phone: {
+        namePrefix: {
           type: "string",
-          description: "Phone number",
+          description: "Name prefix (e.g. Dr., Mr., Ms.)",
+        },
+        nameSuffix: {
+          type: "string",
+          description: "Name suffix (e.g. Jr., III, PhD)",
+        },
+        nickname: {
+          type: "string",
+          description: "Nickname",
+        },
+        previousFamilyName: {
+          type: "string",
+          description: "Previous family name (maiden name)",
+        },
+        phoneticGivenName: {
+          type: "string",
+          description: "Phonetic first name (for pronunciation)",
+        },
+        phoneticMiddleName: {
+          type: "string",
+          description: "Phonetic middle name",
+        },
+        phoneticFamilyName: {
+          type: "string",
+          description: "Phonetic last name",
+        },
+        phoneticOrganizationName: {
+          type: "string",
+          description: "Phonetic organization name",
         },
         organization: {
           type: "string",
@@ -1144,21 +1172,141 @@ const tools = [
           type: "string",
           description: "Job title",
         },
-        notes: {
+        department: {
           type: "string",
-          description: "Notes",
+          description: "Department name",
+        },
+        contactType: {
+          type: "string",
+          enum: ["person", "organization"],
+          description: "Contact type: person or organization",
+        },
+        email: {
+          type: "string",
+          description: "Simple email address (uses 'work' label)",
+        },
+        phone: {
+          type: "string",
+          description: "Simple phone number (uses 'main' label)",
+        },
+        emails: {
+          type: "array",
+          description: "Labeled email addresses",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Label: home, work, school, icloud, other" },
+              value: { type: "string", description: "Email address" },
+            },
+            required: ["value"],
+          },
+        },
+        phones: {
+          type: "array",
+          description: "Labeled phone numbers",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Label: mobile, main, home, work, iphone, home fax, work fax, pager, other" },
+              value: { type: "string", description: "Phone number" },
+            },
+            required: ["value"],
+          },
+        },
+        addresses: {
+          type: "array",
+          description: "Postal addresses",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Label: home, work, school, other" },
+              street: { type: "string" },
+              city: { type: "string" },
+              state: { type: "string" },
+              postalCode: { type: "string" },
+              country: { type: "string" },
+              isoCountryCode: { type: "string", description: "ISO country code (e.g. US)" },
+              subLocality: { type: "string", description: "Neighborhood or village" },
+              subAdministrativeArea: { type: "string", description: "County" },
+            },
+          },
+        },
+        urls: {
+          type: "array",
+          description: "URL addresses",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Label: homepage, home, work, school, other" },
+              value: { type: "string", description: "URL" },
+            },
+            required: ["value"],
+          },
+        },
+        socialProfiles: {
+          type: "array",
+          description: "Social media profiles",
+          items: {
+            type: "object",
+            properties: {
+              service: { type: "string", description: "Service name (e.g. Twitter, LinkedIn, Facebook)" },
+              username: { type: "string" },
+              url: { type: "string", description: "Profile URL" },
+              userIdentifier: { type: "string" },
+            },
+          },
+        },
+        instantMessages: {
+          type: "array",
+          description: "Instant message addresses",
+          items: {
+            type: "object",
+            properties: {
+              service: { type: "string", description: "Service name (e.g. Skype, Jabber, GoogleTalk)" },
+              username: { type: "string" },
+            },
+          },
+        },
+        relations: {
+          type: "array",
+          description: "Related people",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Relationship: spouse, child, parent, sibling, friend, partner, assistant, manager, etc." },
+              name: { type: "string", description: "Related person's name" },
+            },
+            required: ["name"],
+          },
         },
         birthday: {
           type: "string",
-          description:
-            "Birthday in YYYY-MM-DD format (with year) or MM-DD format (without year)",
+          description: "Birthday in YYYY-MM-DD format (with year) or MM-DD format (without year)",
+        },
+        dates: {
+          type: "array",
+          description: "Important dates (e.g. anniversaries)",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Label: anniversary, other" },
+              year: { type: "number" },
+              month: { type: "number" },
+              day: { type: "number" },
+            },
+            required: ["month", "day"],
+          },
+        },
+        notes: {
+          type: "string",
+          description: "Notes",
         },
       },
     },
   },
   {
     name: "contact_update",
-    description: "Update an existing contact",
+    description: "Update an existing contact. Simple fields replace values. Array fields (emails, phones, addresses, etc.) replace ALL entries when provided — read the contact first to preserve existing entries.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1174,13 +1322,41 @@ const tools = [
           type: "string",
           description: "New last name",
         },
-        email: {
+        middleName: {
           type: "string",
-          description: "New email (replaces primary)",
+          description: "New middle name",
         },
-        phone: {
+        namePrefix: {
           type: "string",
-          description: "New phone (replaces primary)",
+          description: "New name prefix (e.g. Dr., Mr.)",
+        },
+        nameSuffix: {
+          type: "string",
+          description: "New name suffix (e.g. Jr., III)",
+        },
+        nickname: {
+          type: "string",
+          description: "New nickname",
+        },
+        previousFamilyName: {
+          type: "string",
+          description: "New previous family name (maiden name)",
+        },
+        phoneticGivenName: {
+          type: "string",
+          description: "New phonetic first name",
+        },
+        phoneticMiddleName: {
+          type: "string",
+          description: "New phonetic middle name",
+        },
+        phoneticFamilyName: {
+          type: "string",
+          description: "New phonetic last name",
+        },
+        phoneticOrganizationName: {
+          type: "string",
+          description: "New phonetic organization name",
         },
         organization: {
           type: "string",
@@ -1190,14 +1366,134 @@ const tools = [
           type: "string",
           description: "New job title",
         },
-        notes: {
+        department: {
           type: "string",
-          description: "New notes",
+          description: "New department name",
+        },
+        contactType: {
+          type: "string",
+          enum: ["person", "organization"],
+          description: "Contact type: person or organization",
+        },
+        email: {
+          type: "string",
+          description: "New email (replaces primary only, keeps others)",
+        },
+        phone: {
+          type: "string",
+          description: "New phone (replaces primary only, keeps others)",
+        },
+        emails: {
+          type: "array",
+          description: "Replace ALL emails with these labeled entries",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Label: home, work, school, icloud, other" },
+              value: { type: "string", description: "Email address" },
+            },
+            required: ["value"],
+          },
+        },
+        phones: {
+          type: "array",
+          description: "Replace ALL phones with these labeled entries",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Label: mobile, main, home, work, iphone, other" },
+              value: { type: "string", description: "Phone number" },
+            },
+            required: ["value"],
+          },
+        },
+        addresses: {
+          type: "array",
+          description: "Replace ALL postal addresses",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Label: home, work, school, other" },
+              street: { type: "string" },
+              city: { type: "string" },
+              state: { type: "string" },
+              postalCode: { type: "string" },
+              country: { type: "string" },
+              isoCountryCode: { type: "string", description: "ISO country code (e.g. US)" },
+              subLocality: { type: "string", description: "Neighborhood or village" },
+              subAdministrativeArea: { type: "string", description: "County" },
+            },
+          },
+        },
+        urls: {
+          type: "array",
+          description: "Replace ALL URLs",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Label: homepage, home, work, school, other" },
+              value: { type: "string", description: "URL" },
+            },
+            required: ["value"],
+          },
+        },
+        socialProfiles: {
+          type: "array",
+          description: "Replace ALL social profiles",
+          items: {
+            type: "object",
+            properties: {
+              service: { type: "string", description: "Service name (e.g. Twitter, LinkedIn, Facebook)" },
+              username: { type: "string" },
+              url: { type: "string", description: "Profile URL" },
+              userIdentifier: { type: "string" },
+            },
+          },
+        },
+        instantMessages: {
+          type: "array",
+          description: "Replace ALL instant messages",
+          items: {
+            type: "object",
+            properties: {
+              service: { type: "string", description: "Service name (e.g. Skype, Jabber, GoogleTalk)" },
+              username: { type: "string" },
+            },
+          },
+        },
+        relations: {
+          type: "array",
+          description: "Replace ALL relations",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Relationship: spouse, child, parent, sibling, friend, partner, assistant, manager, etc." },
+              name: { type: "string", description: "Related person's name" },
+            },
+            required: ["name"],
+          },
         },
         birthday: {
           type: "string",
-          description:
-            "New birthday in YYYY-MM-DD format (with year) or MM-DD format (without year)",
+          description: "New birthday in YYYY-MM-DD format (with year) or MM-DD format (without year)",
+        },
+        dates: {
+          type: "array",
+          description: "Replace ALL dates (e.g. anniversaries)",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Label: anniversary, other" },
+              year: { type: "number" },
+              month: { type: "number" },
+              day: { type: "number" },
+            },
+            required: ["month", "day"],
+          },
+        },
+        notes: {
+          type: "string",
+          description: "New notes",
         },
       },
       required: ["id"],
@@ -1697,27 +1993,79 @@ async function handleTool(name, args) {
 
     case "contact_create":
       cliArgs.push("create");
+      // Name fields
       if (args.name) cliArgs.push("--name", args.name);
       if (args.firstName) cliArgs.push("--first-name", args.firstName);
       if (args.lastName) cliArgs.push("--last-name", args.lastName);
-      if (args.email) cliArgs.push("--email", args.email);
-      if (args.phone) cliArgs.push("--phone", args.phone);
+      if (args.middleName) cliArgs.push("--middle-name", args.middleName);
+      if (args.namePrefix) cliArgs.push("--name-prefix", args.namePrefix);
+      if (args.nameSuffix) cliArgs.push("--name-suffix", args.nameSuffix);
+      if (args.nickname) cliArgs.push("--nickname", args.nickname);
+      if (args.previousFamilyName) cliArgs.push("--previous-family-name", args.previousFamilyName);
+      // Phonetic names
+      if (args.phoneticGivenName) cliArgs.push("--phonetic-given-name", args.phoneticGivenName);
+      if (args.phoneticMiddleName) cliArgs.push("--phonetic-middle-name", args.phoneticMiddleName);
+      if (args.phoneticFamilyName) cliArgs.push("--phonetic-family-name", args.phoneticFamilyName);
+      if (args.phoneticOrganizationName) cliArgs.push("--phonetic-organization-name", args.phoneticOrganizationName);
+      // Organization
       if (args.organization) cliArgs.push("--organization", args.organization);
       if (args.jobTitle) cliArgs.push("--job-title", args.jobTitle);
-      if (args.notes) cliArgs.push("--notes", args.notes);
+      if (args.department) cliArgs.push("--department", args.department);
+      if (args.contactType) cliArgs.push("--contact-type", args.contactType);
+      // Simple communication
+      if (args.email) cliArgs.push("--email", args.email);
+      if (args.phone) cliArgs.push("--phone", args.phone);
+      // Rich labeled arrays (JSON - skip empty arrays)
+      if (args.emails?.length) cliArgs.push("--emails", JSON.stringify(args.emails));
+      if (args.phones?.length) cliArgs.push("--phones", JSON.stringify(args.phones));
+      if (args.addresses?.length) cliArgs.push("--addresses", JSON.stringify(args.addresses));
+      if (args.urls?.length) cliArgs.push("--urls", JSON.stringify(args.urls));
+      if (args.socialProfiles?.length) cliArgs.push("--social-profiles", JSON.stringify(args.socialProfiles));
+      if (args.instantMessages?.length) cliArgs.push("--instant-messages", JSON.stringify(args.instantMessages));
+      if (args.relations?.length) cliArgs.push("--relations", JSON.stringify(args.relations));
+      // Dates
       if (args.birthday) cliArgs.push("--birthday", args.birthday);
+      if (args.dates?.length) cliArgs.push("--dates", JSON.stringify(args.dates));
+      // Notes
+      if (args.notes) cliArgs.push("--notes", args.notes);
       return await runCLI("contacts-cli", cliArgs);
 
     case "contact_update":
       cliArgs.push("update", "--id", args.id);
+      // Name fields
       if (args.firstName) cliArgs.push("--first-name", args.firstName);
       if (args.lastName) cliArgs.push("--last-name", args.lastName);
-      if (args.email) cliArgs.push("--email", args.email);
-      if (args.phone) cliArgs.push("--phone", args.phone);
+      if (args.middleName) cliArgs.push("--middle-name", args.middleName);
+      if (args.namePrefix) cliArgs.push("--name-prefix", args.namePrefix);
+      if (args.nameSuffix) cliArgs.push("--name-suffix", args.nameSuffix);
+      if (args.nickname) cliArgs.push("--nickname", args.nickname);
+      if (args.previousFamilyName) cliArgs.push("--previous-family-name", args.previousFamilyName);
+      // Phonetic names
+      if (args.phoneticGivenName) cliArgs.push("--phonetic-given-name", args.phoneticGivenName);
+      if (args.phoneticMiddleName) cliArgs.push("--phonetic-middle-name", args.phoneticMiddleName);
+      if (args.phoneticFamilyName) cliArgs.push("--phonetic-family-name", args.phoneticFamilyName);
+      if (args.phoneticOrganizationName) cliArgs.push("--phonetic-organization-name", args.phoneticOrganizationName);
+      // Organization
       if (args.organization) cliArgs.push("--organization", args.organization);
       if (args.jobTitle) cliArgs.push("--job-title", args.jobTitle);
-      if (args.notes) cliArgs.push("--notes", args.notes);
+      if (args.department) cliArgs.push("--department", args.department);
+      if (args.contactType) cliArgs.push("--contact-type", args.contactType);
+      // Simple communication (replaces primary)
+      if (args.email) cliArgs.push("--email", args.email);
+      if (args.phone) cliArgs.push("--phone", args.phone);
+      // Rich labeled arrays (JSON - replaces all; skip empty arrays to prevent accidental clearing)
+      if (args.emails?.length) cliArgs.push("--emails", JSON.stringify(args.emails));
+      if (args.phones?.length) cliArgs.push("--phones", JSON.stringify(args.phones));
+      if (args.addresses?.length) cliArgs.push("--addresses", JSON.stringify(args.addresses));
+      if (args.urls?.length) cliArgs.push("--urls", JSON.stringify(args.urls));
+      if (args.socialProfiles?.length) cliArgs.push("--social-profiles", JSON.stringify(args.socialProfiles));
+      if (args.instantMessages?.length) cliArgs.push("--instant-messages", JSON.stringify(args.instantMessages));
+      if (args.relations?.length) cliArgs.push("--relations", JSON.stringify(args.relations));
+      // Dates
       if (args.birthday) cliArgs.push("--birthday", args.birthday);
+      if (args.dates?.length) cliArgs.push("--dates", JSON.stringify(args.dates));
+      // Notes
+      if (args.notes) cliArgs.push("--notes", args.notes);
       return await runCLI("contacts-cli", cliArgs);
 
     case "contact_delete":
