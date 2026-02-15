@@ -8,6 +8,7 @@ struct CalendarCLI: AsyncParsableCommand {
         commandName: "calendar-cli",
         abstract: "Manage macOS Calendar events using EventKit",
         subcommands: [
+            AuthStatus.self,
             ListCalendars.self,
             ListEvents.self,
             GetEvent.self,
@@ -18,6 +19,40 @@ struct CalendarCLI: AsyncParsableCommand {
             BatchCreateEvent.self,
         ]
     )
+}
+
+// MARK: - Auth Status (no prompts)
+
+struct AuthStatus: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "auth-status",
+        abstract: "Check calendar authorization status without triggering prompts"
+    )
+
+    func run() throws {
+        let status: String
+        if #available(macOS 14.0, *) {
+            switch EKEventStore.authorizationStatus(for: .event) {
+            case .fullAccess: status = "authorized"
+            case .writeOnly: status = "writeOnly"
+            case .denied: status = "denied"
+            case .restricted: status = "restricted"
+            case .notDetermined: status = "notDetermined"
+            @unknown default: status = "unknown"
+            }
+        } else {
+            switch EKEventStore.authorizationStatus(for: .event) {
+            case .authorized: status = "authorized"
+            case .denied: status = "denied"
+            case .restricted: status = "restricted"
+            case .notDetermined: status = "notDetermined"
+            default: status = "unknown"
+            }
+        }
+        let result: [String: Any] = ["authorization": status]
+        let data = try JSONSerialization.data(withJSONObject: result)
+        print(String(data: data, encoding: .utf8)!)
+    }
 }
 
 // MARK: - Shared Utilities

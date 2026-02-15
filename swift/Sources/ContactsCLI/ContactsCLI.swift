@@ -8,6 +8,7 @@ struct ContactsCLI: AsyncParsableCommand {
         commandName: "contacts-cli",
         abstract: "Manage macOS Contacts",
         subcommands: [
+            AuthStatus.self,
             ListGroups.self,
             ListContacts.self,
             SearchContacts.self,
@@ -17,6 +18,29 @@ struct ContactsCLI: AsyncParsableCommand {
             DeleteContact.self,
         ]
     )
+}
+
+// MARK: - Auth Status (no prompts)
+
+struct AuthStatus: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "auth-status",
+        abstract: "Check contacts authorization status without triggering prompts"
+    )
+
+    func run() throws {
+        let status: String
+        switch CNContactStore.authorizationStatus(for: .contacts) {
+        case .authorized: status = "authorized"
+        case .denied: status = "denied"
+        case .restricted: status = "restricted"
+        case .notDetermined: status = "notDetermined"
+        @unknown default: status = "unknown"
+        }
+        let result: [String: Any] = ["authorization": status]
+        let data = try JSONSerialization.data(withJSONObject: result)
+        print(String(data: data, encoding: .utf8)!)
+    }
 }
 
 // MARK: - Shared Utilities

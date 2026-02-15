@@ -2219,13 +2219,22 @@ async function handleTool(name, args) {
     case "pim_status": {
       const status = {};
 
-      // Check each domain by attempting a lightweight read
+      // Use auth-status subcommands — check authorization without triggering prompts
       const domains = [
-        { name: "calendars", cli: "calendar-cli", args: ["list"] },
-        { name: "reminders", cli: "reminder-cli", args: ["lists"] },
-        { name: "contacts", cli: "contacts-cli", args: ["groups"] },
-        { name: "mail", cli: "mail-cli", args: ["accounts"] },
+        { name: "calendars", cli: "calendar-cli" },
+        { name: "reminders", cli: "reminder-cli" },
+        { name: "contacts", cli: "contacts-cli" },
+        { name: "mail", cli: "mail-cli" },
       ];
+
+      const statusMessages = {
+        authorized: "Full access granted",
+        notDetermined: "Permission not yet requested. Run pim_authorize to prompt.",
+        denied: "Access denied. Enable in System Settings > Privacy & Security.",
+        restricted: "Access restricted by system policy (MDM or parental controls).",
+        writeOnly: "Write-only access. Upgrade in System Settings > Privacy & Security.",
+        unavailable: "Not available",
+      };
 
       for (const domain of domains) {
         const enabled = await isDomainEnabled(domain.name);
@@ -2239,41 +2248,19 @@ async function handleTool(name, args) {
         }
 
         try {
-          await runCLI(domain.cli, domain.args);
+          const result = await runCLI(domain.cli, ["auth-status"]);
+          const auth = result.authorization || "unknown";
           status[domain.name] = {
             enabled: true,
-            authorization: "authorized",
-            message: "Full access granted",
+            authorization: auth,
+            message: result.message || statusMessages[auth] || `Status: ${auth}`,
           };
         } catch (err) {
-          const msg = err.message.toLowerCase();
-          if (msg.includes("denied") || msg.includes("not granted")) {
-            status[domain.name] = {
-              enabled: true,
-              authorization: "denied",
-              message:
-                "Access denied. Enable in System Settings > Privacy & Security.",
-            };
-          } else if (msg.includes("not running")) {
-            status[domain.name] = {
-              enabled: true,
-              authorization: "unavailable",
-              message: "Mail.app is not running. Open Mail.app first.",
-            };
-          } else if (msg.includes("restricted")) {
-            status[domain.name] = {
-              enabled: true,
-              authorization: "restricted",
-              message:
-                "Access restricted by system policy (MDM or parental controls).",
-            };
-          } else {
-            status[domain.name] = {
-              enabled: true,
-              authorization: "error",
-              message: err.message,
-            };
-          }
+          status[domain.name] = {
+            enabled: true,
+            authorization: "error",
+            message: err.message,
+          };
         }
       }
 
@@ -2349,9 +2336,44 @@ async function handleTool(name, args) {
         throw new Error("IDs array is required and cannot be empty");
       }
 
-      const completeArgs = ["batch-complete", "--json", JSON.stringify(args.ids)];
+      // Check list authorization for each reminder before batch operation
+      const allowedCompleteIds = [];
+      const deniedComplete = [];
+      for (const id of args.ids) {
+        try {
+          const reminder = await runCLI("reminder-cli", ["get", "--id", id]);
+          if (reminder.list) {
+            const allowed = await isReminderListAllowed(reminder.list);
+            if (!allowed) {
+              deniedComplete.push({ id, list: reminder.list });
+              continue;
+            }
+          }
+          allowedCompleteIds.push(id);
+        } catch (err) {
+          deniedComplete.push({ id, error: err.message });
+        }
+      }
+
+      if (allowedCompleteIds.length === 0) {
+        throw new Error(
+          `None of the reminders are in allowed lists. Denied: ${JSON.stringify(deniedComplete)}\n` +
+            `Run /apple-pim:configure to update your allowed lists.`
+        );
+      }
+
+      const completeArgs = [
+        "batch-complete",
+        "--json",
+        JSON.stringify(allowedCompleteIds),
+      ];
       if (args.undo) completeArgs.push("--undo");
-      return await runCLI("reminder-cli", completeArgs);
+      const completeResult = await runCLI("reminder-cli", completeArgs);
+      if (deniedComplete.length > 0) {
+        completeResult.denied = deniedComplete;
+        completeResult.deniedCount = deniedComplete.length;
+      }
+      return completeResult;
     }
 
     case "reminder_batch_delete": {
@@ -2359,11 +2381,42 @@ async function handleTool(name, args) {
         throw new Error("IDs array is required and cannot be empty");
       }
 
-      return await runCLI("reminder-cli", [
+      // Check list authorization for each reminder before batch operation
+      const allowedDeleteIds = [];
+      const deniedDelete = [];
+      for (const id of args.ids) {
+        try {
+          const reminder = await runCLI("reminder-cli", ["get", "--id", id]);
+          if (reminder.list) {
+            const allowed = await isReminderListAllowed(reminder.list);
+            if (!allowed) {
+              deniedDelete.push({ id, list: reminder.list });
+              continue;
+            }
+          }
+          allowedDeleteIds.push(id);
+        } catch (err) {
+          deniedDelete.push({ id, error: err.message });
+        }
+      }
+
+      if (allowedDeleteIds.length === 0) {
+        throw new Error(
+          `None of the reminders are in allowed lists. Denied: ${JSON.stringify(deniedDelete)}\n` +
+            `Run /apple-pim:configure to update your allowed lists.`
+        );
+      }
+
+      const deleteResult = await runCLI("reminder-cli", [
         "batch-delete",
         "--json",
-        JSON.stringify(args.ids),
+        JSON.stringify(allowedDeleteIds),
       ]);
+      if (deniedDelete.length > 0) {
+        deleteResult.denied = deniedDelete;
+        deleteResult.deniedCount = deniedDelete.length;
+      }
+      return deleteResult;
     }
 
     // Batch mail operations (native CLI — single JXA call)

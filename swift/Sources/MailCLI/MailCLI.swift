@@ -8,6 +8,7 @@ struct MailCLI: AsyncParsableCommand {
         commandName: "mail-cli",
         abstract: "Manage macOS Mail.app via JXA (JavaScript for Automation)",
         subcommands: [
+            AuthStatus.self,
             ListAccounts.self,
             ListMailboxes.self,
             ListMessages.self,
@@ -20,6 +21,56 @@ struct MailCLI: AsyncParsableCommand {
             BatchDeleteMessages.self,
         ]
     )
+}
+
+// MARK: - Auth Status (no prompts)
+
+struct AuthStatus: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "auth-status",
+        abstract: "Check Mail.app automation authorization status without triggering prompts"
+    )
+
+    func run() throws {
+        let status: String
+
+        // Check if Mail.app is running first
+        let running = NSWorkspace.shared.runningApplications.contains {
+            $0.bundleIdentifier == "com.apple.mail"
+        }
+        guard running else {
+            let result: [String: Any] = ["authorization": "unavailable", "message": "Mail.app is not running"]
+            let data = try JSONSerialization.data(withJSONObject: result)
+            print(String(data: data, encoding: .utf8)!)
+            return
+        }
+
+        // Use AEDeterminePermissionToAutomateTarget to check without prompting
+        let mailDesc = NSAppleEventDescriptor(bundleIdentifier: "com.apple.mail")
+        let errCode = AEDeterminePermissionToAutomateTarget(
+            mailDesc.aeDesc,
+            typeWildCard,
+            typeWildCard,
+            false  // false = don't prompt
+        )
+
+        switch errCode {
+        case noErr:
+            status = "authorized"
+        case OSStatus(-1744): // errAEEventWouldRequireUserConsent
+            status = "notDetermined"
+        case OSStatus(-1743): // errAEEventNotPermitted
+            status = "denied"
+        case OSStatus(-600): // procNotFound
+            status = "unavailable"
+        default:
+            status = "error"
+        }
+
+        let result: [String: Any] = ["authorization": status]
+        let data = try JSONSerialization.data(withJSONObject: result)
+        print(String(data: data, encoding: .utf8)!)
+    }
 }
 
 // MARK: - Shared Utilities
@@ -202,6 +253,65 @@ func findMessageJXA(targetId: String, mailbox: String?, account: String?) -> Str
                 const key = accounts[a].name() + '/' + mbs[m].name();
                 if (searched.has(key)) continue;
                 const r = searchInMailbox(mbs[m]);
+                if (r) return r;
+            }
+        }
+        return null;
+    }
+    """
+}
+
+/// Generates the JXA `findMsg(targetId)` function for batch operations.
+/// Unlike `findMessageJXA`, the target ID is a parameter (not hardcoded).
+func batchFindMessageJXA(mailbox: String?, account: String?) -> String {
+    let mailboxFilter = mailbox.map { "'\(escapeForJXA($0))'" } ?? "null"
+    let accountFilter = account.map { "'\(escapeForJXA($0))'" } ?? "null"
+
+    return """
+    const mboxHint = \(mailboxFilter);
+    const acctHint = \(accountFilter);
+
+    function findMsg(targetId) {
+        const priority = ['INBOX', 'Sent Messages', 'Archive', 'Drafts', 'Deleted Messages', 'Junk'];
+        const accounts = acctHint ? Mail.accounts.whose({name: acctHint})() : Mail.accounts();
+        const searched = new Set();
+
+        function searchIn(mbox) {
+            try {
+                const found = mbox.messages.whose({messageId: targetId})();
+                if (found.length > 0) return found[0];
+            } catch(e) {}
+            return null;
+        }
+
+        if (mboxHint) {
+            for (let a = 0; a < accounts.length; a++) {
+                const mbs = accounts[a].mailboxes.whose({name: mboxHint})();
+                for (let m = 0; m < mbs.length; m++) {
+                    searched.add(accounts[a].name() + '/' + mbs[m].name());
+                    const r = searchIn(mbs[m]);
+                    if (r) return r;
+                }
+            }
+        }
+        for (let a = 0; a < accounts.length; a++) {
+            for (let p = 0; p < priority.length; p++) {
+                const mbs = accounts[a].mailboxes.whose({name: priority[p]})();
+                for (let m = 0; m < mbs.length; m++) {
+                    const key = accounts[a].name() + '/' + mbs[m].name();
+                    if (searched.has(key)) continue;
+                    searched.add(key);
+                    const r = searchIn(mbs[m]);
+                    if (r) return r;
+                }
+            }
+        }
+        for (let a = 0; a < accounts.length; a++) {
+            const mbs = accounts[a].mailboxes();
+            for (let m = 0; m < mbs.length; m++) {
+                const key = accounts[a].name() + '/' + mbs[m].name();
+                if (searched.has(key)) continue;
+                const r = searchIn(mbs[m]);
                 if (r) return r;
             }
         }
@@ -855,63 +965,14 @@ struct BatchUpdateMessages: AsyncParsableCommand {
             return "{\(fields.joined(separator: ", "))}"
         }.joined(separator: ",\n            ")
 
-        let mailboxFilter = mailbox.map { "'\(escapeForJXA($0))'" } ?? "null"
-        let accountFilter = account.map { "'\(escapeForJXA($0))'" } ?? "null"
+        let findMsgFunc = batchFindMessageJXA(mailbox: mailbox, account: account)
 
         let script = """
         const Mail = Application("Mail");
         const updates = [
             \(jsUpdates)
         ];
-        const mboxHint = \(mailboxFilter);
-        const acctHint = \(accountFilter);
-
-        function findMsg(targetId) {
-            const priority = ['INBOX', 'Sent Messages', 'Archive', 'Drafts', 'Deleted Messages', 'Junk'];
-            const accounts = acctHint ? Mail.accounts.whose({name: acctHint})() : Mail.accounts();
-            const searched = new Set();
-
-            function searchIn(mbox) {
-                try {
-                    const found = mbox.messages.whose({messageId: targetId})();
-                    if (found.length > 0) return found[0];
-                } catch(e) {}
-                return null;
-            }
-
-            if (mboxHint) {
-                for (let a = 0; a < accounts.length; a++) {
-                    const mbs = accounts[a].mailboxes.whose({name: mboxHint})();
-                    for (let m = 0; m < mbs.length; m++) {
-                        searched.add(accounts[a].name() + '/' + mbs[m].name());
-                        const r = searchIn(mbs[m]);
-                        if (r) return r;
-                    }
-                }
-            }
-            for (let a = 0; a < accounts.length; a++) {
-                for (let p = 0; p < priority.length; p++) {
-                    const mbs = accounts[a].mailboxes.whose({name: priority[p]})();
-                    for (let m = 0; m < mbs.length; m++) {
-                        const key = accounts[a].name() + '/' + mbs[m].name();
-                        if (searched.has(key)) continue;
-                        searched.add(key);
-                        const r = searchIn(mbs[m]);
-                        if (r) return r;
-                    }
-                }
-            }
-            for (let a = 0; a < accounts.length; a++) {
-                const mbs = accounts[a].mailboxes();
-                for (let m = 0; m < mbs.length; m++) {
-                    const key = accounts[a].name() + '/' + mbs[m].name();
-                    if (searched.has(key)) continue;
-                    const r = searchIn(mbs[m]);
-                    if (r) return r;
-                }
-            }
-            return null;
-        }
+        \(findMsgFunc)
 
         const results = [];
         const errors = [];
@@ -989,61 +1050,12 @@ struct BatchDeleteMessages: AsyncParsableCommand {
         }
 
         let jsIds = ids.map { "'\(escapeForJXA($0))'" }.joined(separator: ", ")
-        let mailboxFilter = mailbox.map { "'\(escapeForJXA($0))'" } ?? "null"
-        let accountFilter = account.map { "'\(escapeForJXA($0))'" } ?? "null"
+        let findMsgFunc = batchFindMessageJXA(mailbox: mailbox, account: account)
 
         let script = """
         const Mail = Application("Mail");
         const ids = [\(jsIds)];
-        const mboxHint = \(mailboxFilter);
-        const acctHint = \(accountFilter);
-
-        function findMsg(targetId) {
-            const priority = ['INBOX', 'Sent Messages', 'Archive', 'Drafts', 'Deleted Messages', 'Junk'];
-            const accounts = acctHint ? Mail.accounts.whose({name: acctHint})() : Mail.accounts();
-            const searched = new Set();
-
-            function searchIn(mbox) {
-                try {
-                    const found = mbox.messages.whose({messageId: targetId})();
-                    if (found.length > 0) return found[0];
-                } catch(e) {}
-                return null;
-            }
-
-            if (mboxHint) {
-                for (let a = 0; a < accounts.length; a++) {
-                    const mbs = accounts[a].mailboxes.whose({name: mboxHint})();
-                    for (let m = 0; m < mbs.length; m++) {
-                        searched.add(accounts[a].name() + '/' + mbs[m].name());
-                        const r = searchIn(mbs[m]);
-                        if (r) return r;
-                    }
-                }
-            }
-            for (let a = 0; a < accounts.length; a++) {
-                for (let p = 0; p < priority.length; p++) {
-                    const mbs = accounts[a].mailboxes.whose({name: priority[p]})();
-                    for (let m = 0; m < mbs.length; m++) {
-                        const key = accounts[a].name() + '/' + mbs[m].name();
-                        if (searched.has(key)) continue;
-                        searched.add(key);
-                        const r = searchIn(mbs[m]);
-                        if (r) return r;
-                    }
-                }
-            }
-            for (let a = 0; a < accounts.length; a++) {
-                const mbs = accounts[a].mailboxes();
-                for (let m = 0; m < mbs.length; m++) {
-                    const key = accounts[a].name() + '/' + mbs[m].name();
-                    if (searched.has(key)) continue;
-                    const r = searchIn(mbs[m]);
-                    if (r) return r;
-                }
-            }
-            return null;
-        }
+        \(findMsgFunc)
 
         const results = [];
         const errors = [];

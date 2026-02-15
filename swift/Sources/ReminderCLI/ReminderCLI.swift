@@ -9,6 +9,7 @@ struct ReminderCLI: AsyncParsableCommand {
         commandName: "reminder-cli",
         abstract: "Manage macOS Reminders using EventKit",
         subcommands: [
+            AuthStatus.self,
             ListLists.self,
             ListReminders.self,
             GetReminder.self,
@@ -22,6 +23,40 @@ struct ReminderCLI: AsyncParsableCommand {
             BatchDeleteReminder.self,
         ]
     )
+}
+
+// MARK: - Auth Status (no prompts)
+
+struct AuthStatus: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "auth-status",
+        abstract: "Check reminder authorization status without triggering prompts"
+    )
+
+    func run() throws {
+        let status: String
+        if #available(macOS 14.0, *) {
+            switch EKEventStore.authorizationStatus(for: .reminder) {
+            case .fullAccess: status = "authorized"
+            case .writeOnly: status = "writeOnly"
+            case .denied: status = "denied"
+            case .restricted: status = "restricted"
+            case .notDetermined: status = "notDetermined"
+            @unknown default: status = "unknown"
+            }
+        } else {
+            switch EKEventStore.authorizationStatus(for: .reminder) {
+            case .authorized: status = "authorized"
+            case .denied: status = "denied"
+            case .restricted: status = "restricted"
+            case .notDetermined: status = "notDetermined"
+            default: status = "unknown"
+            }
+        }
+        let result: [String: Any] = ["authorization": status]
+        let data = try JSONSerialization.data(withJSONObject: result)
+        print(String(data: data, encoding: .utf8)!)
+    }
 }
 
 // MARK: - Shared Utilities
@@ -427,19 +462,19 @@ struct ListReminders: AsyncParsableCommand {
             }
         }
 
-        // Determine include-completed based on filter or flag
-        let includeCompleted = completed || filter == "completed" || filter == "all"
+        // Determine include-completed based on filter or flag (case-insensitive)
+        let filterLower = filter?.lowercased()
+        let includeCompleted = completed || filterLower == "completed" || filterLower == "all"
 
         let calendar = Calendar.current
         let now = Date()
         let startOfToday = calendar.startOfDay(for: now)
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let endOfTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
-        let endOfWeek: Date = {
-            let weekday = calendar.component(.weekday, from: startOfToday)
-            let daysUntilSunday = weekday == 1 ? 7 : (8 - weekday)
-            return calendar.date(byAdding: .day, value: daysUntilSunday, to: startOfToday)!
-        }()
+        // Use Calendar's locale-aware week interval (respects firstWeekday setting)
+        let weekInterval = calendar.dateInterval(of: .weekOfYear, for: startOfToday)
+        let startOfWeek = weekInterval?.start ?? startOfToday
+        let endOfWeek = weekInterval?.end ?? calendar.date(byAdding: .day, value: 7, to: startOfToday)!
 
         let filtered: [[String: Any]] = reminders
             .filter { reminder in
@@ -447,7 +482,7 @@ struct ListReminders: AsyncParsableCommand {
                 if !includeCompleted && reminder.isCompleted { return false }
 
                 // Then apply date filter if specified
-                guard let filterType = filter?.lowercased() else { return true }
+                guard let filterType = filterLower else { return true }
 
                 let dueDate: Date? = {
                     guard let components = reminder.dueDateComponents else { return nil }
@@ -466,8 +501,9 @@ struct ListReminders: AsyncParsableCommand {
                     guard let due = dueDate else { return false }
                     return due >= startOfTomorrow && due < endOfTomorrow
                 case "week":
+                    // Full calendar week (locale-aware boundaries)
                     guard let due = dueDate else { return false }
-                    return due >= startOfToday && due < endOfWeek
+                    return due >= startOfWeek && due < endOfWeek
                 case "upcoming":
                     guard dueDate != nil else { return false }
                     return !reminder.isCompleted
