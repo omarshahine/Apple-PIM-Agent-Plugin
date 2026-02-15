@@ -448,7 +448,8 @@ const tools = [
   },
   {
     name: "reminder_items",
-    description: "List reminders from a list",
+    description:
+      "List reminders from a list, with optional date-based filtering (overdue, today, tomorrow, week, upcoming)",
     inputSchema: {
       type: "object",
       properties: {
@@ -456,9 +457,15 @@ const tools = [
           type: "string",
           description: "Reminder list name or ID (optional)",
         },
+        filter: {
+          type: "string",
+          enum: ["overdue", "today", "tomorrow", "week", "upcoming", "completed", "all"],
+          description:
+            "Filter reminders by time: 'overdue' (past due), 'today' (due today + overdue), 'tomorrow' (due tomorrow), 'week' (due this calendar week), 'upcoming' (all with due dates), 'completed' (finished), 'all' (everything). Default: incomplete reminders.",
+        },
         completed: {
           type: "boolean",
-          description: "Include completed reminders (default: false)",
+          description: "Include completed reminders (default: false). Overridden by filter if set.",
         },
         lastDays: {
           type: "number",
@@ -1517,6 +1524,134 @@ const tools = [
       required: ["id"],
     },
   },
+
+  // PIM authorization tools
+  {
+    name: "pim_status",
+    description:
+      "Check macOS authorization status for all PIM domains (calendars, reminders, contacts, mail). Does not trigger any permission prompts. Returns current authorization state for each domain.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "pim_authorize",
+    description:
+      "Request macOS permission for PIM domains. Triggers the system permission dialog for domains that have not yet been requested. For domains already denied, provides guidance to enable access in System Settings.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        domain: {
+          type: "string",
+          enum: ["calendars", "reminders", "contacts", "mail"],
+          description:
+            "Specific domain to authorize. If omitted, requests access for all enabled domains.",
+        },
+      },
+    },
+  },
+
+  // Batch reminder operations
+  {
+    name: "reminder_batch_complete",
+    description:
+      "Mark multiple reminders as complete (or incomplete) in one operation. More efficient than calling reminder_complete multiple times.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "Array of reminder IDs to complete",
+        },
+        undo: {
+          type: "boolean",
+          description:
+            "Mark as incomplete instead of complete (default: false)",
+        },
+      },
+      required: ["ids"],
+    },
+  },
+  {
+    name: "reminder_batch_delete",
+    description:
+      "Delete multiple reminders in one operation. More efficient than calling reminder_delete multiple times.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "Array of reminder IDs to delete",
+        },
+      },
+      required: ["ids"],
+    },
+  },
+
+  // Batch mail operations
+  {
+    name: "mail_batch_update",
+    description:
+      "Update flags on multiple messages in one operation. Requires Mail.app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "Array of RFC 2822 message IDs",
+        },
+        read: {
+          type: "boolean",
+          description: "Set read status for all messages",
+        },
+        flagged: {
+          type: "boolean",
+          description: "Set flagged status for all messages",
+        },
+        junk: {
+          type: "boolean",
+          description: "Set junk status for all messages",
+        },
+        mailbox: {
+          type: "string",
+          description: "Mailbox name hint for faster lookup",
+        },
+        account: {
+          type: "string",
+          description: "Account name hint for faster lookup",
+        },
+      },
+      required: ["ids"],
+    },
+  },
+  {
+    name: "mail_batch_delete",
+    description:
+      "Delete multiple messages in one operation (moves to Trash). Requires Mail.app to be running.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "Array of RFC 2822 message IDs",
+        },
+        mailbox: {
+          type: "string",
+          description: "Mailbox name hint for faster lookup",
+        },
+        account: {
+          type: "string",
+          description: "Account name hint for faster lookup",
+        },
+      },
+      required: ["ids"],
+    },
+  },
 ];
 
 // Tool handlers
@@ -1736,7 +1871,11 @@ async function handleTool(name, args) {
 
       cliArgs.push("items");
       if (args.list) cliArgs.push("--list", args.list);
-      if (args.completed) cliArgs.push("--completed");
+
+      // Pass filter directly to CLI (native filtering + sorting)
+      if (args.filter) cliArgs.push("--filter", args.filter);
+      // Legacy completed flag (overridden by filter if both set)
+      if (!args.filter && args.completed) cliArgs.push("--completed");
       if (args.limit) cliArgs.push("--limit", String(args.limit));
 
       const result = await runCLI("reminder-cli", cliArgs);
@@ -1744,6 +1883,7 @@ async function handleTool(name, args) {
       if (result.reminders) {
         result.reminders = await filterReminders(result.reminders);
       }
+
       return result;
     }
 
@@ -2075,6 +2215,246 @@ async function handleTool(name, args) {
     case "contact_delete":
       return await runCLI("contacts-cli", ["delete", "--id", args.id]);
 
+    // PIM authorization tools
+    case "pim_status": {
+      const status = {};
+
+      // Use auth-status subcommands — check authorization without triggering prompts
+      const domains = [
+        { name: "calendars", cli: "calendar-cli" },
+        { name: "reminders", cli: "reminder-cli" },
+        { name: "contacts", cli: "contacts-cli" },
+        { name: "mail", cli: "mail-cli" },
+      ];
+
+      const statusMessages = {
+        authorized: "Full access granted",
+        notDetermined: "Permission not yet requested. Run pim_authorize to prompt.",
+        denied: "Access denied. Enable in System Settings > Privacy & Security.",
+        restricted: "Access restricted by system policy (MDM or parental controls).",
+        writeOnly: "Write-only access. Upgrade in System Settings > Privacy & Security.",
+        unavailable: "Not available",
+      };
+
+      for (const domain of domains) {
+        const enabled = await isDomainEnabled(domain.name);
+        if (!enabled) {
+          status[domain.name] = {
+            enabled: false,
+            authorization: "unavailable",
+            message: "Domain disabled in plugin configuration",
+          };
+          continue;
+        }
+
+        try {
+          const result = await runCLI(domain.cli, ["auth-status"]);
+          const auth = result.authorization || "unknown";
+          status[domain.name] = {
+            enabled: true,
+            authorization: auth,
+            message: result.message || statusMessages[auth] || `Status: ${auth}`,
+          };
+        } catch (err) {
+          status[domain.name] = {
+            enabled: true,
+            authorization: "error",
+            message: err.message,
+          };
+        }
+      }
+
+      return { status };
+    }
+
+    case "pim_authorize": {
+      const targetDomain = args.domain;
+      const results = {};
+
+      const domains = [
+        { name: "calendars", cli: "calendar-cli", args: ["list"] },
+        { name: "reminders", cli: "reminder-cli", args: ["lists"] },
+        { name: "contacts", cli: "contacts-cli", args: ["groups"] },
+        { name: "mail", cli: "mail-cli", args: ["accounts"] },
+      ];
+
+      const toAuthorize = targetDomain
+        ? domains.filter((d) => d.name === targetDomain)
+        : domains;
+
+      for (const domain of toAuthorize) {
+        const enabled = await isDomainEnabled(domain.name);
+        if (!enabled) {
+          results[domain.name] = {
+            success: false,
+            message:
+              "Domain disabled in plugin configuration. Run /apple-pim:configure to enable it.",
+          };
+          continue;
+        }
+
+        try {
+          // Running the CLI triggers the permission prompt if not yet determined
+          await runCLI(domain.cli, domain.args);
+          results[domain.name] = {
+            success: true,
+            message: "Access authorized",
+          };
+        } catch (err) {
+          const msg = err.message.toLowerCase();
+          if (msg.includes("denied") || msg.includes("not granted")) {
+            results[domain.name] = {
+              success: false,
+              message:
+                "Access denied. The user must manually enable access:\n" +
+                "1. Open System Settings > Privacy & Security\n" +
+                `2. Find the ${domain.name === "mail" ? "Automation" : domain.name.charAt(0).toUpperCase() + domain.name.slice(1)} section\n` +
+                "3. Enable access for the terminal application\n" +
+                "4. Restart the terminal and try again",
+            };
+          } else if (msg.includes("not running")) {
+            results[domain.name] = {
+              success: false,
+              message:
+                "Mail.app must be running before authorization can be requested. Ask the user to open Mail.app.",
+            };
+          } else {
+            results[domain.name] = {
+              success: false,
+              message: err.message,
+            };
+          }
+        }
+      }
+
+      return { results };
+    }
+
+    // Batch reminder operations (native CLI — single process, single EventKit commit)
+    case "reminder_batch_complete": {
+      if (!args.ids || !Array.isArray(args.ids) || args.ids.length === 0) {
+        throw new Error("IDs array is required and cannot be empty");
+      }
+
+      // Check list authorization for each reminder before batch operation
+      const allowedCompleteIds = [];
+      const deniedComplete = [];
+      for (const id of args.ids) {
+        try {
+          const reminder = await runCLI("reminder-cli", ["get", "--id", id]);
+          if (reminder.list) {
+            const allowed = await isReminderListAllowed(reminder.list);
+            if (!allowed) {
+              deniedComplete.push({ id, list: reminder.list });
+              continue;
+            }
+          }
+          allowedCompleteIds.push(id);
+        } catch (err) {
+          deniedComplete.push({ id, error: err.message });
+        }
+      }
+
+      if (allowedCompleteIds.length === 0) {
+        throw new Error(
+          `None of the reminders are in allowed lists. Denied: ${JSON.stringify(deniedComplete)}\n` +
+            `Run /apple-pim:configure to update your allowed lists.`
+        );
+      }
+
+      const completeArgs = [
+        "batch-complete",
+        "--json",
+        JSON.stringify(allowedCompleteIds),
+      ];
+      if (args.undo) completeArgs.push("--undo");
+      const completeResult = await runCLI("reminder-cli", completeArgs);
+      if (deniedComplete.length > 0) {
+        completeResult.denied = deniedComplete;
+        completeResult.deniedCount = deniedComplete.length;
+      }
+      return completeResult;
+    }
+
+    case "reminder_batch_delete": {
+      if (!args.ids || !Array.isArray(args.ids) || args.ids.length === 0) {
+        throw new Error("IDs array is required and cannot be empty");
+      }
+
+      // Check list authorization for each reminder before batch operation
+      const allowedDeleteIds = [];
+      const deniedDelete = [];
+      for (const id of args.ids) {
+        try {
+          const reminder = await runCLI("reminder-cli", ["get", "--id", id]);
+          if (reminder.list) {
+            const allowed = await isReminderListAllowed(reminder.list);
+            if (!allowed) {
+              deniedDelete.push({ id, list: reminder.list });
+              continue;
+            }
+          }
+          allowedDeleteIds.push(id);
+        } catch (err) {
+          deniedDelete.push({ id, error: err.message });
+        }
+      }
+
+      if (allowedDeleteIds.length === 0) {
+        throw new Error(
+          `None of the reminders are in allowed lists. Denied: ${JSON.stringify(deniedDelete)}\n` +
+            `Run /apple-pim:configure to update your allowed lists.`
+        );
+      }
+
+      const deleteResult = await runCLI("reminder-cli", [
+        "batch-delete",
+        "--json",
+        JSON.stringify(allowedDeleteIds),
+      ]);
+      if (deniedDelete.length > 0) {
+        deleteResult.denied = deniedDelete;
+        deleteResult.deniedCount = deniedDelete.length;
+      }
+      return deleteResult;
+    }
+
+    // Batch mail operations (native CLI — single JXA call)
+    case "mail_batch_update": {
+      if (!args.ids || !Array.isArray(args.ids) || args.ids.length === 0) {
+        throw new Error("IDs array is required and cannot be empty");
+      }
+
+      // Build update objects for the native CLI
+      const updates = args.ids.map((id) => {
+        const obj = { id };
+        if (args.read !== undefined) obj.read = args.read;
+        if (args.flagged !== undefined) obj.flagged = args.flagged;
+        if (args.junk !== undefined) obj.junk = args.junk;
+        return obj;
+      });
+
+      const batchArgs = ["batch-update", "--json", JSON.stringify(updates)];
+      if (args.mailbox) batchArgs.push("--mailbox", args.mailbox);
+      if (args.account) batchArgs.push("--account", args.account);
+      return await runCLI("mail-cli", batchArgs);
+    }
+
+    case "mail_batch_delete": {
+      if (!args.ids || !Array.isArray(args.ids) || args.ids.length === 0) {
+        throw new Error("IDs array is required and cannot be empty");
+      }
+
+      const batchArgs = [
+        "batch-delete",
+        "--json",
+        JSON.stringify(args.ids),
+      ];
+      if (args.mailbox) batchArgs.push("--mailbox", args.mailbox);
+      if (args.account) batchArgs.push("--account", args.account);
+      return await runCLI("mail-cli", batchArgs);
+    }
+
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
@@ -2086,6 +2466,8 @@ function toolDomain(toolName) {
   if (toolName.startsWith("reminder_")) return "reminders";
   if (toolName.startsWith("contact_")) return "contacts";
   if (toolName.startsWith("mail_")) return "mail";
+  // pim_ tools are cross-domain, always available
+  if (toolName.startsWith("pim_")) return null;
   return null;
 }
 

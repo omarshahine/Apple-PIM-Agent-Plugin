@@ -8,6 +8,7 @@ struct MailCLI: AsyncParsableCommand {
         commandName: "mail-cli",
         abstract: "Manage macOS Mail.app via JXA (JavaScript for Automation)",
         subcommands: [
+            AuthStatus.self,
             ListAccounts.self,
             ListMailboxes.self,
             ListMessages.self,
@@ -16,8 +17,60 @@ struct MailCLI: AsyncParsableCommand {
             UpdateMessage.self,
             MoveMessage.self,
             DeleteMessage.self,
+            BatchUpdateMessages.self,
+            BatchDeleteMessages.self,
         ]
     )
+}
+
+// MARK: - Auth Status (no prompts)
+
+struct AuthStatus: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "auth-status",
+        abstract: "Check Mail.app automation authorization status without triggering prompts"
+    )
+
+    func run() throws {
+        let status: String
+
+        // Check if Mail.app is running first
+        let running = NSWorkspace.shared.runningApplications.contains {
+            $0.bundleIdentifier == "com.apple.mail"
+        }
+        guard running else {
+            let result: [String: Any] = ["authorization": "unavailable", "message": "Mail.app is not running"]
+            let data = try JSONSerialization.data(withJSONObject: result)
+            print(String(data: data, encoding: .utf8)!)
+            return
+        }
+
+        // Use AEDeterminePermissionToAutomateTarget to check without prompting
+        let mailDesc = NSAppleEventDescriptor(bundleIdentifier: "com.apple.mail")
+        let errCode = AEDeterminePermissionToAutomateTarget(
+            mailDesc.aeDesc,
+            typeWildCard,
+            typeWildCard,
+            false  // false = don't prompt
+        )
+
+        switch errCode {
+        case noErr:
+            status = "authorized"
+        case OSStatus(-1744): // errAEEventWouldRequireUserConsent
+            status = "notDetermined"
+        case OSStatus(-1743): // errAEEventNotPermitted
+            status = "denied"
+        case OSStatus(-600): // procNotFound
+            status = "unavailable"
+        default:
+            status = "error"
+        }
+
+        let result: [String: Any] = ["authorization": status]
+        let data = try JSONSerialization.data(withJSONObject: result)
+        print(String(data: data, encoding: .utf8)!)
+    }
 }
 
 // MARK: - Shared Utilities
@@ -200,6 +253,65 @@ func findMessageJXA(targetId: String, mailbox: String?, account: String?) -> Str
                 const key = accounts[a].name() + '/' + mbs[m].name();
                 if (searched.has(key)) continue;
                 const r = searchInMailbox(mbs[m]);
+                if (r) return r;
+            }
+        }
+        return null;
+    }
+    """
+}
+
+/// Generates the JXA `findMsg(targetId)` function for batch operations.
+/// Unlike `findMessageJXA`, the target ID is a parameter (not hardcoded).
+func batchFindMessageJXA(mailbox: String?, account: String?) -> String {
+    let mailboxFilter = mailbox.map { "'\(escapeForJXA($0))'" } ?? "null"
+    let accountFilter = account.map { "'\(escapeForJXA($0))'" } ?? "null"
+
+    return """
+    const mboxHint = \(mailboxFilter);
+    const acctHint = \(accountFilter);
+
+    function findMsg(targetId) {
+        const priority = ['INBOX', 'Sent Messages', 'Archive', 'Drafts', 'Deleted Messages', 'Junk'];
+        const accounts = acctHint ? Mail.accounts.whose({name: acctHint})() : Mail.accounts();
+        const searched = new Set();
+
+        function searchIn(mbox) {
+            try {
+                const found = mbox.messages.whose({messageId: targetId})();
+                if (found.length > 0) return found[0];
+            } catch(e) {}
+            return null;
+        }
+
+        if (mboxHint) {
+            for (let a = 0; a < accounts.length; a++) {
+                const mbs = accounts[a].mailboxes.whose({name: mboxHint})();
+                for (let m = 0; m < mbs.length; m++) {
+                    searched.add(accounts[a].name() + '/' + mbs[m].name());
+                    const r = searchIn(mbs[m]);
+                    if (r) return r;
+                }
+            }
+        }
+        for (let a = 0; a < accounts.length; a++) {
+            for (let p = 0; p < priority.length; p++) {
+                const mbs = accounts[a].mailboxes.whose({name: priority[p]})();
+                for (let m = 0; m < mbs.length; m++) {
+                    const key = accounts[a].name() + '/' + mbs[m].name();
+                    if (searched.has(key)) continue;
+                    searched.add(key);
+                    const r = searchIn(mbs[m]);
+                    if (r) return r;
+                }
+            }
+        }
+        for (let a = 0; a < accounts.length; a++) {
+            const mbs = accounts[a].mailboxes();
+            for (let m = 0; m < mbs.length; m++) {
+                const key = accounts[a].name() + '/' + mbs[m].name();
+                if (searched.has(key)) continue;
+                const r = searchIn(mbs[m]);
                 if (r) return r;
             }
         }
@@ -803,6 +915,186 @@ struct DeleteMessage: AsyncParsableCommand {
             "success": true,
             "message": "Message deleted (moved to Trash)",
             "result": raw
+        ])
+    }
+}
+
+// MARK: - Batch Operations
+
+struct BatchUpdateInput: Codable {
+    let id: String
+    let read: Bool?
+    let flagged: Bool?
+    let junk: Bool?
+}
+
+struct BatchUpdateMessages: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "batch-update",
+        abstract: "Update flags on multiple messages in a single JXA call"
+    )
+
+    @Option(name: .long, help: "JSON array of update objects: [{\"id\": \"...\", \"read\": true}, ...]")
+    var json: String
+
+    @Option(name: .long, help: "Mailbox name hint (speeds up lookup)")
+    var mailbox: String?
+
+    @Option(name: .long, help: "Account name hint (speeds up lookup)")
+    var account: String?
+
+    func run() async throws {
+        try ensureMailRunning()
+
+        guard let data = json.data(using: .utf8),
+              let updates = try? JSONDecoder().decode([BatchUpdateInput].self, from: data) else {
+            throw CLIError.invalidInput("Invalid JSON format. Expected an array of update objects with 'id' and optional 'read', 'flagged', 'junk' fields.")
+        }
+
+        if updates.isEmpty {
+            throw CLIError.invalidInput("Updates array cannot be empty")
+        }
+
+        // Build the updates array as a JS literal
+        let jsUpdates = updates.map { update -> String in
+            var fields = [String]()
+            fields.append("id: '\(escapeForJXA(update.id))'")
+            if let read = update.read { fields.append("read: \(read)") }
+            if let flagged = update.flagged { fields.append("flagged: \(flagged)") }
+            if let junk = update.junk { fields.append("junk: \(junk)") }
+            return "{\(fields.joined(separator: ", "))}"
+        }.joined(separator: ",\n            ")
+
+        let findMsgFunc = batchFindMessageJXA(mailbox: mailbox, account: account)
+
+        let script = """
+        const Mail = Application("Mail");
+        const updates = [
+            \(jsUpdates)
+        ];
+        \(findMsgFunc)
+
+        const results = [];
+        const errors = [];
+
+        for (const u of updates) {
+            try {
+                const msg = findMsg(u.id);
+                if (!msg) {
+                    errors.push({id: u.id, error: 'Message not found'});
+                    continue;
+                }
+                if (u.read !== undefined) msg.readStatus = u.read;
+                if (u.flagged !== undefined) msg.flaggedStatus = u.flagged;
+                if (u.junk !== undefined) msg.junkMailStatus = u.junk;
+                results.push({
+                    id: u.id,
+                    subject: msg.subject(),
+                    isRead: msg.readStatus(),
+                    isFlagged: msg.flaggedStatus(),
+                    isJunk: msg.junkMailStatus()
+                });
+            } catch(e) {
+                errors.push({id: u.id, error: e.message || String(e)});
+            }
+        }
+
+        JSON.stringify({results: results, errors: errors});
+        """
+
+        let raw = try runJXA(script)
+
+        guard let dict = raw as? [String: Any] else {
+            throw CLIError.jxaError("Unexpected output from batch update")
+        }
+
+        let results = dict["results"] as? [Any] ?? []
+        let errors = dict["errors"] as? [Any] ?? []
+
+        outputJSON([
+            "success": errors.isEmpty,
+            "message": "Batch update completed",
+            "updated": results,
+            "updatedCount": results.count,
+            "errors": errors,
+            "errorCount": errors.count
+        ])
+    }
+}
+
+struct BatchDeleteMessages: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "batch-delete",
+        abstract: "Delete multiple messages in a single JXA call (moves to Trash)"
+    )
+
+    @Option(name: .long, help: "JSON array of RFC 2822 message IDs to delete")
+    var json: String
+
+    @Option(name: .long, help: "Mailbox name hint (speeds up lookup)")
+    var mailbox: String?
+
+    @Option(name: .long, help: "Account name hint (speeds up lookup)")
+    var account: String?
+
+    func run() async throws {
+        try ensureMailRunning()
+
+        guard let data = json.data(using: .utf8),
+              let ids = try? JSONDecoder().decode([String].self, from: data) else {
+            throw CLIError.invalidInput("Invalid JSON format. Expected an array of message ID strings.")
+        }
+
+        if ids.isEmpty {
+            throw CLIError.invalidInput("IDs array cannot be empty")
+        }
+
+        let jsIds = ids.map { "'\(escapeForJXA($0))'" }.joined(separator: ", ")
+        let findMsgFunc = batchFindMessageJXA(mailbox: mailbox, account: account)
+
+        let script = """
+        const Mail = Application("Mail");
+        const ids = [\(jsIds)];
+        \(findMsgFunc)
+
+        const results = [];
+        const errors = [];
+
+        for (const targetId of ids) {
+            try {
+                const msg = findMsg(targetId);
+                if (!msg) {
+                    errors.push({id: targetId, error: 'Message not found'});
+                    continue;
+                }
+                const subject = msg.subject();
+                const mboxName = msg.mailbox().name();
+                Mail.delete(msg);
+                results.push({id: targetId, subject: subject, fromMailbox: mboxName});
+            } catch(e) {
+                errors.push({id: targetId, error: e.message || String(e)});
+            }
+        }
+
+        JSON.stringify({results: results, errors: errors});
+        """
+
+        let raw = try runJXA(script)
+
+        guard let dict = raw as? [String: Any] else {
+            throw CLIError.jxaError("Unexpected output from batch delete")
+        }
+
+        let results = dict["results"] as? [Any] ?? []
+        let errors = dict["errors"] as? [Any] ?? []
+
+        outputJSON([
+            "success": errors.isEmpty,
+            "message": "Batch delete completed",
+            "deleted": results,
+            "deletedCount": results.count,
+            "errors": errors,
+            "errorCount": errors.count
         ])
     }
 }
