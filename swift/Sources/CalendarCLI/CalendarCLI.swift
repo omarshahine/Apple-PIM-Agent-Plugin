@@ -781,6 +781,19 @@ struct BatchEventInput: Codable {
     let recurrence: RecurrenceJSON?
 }
 
+func decodeBatchEvents(_ json: String) throws -> [BatchEventInput] {
+    guard let data = json.data(using: .utf8),
+          let events = try? JSONDecoder().decode([BatchEventInput].self, from: data) else {
+        throw CLIError.invalidInput("Invalid JSON format for events array")
+    }
+
+    if events.isEmpty {
+        throw CLIError.invalidInput("Events array cannot be empty")
+    }
+
+    return events
+}
+
 struct BatchCreateEvent: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "batch-create",
@@ -793,14 +806,7 @@ struct BatchCreateEvent: AsyncParsableCommand {
     func run() async throws {
         try await requestCalendarAccess()
 
-        guard let data = json.data(using: .utf8),
-              let events = try? JSONDecoder().decode([BatchEventInput].self, from: data) else {
-            throw CLIError.invalidInput("Invalid JSON format for events array")
-        }
-
-        if events.isEmpty {
-            throw CLIError.invalidInput("Events array cannot be empty")
-        }
+        let events = try decodeBatchEvents(json)
 
         var createdEvents: [[String: Any]] = []
         var errors: [[String: Any]] = []

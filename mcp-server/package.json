@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node dist/server.js",
     "build": "esbuild server.js --bundle --platform=node --target=node18 --format=esm --outfile=dist/server.js --external:child_process --external:fs --external:path --external:url",
+    "test": "vitest run",
     "prepublish": "npm run build"
   },
   "dependencies": {
@@ -14,6 +15,7 @@
     "js-yaml": "^4.1.0"
   },
   "devDependencies": {
-    "esbuild": "^0.20.0"
+    "esbuild": "^0.20.0",
+    "vitest": "^3.2.4"
   }
 }

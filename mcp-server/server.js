@@ -29,6 +29,11 @@ import {
   markToolResult,
   getDatamarkingPreamble,
 } from "./sanitize.js";
+import {
+  applyDefaultCalendar,
+  applyDefaultReminderList,
+  buildCalendarDeleteArgs,
+} from "./tool-args.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1814,9 +1819,7 @@ async function handleTool(name, args) {
         }
       }
 
-      const deleteArgs = ["delete", "--id", args.id];
-      if (args.futureEvents) deleteArgs.push("--future-events");
-      return await runCLI("calendar-cli", deleteArgs);
+      return await runCLI("calendar-cli", buildCalendarDeleteArgs(args));
     }
 
     case "calendar_batch_create": {
@@ -1835,10 +1838,10 @@ async function handleTool(name, args) {
       const defaultCalendar = await getDefaultCalendar();
 
       // Transform events to include default calendar if not specified
-      const eventsWithDefaults = args.events.map((event) => ({
-        ...event,
-        calendar: event.calendar || defaultCalendar,
-      }));
+      const eventsWithDefaults = applyDefaultCalendar(
+        args.events,
+        defaultCalendar
+      );
 
       return await runCLI("calendar-cli", [
         "batch-create",
@@ -2041,10 +2044,10 @@ async function handleTool(name, args) {
       const defaultList = await getDefaultReminderList();
 
       // Transform reminders to include default list if not specified
-      const remindersWithDefaults = args.reminders.map((reminder) => ({
-        ...reminder,
-        list: reminder.list || defaultList,
-      }));
+      const remindersWithDefaults = applyDefaultReminderList(
+        args.reminders,
+        defaultList
+      );
 
       return await runCLI("reminder-cli", [
         "batch-create",

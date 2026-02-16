@@ -1,0 +1,49 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  mcp-server-tests:
+    name: MCP Server (Node)
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mcp-server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build MCP server
+        run: npm run build
+
+  swift-cli-tests:
+    name: Swift CLI
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: swift
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select latest Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Run Swift tests
+        run: swift test
