@@ -34,6 +34,7 @@ import {
   applyDefaultReminderList,
   buildCalendarDeleteArgs,
 } from "./tool-args.js";
+import { formatMailGetResult } from "./mail-format.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -928,6 +929,12 @@ const tools = [
           type: "string",
           description:
             "Account name hint to speed up lookup (from prior list/search results)",
+        },
+        format: {
+          type: "string",
+          enum: ["plain", "markdown"],
+          description:
+            "Body format. plain uses Mail.app text extraction (default). markdown converts HTML emails to markdown when available.",
         },
       },
       required: ["id"],
@@ -2077,7 +2084,10 @@ async function handleTool(name, args) {
       const getArgs = ["get", "--id", args.id];
       if (args.mailbox) getArgs.push("--mailbox", args.mailbox);
       if (args.account) getArgs.push("--account", args.account);
-      return await runCLI("mail-cli", getArgs);
+      if (args.format === "markdown") getArgs.push("--include-source");
+
+      const result = await runCLI("mail-cli", getArgs);
+      return await formatMailGetResult(result, args.format || "plain");
     }
 
     case "mail_search":

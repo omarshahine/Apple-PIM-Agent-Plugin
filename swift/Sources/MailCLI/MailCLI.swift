@@ -539,6 +539,9 @@ struct GetMessage: AsyncParsableCommand {
     @Option(name: .long, help: "Account name hint (speeds up lookup)")
     var account: String?
 
+    @Flag(name: .long, help: "Include raw RFC 2822 source in the response")
+    var includeSource: Bool = false
+
     func run() async throws {
         try ensureMailRunning()
 
@@ -565,6 +568,12 @@ struct GetMessage: AsyncParsableCommand {
                 account: msg.mailbox().account().name(),
                 content: msg.content()
             };
+
+            if (\(includeSource ? "true" : "false")) {
+                try {
+                    result.source = msg.source();
+                } catch(e) {}
+            }
 
             // Get recipients
             try {

@@ -38,6 +38,7 @@ Use `mail_messages` to list messages in a mailbox:
 Use `mail_get` to get a single message with full body content:
 - Required: `id` (RFC 2822 message ID)
 - Optional: `mailbox`, `account` (hints for faster lookup)
+- Optional: `format` (`plain` default, or `markdown` for HTML-to-markdown conversion)
 
 ### Search Messages
 Use `mail_search` to find messages by subject, sender, or content:
@@ -93,6 +94,7 @@ Use `mail_batch_delete` to delete multiple messages at once:
 **Read a message:**
 ```
 /apple-pim:mail get --id <message-id>
+/apple-pim:mail get --id <message-id> --format markdown
 ```
 
 **Search messages:**
