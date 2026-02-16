@@ -69,4 +69,18 @@ final class BatchCreateReminderValidationTests: XCTestCase {
         XCTAssertEqual(reminders[0].location?.name, "Office")
         XCTAssertEqual(reminders[0].location?.proximity, "arrive")
     }
+
+    func testBatchReminderDueDateComponentsParsesValidDate() {
+        let components = batchReminderDueDateComponents("2026-02-21 17:00")
+        XCTAssertEqual(components?.year, 2026)
+        XCTAssertEqual(components?.month, 2)
+        XCTAssertEqual(components?.day, 21)
+        XCTAssertEqual(components?.hour, 17)
+        XCTAssertEqual(components?.minute, 0)
+    }
+
+    func testBatchReminderDueDateComponentsReturnsNilForInvalidDate() {
+        XCTAssertNil(batchReminderDueDateComponents("bad-date"))
+        XCTAssertNil(batchReminderDueDateComponents(nil))
+    }
 }

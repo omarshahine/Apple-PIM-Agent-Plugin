@@ -794,6 +794,26 @@ func decodeBatchEvents(_ json: String) throws -> [BatchEventInput] {
     return events
 }
 
+func resolveBatchEventDates(_ eventInput: BatchEventInput) throws -> (startDate: Date, endDate: Date) {
+    guard let startDate = parseDate(eventInput.start) else {
+        throw CLIError.invalidInput("Invalid start date: \(eventInput.start)")
+    }
+
+    let endDate: Date
+    if let endStr = eventInput.end {
+        guard let parsed = parseDate(endStr) else {
+            throw CLIError.invalidInput("Invalid end date: \(endStr)")
+        }
+        endDate = parsed
+    } else if let durationMinutes = eventInput.duration {
+        endDate = Calendar.current.date(byAdding: .minute, value: durationMinutes, to: startDate) ?? startDate
+    } else {
+        endDate = Calendar.current.date(byAdding: .hour, value: 1, to: startDate) ?? startDate
+    }
+
+    return (startDate, endDate)
+}
+
 struct BatchCreateEvent: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "batch-create",
@@ -813,21 +833,9 @@ struct BatchCreateEvent: AsyncParsableCommand {
 
         for (index, eventInput) in events.enumerated() {
             do {
-                guard let startDate = parseDate(eventInput.start) else {
-                    throw CLIError.invalidInput("Invalid start date: \(eventInput.start)")
-                }
-
-                let endDate: Date
-                if let endStr = eventInput.end {
-                    guard let parsed = parseDate(endStr) else {
-                        throw CLIError.invalidInput("Invalid end date: \(endStr)")
-                    }
-                    endDate = parsed
-                } else if let durationMinutes = eventInput.duration {
-                    endDate = Calendar.current.date(byAdding: .minute, value: durationMinutes, to: startDate) ?? startDate
-                } else {
-                    endDate = Calendar.current.date(byAdding: .hour, value: 1, to: startDate) ?? startDate
-                }
+                let dates = try resolveBatchEventDates(eventInput)
+                let startDate = dates.startDate
+                let endDate = dates.endDate
 
                 let event = EKEvent(eventStore: eventStore)
                 event.title = eventInput.title
