@@ -79,3 +79,52 @@ export function buildReminderUpdateArgs(args) {
   if (args.recurrence) cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
   return cliArgs;
 }
+
+function pushJSONIfNonEmpty(cliArgs, flag, value) {
+  if (Array.isArray(value) && value.length > 0) {
+    cliArgs.push(flag, JSON.stringify(value));
+  }
+}
+
+function pushContactSharedFields(cliArgs, args) {
+  if (args.firstName) cliArgs.push("--first-name", args.firstName);
+  if (args.lastName) cliArgs.push("--last-name", args.lastName);
+  if (args.middleName) cliArgs.push("--middle-name", args.middleName);
+  if (args.namePrefix) cliArgs.push("--name-prefix", args.namePrefix);
+  if (args.nameSuffix) cliArgs.push("--name-suffix", args.nameSuffix);
+  if (args.nickname) cliArgs.push("--nickname", args.nickname);
+  if (args.previousFamilyName) cliArgs.push("--previous-family-name", args.previousFamilyName);
+  if (args.phoneticGivenName) cliArgs.push("--phonetic-given-name", args.phoneticGivenName);
+  if (args.phoneticMiddleName) cliArgs.push("--phonetic-middle-name", args.phoneticMiddleName);
+  if (args.phoneticFamilyName) cliArgs.push("--phonetic-family-name", args.phoneticFamilyName);
+  if (args.phoneticOrganizationName) cliArgs.push("--phonetic-organization-name", args.phoneticOrganizationName);
+  if (args.organization) cliArgs.push("--organization", args.organization);
+  if (args.jobTitle) cliArgs.push("--job-title", args.jobTitle);
+  if (args.department) cliArgs.push("--department", args.department);
+  if (args.contactType) cliArgs.push("--contact-type", args.contactType);
+  if (args.email) cliArgs.push("--email", args.email);
+  if (args.phone) cliArgs.push("--phone", args.phone);
+  pushJSONIfNonEmpty(cliArgs, "--emails", args.emails);
+  pushJSONIfNonEmpty(cliArgs, "--phones", args.phones);
+  pushJSONIfNonEmpty(cliArgs, "--addresses", args.addresses);
+  pushJSONIfNonEmpty(cliArgs, "--urls", args.urls);
+  pushJSONIfNonEmpty(cliArgs, "--social-profiles", args.socialProfiles);
+  pushJSONIfNonEmpty(cliArgs, "--instant-messages", args.instantMessages);
+  pushJSONIfNonEmpty(cliArgs, "--relations", args.relations);
+  if (args.birthday) cliArgs.push("--birthday", args.birthday);
+  pushJSONIfNonEmpty(cliArgs, "--dates", args.dates);
+  if (args.notes) cliArgs.push("--notes", args.notes);
+}
+
+export function buildContactCreateArgs(args) {
+  const cliArgs = ["create"];
+  if (args.name) cliArgs.push("--name", args.name);
+  pushContactSharedFields(cliArgs, args);
+  return cliArgs;
+}
+
+export function buildContactUpdateArgs(args) {
+  const cliArgs = ["update", "--id", args.id];
+  pushContactSharedFields(cliArgs, args);
+  return cliArgs;
+}
