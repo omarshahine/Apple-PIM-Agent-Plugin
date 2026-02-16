@@ -4744,7 +4744,6 @@ var require_pattern = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var code_1 = require_code2();
-    var util_1 = require_util();
     var codegen_1 = require_codegen();
     var error2 = {
       message: ({ schemaCode }) => (0, codegen_1.str)`must match pattern "${schemaCode}"`,
@@ -4757,18 +4756,10 @@ var require_pattern = __commonJS({
       $data: true,
       error: error2,
       code(cxt) {
-        const { gen, data, $data, schema: schema2, schemaCode, it } = cxt;
+        const { data, $data, schema: schema2, schemaCode, it } = cxt;
         const u = it.opts.unicodeRegExp ? "u" : "";
-        if ($data) {
-          const { regExp } = it.opts.code;
-          const regExpCode = regExp.code === "new RegExp" ? (0, codegen_1._)`new RegExp` : (0, util_1.useFunc)(gen, regExp);
-          const valid = gen.let("valid");
-          gen.try(() => gen.assign(valid, (0, codegen_1._)`${regExpCode}(${schemaCode}, ${u}).test(${data})`), () => gen.assign(valid, false));
-          cxt.fail$data((0, codegen_1._)`!${valid}`);
-        } else {
-          const regExp = (0, code_1.usePattern)(cxt, schema2);
-          cxt.fail$data((0, codegen_1._)`!${regExp}.test(${data})`);
-        }
+        const regExp = $data ? (0, codegen_1._)`(new RegExp(${schemaCode}, ${u}))` : (0, code_1.usePattern)(cxt, schema2);
+        cxt.fail$data((0, codegen_1._)`!${regExp}.test(${data})`);
       }
     };
     exports.default = def;
@@ -68787,7 +68778,7 @@ var Doc = class {
 var version = {
   major: 4,
   minor: 3,
-  patch: 6
+  patch: 5
 };
 
 // node_modules/zod/v4/core/schemas.js
@@ -70078,7 +70069,7 @@ var $ZodRecord = /* @__PURE__ */ $constructor("$ZodRecord", (inst, def) => {
         if (keyResult instanceof Promise) {
           throw new Error("Async schemas not supported in object keys currently");
         }
-        const checkNumericKey = typeof key === "string" && number.test(key) && keyResult.issues.length;
+        const checkNumericKey = typeof key === "string" && number.test(key) && keyResult.issues.length && keyResult.issues.some((iss) => iss.code === "invalid_type" && iss.expected === "number");
         if (checkNumericKey) {
           const retryResult = def.keyType._zod.run({ value: Number(key), issues: [] }, ctx);
           if (retryResult instanceof Promise) {
@@ -71923,7 +71914,7 @@ function finalize(ctx, schema2) {
           }
         }
       }
-      if (refSchema.$ref && refSeen.def) {
+      if (refSchema.$ref) {
         for (const key in schema3) {
           if (key === "$ref" || key === "allOf")
             continue;
@@ -75722,9 +75713,6 @@ var Protocol = class {
    * The Protocol object assumes ownership of the Transport, replacing any callbacks that have already been set, and expects that it is the only user of the Transport instance going forward.
    */
   async connect(transport2) {
-    if (this._transport) {
-      throw new Error("Already connected to a transport. Call close() before connecting to a new transport, or use a separate Protocol instance per connection.");
-    }
     this._transport = transport2;
     const _onclose = this.transport?.onclose;
     this._transport.onclose = () => {
@@ -75757,10 +75745,6 @@ var Protocol = class {
     this._progressHandlers.clear();
     this._taskProgressTokens.clear();
     this._pendingDebouncedNotifications.clear();
-    for (const controller of this._requestHandlerAbortControllers.values()) {
-      controller.abort();
-    }
-    this._requestHandlerAbortControllers.clear();
     const error2 = McpError.fromError(ErrorCode.ConnectionClosed, "Connection closed");
     this._transport = void 0;
     this.onclose?.();
@@ -75811,8 +75795,6 @@ var Protocol = class {
       sessionId: capturedTransport?.sessionId,
       _meta: request.params?._meta,
       sendNotification: async (notification) => {
-        if (abortController.signal.aborted)
-          return;
         const notificationOptions = { relatedRequestId: request.id };
         if (relatedTaskId) {
           notificationOptions.relatedTask = { taskId: relatedTaskId };
@@ -75820,9 +75802,6 @@ var Protocol = class {
         await this.notification(notification, notificationOptions);
       },
       sendRequest: async (r, resultSchema, options) => {
-        if (abortController.signal.aborted) {
-          throw new McpError(ErrorCode.ConnectionClosed, "Request was cancelled");
-        }
         const requestOptions = { ...options, relatedRequestId: request.id };
         if (relatedTaskId && !requestOptions.relatedTask) {
           requestOptions.relatedTask = { taskId: relatedTaskId };
@@ -80239,6 +80218,71 @@ function buildReminderUpdateArgs(args) {
     cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
   return cliArgs;
 }
+function pushJSONIfNonEmpty(cliArgs, flag, value) {
+  if (Array.isArray(value) && value.length > 0) {
+    cliArgs.push(flag, JSON.stringify(value));
+  }
+}
+function pushContactSharedFields(cliArgs, args) {
+  if (args.firstName)
+    cliArgs.push("--first-name", args.firstName);
+  if (args.lastName)
+    cliArgs.push("--last-name", args.lastName);
+  if (args.middleName)
+    cliArgs.push("--middle-name", args.middleName);
+  if (args.namePrefix)
+    cliArgs.push("--name-prefix", args.namePrefix);
+  if (args.nameSuffix)
+    cliArgs.push("--name-suffix", args.nameSuffix);
+  if (args.nickname)
+    cliArgs.push("--nickname", args.nickname);
+  if (args.previousFamilyName)
+    cliArgs.push("--previous-family-name", args.previousFamilyName);
+  if (args.phoneticGivenName)
+    cliArgs.push("--phonetic-given-name", args.phoneticGivenName);
+  if (args.phoneticMiddleName)
+    cliArgs.push("--phonetic-middle-name", args.phoneticMiddleName);
+  if (args.phoneticFamilyName)
+    cliArgs.push("--phonetic-family-name", args.phoneticFamilyName);
+  if (args.phoneticOrganizationName)
+    cliArgs.push("--phonetic-organization-name", args.phoneticOrganizationName);
+  if (args.organization)
+    cliArgs.push("--organization", args.organization);
+  if (args.jobTitle)
+    cliArgs.push("--job-title", args.jobTitle);
+  if (args.department)
+    cliArgs.push("--department", args.department);
+  if (args.contactType)
+    cliArgs.push("--contact-type", args.contactType);
+  if (args.email)
+    cliArgs.push("--email", args.email);
+  if (args.phone)
+    cliArgs.push("--phone", args.phone);
+  pushJSONIfNonEmpty(cliArgs, "--emails", args.emails);
+  pushJSONIfNonEmpty(cliArgs, "--phones", args.phones);
+  pushJSONIfNonEmpty(cliArgs, "--addresses", args.addresses);
+  pushJSONIfNonEmpty(cliArgs, "--urls", args.urls);
+  pushJSONIfNonEmpty(cliArgs, "--social-profiles", args.socialProfiles);
+  pushJSONIfNonEmpty(cliArgs, "--instant-messages", args.instantMessages);
+  pushJSONIfNonEmpty(cliArgs, "--relations", args.relations);
+  if (args.birthday)
+    cliArgs.push("--birthday", args.birthday);
+  pushJSONIfNonEmpty(cliArgs, "--dates", args.dates);
+  if (args.notes)
+    cliArgs.push("--notes", args.notes);
+}
+function buildContactCreateArgs(args) {
+  const cliArgs = ["create"];
+  if (args.name)
+    cliArgs.push("--name", args.name);
+  pushContactSharedFields(cliArgs, args);
+  return cliArgs;
+}
+function buildContactUpdateArgs(args) {
+  const cliArgs = ["update", "--id", args.id];
+  pushContactSharedFields(cliArgs, args);
+  return cliArgs;
+}
 
 // mail-format.js
 var import_mailparser = __toESM(require_mailparser(), 1);
@@ -82210,121 +82254,9 @@ Run /apple-pim:configure to add it.`
     case "contact_get":
       return await runCLI("contacts-cli", ["get", "--id", args.id]);
     case "contact_create":
-      cliArgs.push("create");
-      if (args.name)
-        cliArgs.push("--name", args.name);
-      if (args.firstName)
-        cliArgs.push("--first-name", args.firstName);
-      if (args.lastName)
-        cliArgs.push("--last-name", args.lastName);
-      if (args.middleName)
-        cliArgs.push("--middle-name", args.middleName);
-      if (args.namePrefix)
-        cliArgs.push("--name-prefix", args.namePrefix);
-      if (args.nameSuffix)
-        cliArgs.push("--name-suffix", args.nameSuffix);
-      if (args.nickname)
-        cliArgs.push("--nickname", args.nickname);
-      if (args.previousFamilyName)
-        cliArgs.push("--previous-family-name", args.previousFamilyName);
-      if (args.phoneticGivenName)
-        cliArgs.push("--phonetic-given-name", args.phoneticGivenName);
-      if (args.phoneticMiddleName)
-        cliArgs.push("--phonetic-middle-name", args.phoneticMiddleName);
-      if (args.phoneticFamilyName)
-        cliArgs.push("--phonetic-family-name", args.phoneticFamilyName);
-      if (args.phoneticOrganizationName)
-        cliArgs.push("--phonetic-organization-name", args.phoneticOrganizationName);
-      if (args.organization)
-        cliArgs.push("--organization", args.organization);
-      if (args.jobTitle)
-        cliArgs.push("--job-title", args.jobTitle);
-      if (args.department)
-        cliArgs.push("--department", args.department);
-      if (args.contactType)
-        cliArgs.push("--contact-type", args.contactType);
-      if (args.email)
-        cliArgs.push("--email", args.email);
-      if (args.phone)
-        cliArgs.push("--phone", args.phone);
-      if (args.emails?.length)
-        cliArgs.push("--emails", JSON.stringify(args.emails));
-      if (args.phones?.length)
-        cliArgs.push("--phones", JSON.stringify(args.phones));
-      if (args.addresses?.length)
-        cliArgs.push("--addresses", JSON.stringify(args.addresses));
-      if (args.urls?.length)
-        cliArgs.push("--urls", JSON.stringify(args.urls));
-      if (args.socialProfiles?.length)
-        cliArgs.push("--social-profiles", JSON.stringify(args.socialProfiles));
-      if (args.instantMessages?.length)
-        cliArgs.push("--instant-messages", JSON.stringify(args.instantMessages));
-      if (args.relations?.length)
-        cliArgs.push("--relations", JSON.stringify(args.relations));
-      if (args.birthday)
-        cliArgs.push("--birthday", args.birthday);
-      if (args.dates?.length)
-        cliArgs.push("--dates", JSON.stringify(args.dates));
-      if (args.notes)
-        cliArgs.push("--notes", args.notes);
-      return await runCLI("contacts-cli", cliArgs);
+      return await runCLI("contacts-cli", buildContactCreateArgs(args));
     case "contact_update":
-      cliArgs.push("update", "--id", args.id);
-      if (args.firstName)
-        cliArgs.push("--first-name", args.firstName);
-      if (args.lastName)
-        cliArgs.push("--last-name", args.lastName);
-      if (args.middleName)
-        cliArgs.push("--middle-name", args.middleName);
-      if (args.namePrefix)
-        cliArgs.push("--name-prefix", args.namePrefix);
-      if (args.nameSuffix)
-        cliArgs.push("--name-suffix", args.nameSuffix);
-      if (args.nickname)
-        cliArgs.push("--nickname", args.nickname);
-      if (args.previousFamilyName)
-        cliArgs.push("--previous-family-name", args.previousFamilyName);
-      if (args.phoneticGivenName)
-        cliArgs.push("--phonetic-given-name", args.phoneticGivenName);
-      if (args.phoneticMiddleName)
-        cliArgs.push("--phonetic-middle-name", args.phoneticMiddleName);
-      if (args.phoneticFamilyName)
-        cliArgs.push("--phonetic-family-name", args.phoneticFamilyName);
-      if (args.phoneticOrganizationName)
-        cliArgs.push("--phonetic-organization-name", args.phoneticOrganizationName);
-      if (args.organization)
-        cliArgs.push("--organization", args.organization);
-      if (args.jobTitle)
-        cliArgs.push("--job-title", args.jobTitle);
-      if (args.department)
-        cliArgs.push("--department", args.department);
-      if (args.contactType)
-        cliArgs.push("--contact-type", args.contactType);
-      if (args.email)
-        cliArgs.push("--email", args.email);
-      if (args.phone)
-        cliArgs.push("--phone", args.phone);
-      if (args.emails?.length)
-        cliArgs.push("--emails", JSON.stringify(args.emails));
-      if (args.phones?.length)
-        cliArgs.push("--phones", JSON.stringify(args.phones));
-      if (args.addresses?.length)
-        cliArgs.push("--addresses", JSON.stringify(args.addresses));
-      if (args.urls?.length)
-        cliArgs.push("--urls", JSON.stringify(args.urls));
-      if (args.socialProfiles?.length)
-        cliArgs.push("--social-profiles", JSON.stringify(args.socialProfiles));
-      if (args.instantMessages?.length)
-        cliArgs.push("--instant-messages", JSON.stringify(args.instantMessages));
-      if (args.relations?.length)
-        cliArgs.push("--relations", JSON.stringify(args.relations));
-      if (args.birthday)
-        cliArgs.push("--birthday", args.birthday);
-      if (args.dates?.length)
-        cliArgs.push("--dates", JSON.stringify(args.dates));
-      if (args.notes)
-        cliArgs.push("--notes", args.notes);
-      return await runCLI("contacts-cli", cliArgs);
+      return await runCLI("contacts-cli", buildContactUpdateArgs(args));
     case "contact_delete":
       return await runCLI("contacts-cli", ["delete", "--id", args.id]);
     case "pim_status": {

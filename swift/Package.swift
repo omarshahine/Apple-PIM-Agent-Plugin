@@ -54,5 +54,15 @@ let package = Package(
             dependencies: ["ReminderCLI"],
             path: "Tests/ReminderCLITests"
         ),
+        .testTarget(
+            name: "ContactsCLITests",
+            dependencies: ["ContactsCLI"],
+            path: "Tests/ContactsCLITests"
+        ),
+        .testTarget(
+            name: "MailCLITests",
+            dependencies: ["MailCLI"],
+            path: "Tests/MailCLITests"
+        ),
     ]
 )

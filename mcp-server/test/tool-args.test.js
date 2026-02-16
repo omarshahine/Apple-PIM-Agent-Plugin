@@ -5,6 +5,8 @@ import {
   buildCalendarCreateArgs,
   buildCalendarDeleteArgs,
   buildCalendarUpdateArgs,
+  buildContactCreateArgs,
+  buildContactUpdateArgs,
   buildReminderCreateArgs,
   buildReminderUpdateArgs,
 } from "../tool-args.js";
@@ -124,5 +126,47 @@ describe("buildReminderUpdateArgs", () => {
       "--recurrence",
       JSON.stringify({ frequency: "weekly", daysOfTheWeek: ["friday"] }),
     ]);
+  });
+});
+
+describe("buildContactCreateArgs", () => {
+  it("omits empty rich arrays to prevent accidental clearing", () => {
+    const args = buildContactCreateArgs({
+      name: "Ada Lovelace",
+      emails: [],
+      phones: [],
+      addresses: [],
+      notes: "Test",
+    });
+    expect(args).toEqual(["create", "--name", "Ada Lovelace", "--notes", "Test"]);
+  });
+
+  it("maps non-empty rich arrays as JSON", () => {
+    const args = buildContactCreateArgs({
+      firstName: "Ada",
+      emails: [{ label: "work", value: "ada@example.com" }],
+      relations: [{ label: "assistant", name: "Charles" }],
+    });
+    expect(args).toEqual([
+      "create",
+      "--first-name",
+      "Ada",
+      "--emails",
+      JSON.stringify([{ label: "work", value: "ada@example.com" }]),
+      "--relations",
+      JSON.stringify([{ label: "assistant", name: "Charles" }]),
+    ]);
+  });
+});
+
+describe("buildContactUpdateArgs", () => {
+  it("includes id and omits empty rich arrays", () => {
+    const args = buildContactUpdateArgs({
+      id: "contact_1",
+      emails: [],
+      phones: [],
+      firstName: "Grace",
+    });
+    expect(args).toEqual(["update", "--id", "contact_1", "--first-name", "Grace"]);
   });
 });

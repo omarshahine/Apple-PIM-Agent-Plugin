@@ -144,8 +144,18 @@ func relationLabelConstant(_ label: String?) -> String {
 
 /// Parse a JSON string into an array of dictionaries.
 func parseJSONArray(_ json: String) throws -> [[String: Any]] {
-    guard let data = json.data(using: .utf8),
-          let parsed = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+    guard let data = json.data(using: .utf8) else {
+        throw CLIError.invalidInput("Invalid JSON array: \(json)")
+    }
+
+    let parsedAny: Any
+    do {
+        parsedAny = try JSONSerialization.jsonObject(with: data)
+    } catch {
+        throw CLIError.invalidInput("Invalid JSON array: \(json)")
+    }
+
+    guard let parsed = parsedAny as? [[String: Any]] else {
         throw CLIError.invalidInput("Invalid JSON array: \(json)")
     }
     return parsed

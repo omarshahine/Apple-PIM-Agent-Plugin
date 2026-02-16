@@ -35,6 +35,8 @@ import {
   buildCalendarCreateArgs,
   buildCalendarDeleteArgs,
   buildCalendarUpdateArgs,
+  buildContactCreateArgs,
+  buildContactUpdateArgs,
   buildReminderCreateArgs,
   buildReminderUpdateArgs,
 } from "./tool-args.js";
@@ -2101,81 +2103,10 @@ async function handleTool(name, args) {
       return await runCLI("contacts-cli", ["get", "--id", args.id]);
 
     case "contact_create":
-      cliArgs.push("create");
-      // Name fields
-      if (args.name) cliArgs.push("--name", args.name);
-      if (args.firstName) cliArgs.push("--first-name", args.firstName);
-      if (args.lastName) cliArgs.push("--last-name", args.lastName);
-      if (args.middleName) cliArgs.push("--middle-name", args.middleName);
-      if (args.namePrefix) cliArgs.push("--name-prefix", args.namePrefix);
-      if (args.nameSuffix) cliArgs.push("--name-suffix", args.nameSuffix);
-      if (args.nickname) cliArgs.push("--nickname", args.nickname);
-      if (args.previousFamilyName) cliArgs.push("--previous-family-name", args.previousFamilyName);
-      // Phonetic names
-      if (args.phoneticGivenName) cliArgs.push("--phonetic-given-name", args.phoneticGivenName);
-      if (args.phoneticMiddleName) cliArgs.push("--phonetic-middle-name", args.phoneticMiddleName);
-      if (args.phoneticFamilyName) cliArgs.push("--phonetic-family-name", args.phoneticFamilyName);
-      if (args.phoneticOrganizationName) cliArgs.push("--phonetic-organization-name", args.phoneticOrganizationName);
-      // Organization
-      if (args.organization) cliArgs.push("--organization", args.organization);
-      if (args.jobTitle) cliArgs.push("--job-title", args.jobTitle);
-      if (args.department) cliArgs.push("--department", args.department);
-      if (args.contactType) cliArgs.push("--contact-type", args.contactType);
-      // Simple communication
-      if (args.email) cliArgs.push("--email", args.email);
-      if (args.phone) cliArgs.push("--phone", args.phone);
-      // Rich labeled arrays (JSON - skip empty arrays)
-      if (args.emails?.length) cliArgs.push("--emails", JSON.stringify(args.emails));
-      if (args.phones?.length) cliArgs.push("--phones", JSON.stringify(args.phones));
-      if (args.addresses?.length) cliArgs.push("--addresses", JSON.stringify(args.addresses));
-      if (args.urls?.length) cliArgs.push("--urls", JSON.stringify(args.urls));
-      if (args.socialProfiles?.length) cliArgs.push("--social-profiles", JSON.stringify(args.socialProfiles));
-      if (args.instantMessages?.length) cliArgs.push("--instant-messages", JSON.stringify(args.instantMessages));
-      if (args.relations?.length) cliArgs.push("--relations", JSON.stringify(args.relations));
-      // Dates
-      if (args.birthday) cliArgs.push("--birthday", args.birthday);
-      if (args.dates?.length) cliArgs.push("--dates", JSON.stringify(args.dates));
-      // Notes
-      if (args.notes) cliArgs.push("--notes", args.notes);
-      return await runCLI("contacts-cli", cliArgs);
+      return await runCLI("contacts-cli", buildContactCreateArgs(args));
 
     case "contact_update":
-      cliArgs.push("update", "--id", args.id);
-      // Name fields
-      if (args.firstName) cliArgs.push("--first-name", args.firstName);
-      if (args.lastName) cliArgs.push("--last-name", args.lastName);
-      if (args.middleName) cliArgs.push("--middle-name", args.middleName);
-      if (args.namePrefix) cliArgs.push("--name-prefix", args.namePrefix);
-      if (args.nameSuffix) cliArgs.push("--name-suffix", args.nameSuffix);
-      if (args.nickname) cliArgs.push("--nickname", args.nickname);
-      if (args.previousFamilyName) cliArgs.push("--previous-family-name", args.previousFamilyName);
-      // Phonetic names
-      if (args.phoneticGivenName) cliArgs.push("--phonetic-given-name", args.phoneticGivenName);
-      if (args.phoneticMiddleName) cliArgs.push("--phonetic-middle-name", args.phoneticMiddleName);
-      if (args.phoneticFamilyName) cliArgs.push("--phonetic-family-name", args.phoneticFamilyName);
-      if (args.phoneticOrganizationName) cliArgs.push("--phonetic-organization-name", args.phoneticOrganizationName);
-      // Organization
-      if (args.organization) cliArgs.push("--organization", args.organization);
-      if (args.jobTitle) cliArgs.push("--job-title", args.jobTitle);
-      if (args.department) cliArgs.push("--department", args.department);
-      if (args.contactType) cliArgs.push("--contact-type", args.contactType);
-      // Simple communication (replaces primary)
-      if (args.email) cliArgs.push("--email", args.email);
-      if (args.phone) cliArgs.push("--phone", args.phone);
-      // Rich labeled arrays (JSON - replaces all; skip empty arrays to prevent accidental clearing)
-      if (args.emails?.length) cliArgs.push("--emails", JSON.stringify(args.emails));
-      if (args.phones?.length) cliArgs.push("--phones", JSON.stringify(args.phones));
-      if (args.addresses?.length) cliArgs.push("--addresses", JSON.stringify(args.addresses));
-      if (args.urls?.length) cliArgs.push("--urls", JSON.stringify(args.urls));
-      if (args.socialProfiles?.length) cliArgs.push("--social-profiles", JSON.stringify(args.socialProfiles));
-      if (args.instantMessages?.length) cliArgs.push("--instant-messages", JSON.stringify(args.instantMessages));
-      if (args.relations?.length) cliArgs.push("--relations", JSON.stringify(args.relations));
-      // Dates
-      if (args.birthday) cliArgs.push("--birthday", args.birthday);
-      if (args.dates?.length) cliArgs.push("--dates", JSON.stringify(args.dates));
-      // Notes
-      if (args.notes) cliArgs.push("--notes", args.notes);
-      return await runCLI("contacts-cli", cliArgs);
+      return await runCLI("contacts-cli", buildContactUpdateArgs(args));
 
     case "contact_delete":
       return await runCLI("contacts-cli", ["delete", "--id", args.id]);
