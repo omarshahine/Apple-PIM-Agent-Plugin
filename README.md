@@ -214,6 +214,7 @@ Manage Apple Mail.app messages. Requires Mail.app to be running.
 /apple-pim:mail messages --filter unread     # Unread messages only
 /apple-pim:mail search "invoice"             # Search by subject/sender/content
 /apple-pim:mail get --id <message-id>        # Read full message
+/apple-pim:mail get --id <message-id> --format markdown  # Convert HTML-heavy emails to markdown
 /apple-pim:mail move --id <id> --to-mailbox Archive
 ```
 
