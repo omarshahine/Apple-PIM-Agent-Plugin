@@ -39,9 +39,15 @@ npm run build
 - Required checks on `main`:
   - `MCP Server (Node)`
   - `Swift CLI`
-  - `Cursor Bugbot`
 - Auto-merge is enabled at the repo level; use it on PRs so merges wait for required checks.
 - This repo ignores lockfiles; CI uses `npm install` (not `npm ci`) in `mcp-server`.
+
+## Code Hygiene
+
+- No hardcoded user paths (`/Users/[name]/`) - use `~/` or `${HOME}`
+- No personal email addresses in tracked files (allowed: `@example.com`, `@anthropic.com`, `@noreply`)
+- No API keys or secrets in code - use environment variables
+- No phone numbers or PII in examples - use generic placeholders
 
 ## Gotchas
 
