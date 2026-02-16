@@ -884,6 +884,19 @@ struct BatchReminderInput: Codable {
     let location: LocationJSON?
 }
 
+func decodeBatchReminders(_ json: String) throws -> [BatchReminderInput] {
+    guard let data = json.data(using: .utf8),
+          let reminders = try? JSONDecoder().decode([BatchReminderInput].self, from: data) else {
+        throw CLIError.invalidInput("Invalid JSON format for reminders array")
+    }
+
+    if reminders.isEmpty {
+        throw CLIError.invalidInput("Reminders array cannot be empty")
+    }
+
+    return reminders
+}
+
 struct BatchCreateReminder: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "batch-create",
@@ -896,14 +909,7 @@ struct BatchCreateReminder: AsyncParsableCommand {
     func run() async throws {
         try await requestReminderAccess()
 
-        guard let data = json.data(using: .utf8),
-              let reminders = try? JSONDecoder().decode([BatchReminderInput].self, from: data) else {
-            throw CLIError.invalidInput("Invalid JSON format for reminders array")
-        }
-
-        if reminders.isEmpty {
-            throw CLIError.invalidInput("Reminders array cannot be empty")
-        }
+        let reminders = try decodeBatchReminders(json)
 
         var createdReminders: [[String: Any]] = []
         var errors: [[String: Any]] = []

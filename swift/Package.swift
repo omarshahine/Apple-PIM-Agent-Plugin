@@ -44,5 +44,15 @@ let package = Package(
             ],
             path: "Sources/MailCLI"
         ),
+        .testTarget(
+            name: "CalendarCLITests",
+            dependencies: ["CalendarCLI"],
+            path: "Tests/CalendarCLITests"
+        ),
+        .testTarget(
+            name: "ReminderCLITests",
+            dependencies: ["ReminderCLI"],
+            path: "Tests/ReminderCLITests"
+        ),
     ]
 )
