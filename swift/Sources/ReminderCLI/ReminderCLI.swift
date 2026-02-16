@@ -897,6 +897,13 @@ func decodeBatchReminders(_ json: String) throws -> [BatchReminderInput] {
     return reminders
 }
 
+func batchReminderDueDateComponents(_ due: String?) -> DateComponents? {
+    guard let due, let dueDate = parseDate(due) else {
+        return nil
+    }
+    return Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: dueDate)
+}
+
 struct BatchCreateReminder: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "batch-create",
@@ -929,9 +936,7 @@ struct BatchCreateReminder: AsyncParsableCommand {
                     reminder.calendar = eventStore.defaultCalendarForNewReminders()
                 }
 
-                if let dueStr = reminderInput.due, let dueDate = parseDate(dueStr) {
-                    reminder.dueDateComponents = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: dueDate)
-                }
+                reminder.dueDateComponents = batchReminderDueDateComponents(reminderInput.due)
 
                 if let n = reminderInput.notes {
                     reminder.notes = n
