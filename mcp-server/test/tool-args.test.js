@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   applyDefaultCalendar,
   applyDefaultReminderList,
+  buildCalendarCreateArgs,
   buildCalendarDeleteArgs,
+  buildCalendarUpdateArgs,
+  buildReminderCreateArgs,
+  buildReminderUpdateArgs,
 } from "../tool-args.js";
 
 describe("buildCalendarDeleteArgs", () => {
@@ -37,6 +41,88 @@ describe("applyDefaultReminderList", () => {
     expect(applyDefaultReminderList(reminders, "Reminders")).toEqual([
       { title: "A", list: "Reminders" },
       { title: "B", list: "Errands" },
+    ]);
+  });
+});
+
+describe("buildCalendarCreateArgs", () => {
+  it("maps recurrence and url args for calendar create", () => {
+    const args = buildCalendarCreateArgs(
+      {
+        title: "Team sync",
+        start: "2026-02-18 10:00",
+        url: "https://example.com",
+        recurrence: { frequency: "weekly", daysOfTheWeek: ["monday"] },
+      },
+      "Work"
+    );
+    expect(args).toEqual([
+      "create",
+      "--title",
+      "Team sync",
+      "--start",
+      "2026-02-18 10:00",
+      "--calendar",
+      "Work",
+      "--url",
+      "https://example.com",
+      "--recurrence",
+      JSON.stringify({ frequency: "weekly", daysOfTheWeek: ["monday"] }),
+    ]);
+  });
+});
+
+describe("buildCalendarUpdateArgs", () => {
+  it("maps futureEvents and recurrence args for calendar update", () => {
+    const args = buildCalendarUpdateArgs({
+      id: "evt_1",
+      recurrence: { frequency: "monthly", daysOfTheMonth: [1, 15] },
+      futureEvents: true,
+    });
+    expect(args).toEqual([
+      "update",
+      "--id",
+      "evt_1",
+      "--recurrence",
+      JSON.stringify({ frequency: "monthly", daysOfTheMonth: [1, 15] }),
+      "--future-events",
+    ]);
+  });
+});
+
+describe("buildReminderCreateArgs", () => {
+  it("maps recurrence args for reminder create", () => {
+    const args = buildReminderCreateArgs(
+      {
+        title: "Pay rent",
+        recurrence: { frequency: "monthly", interval: 1 },
+      },
+      "Reminders"
+    );
+    expect(args).toEqual([
+      "create",
+      "--title",
+      "Pay rent",
+      "--list",
+      "Reminders",
+      "--recurrence",
+      JSON.stringify({ frequency: "monthly", interval: 1 }),
+    ]);
+  });
+});
+
+describe("buildReminderUpdateArgs", () => {
+  it("maps recurrence args for reminder update", () => {
+    const args = buildReminderUpdateArgs({
+      id: "rem_1",
+      recurrence: { frequency: "weekly", daysOfTheWeek: ["friday"] },
+    });
+    expect(args).toEqual([
+      "update",
+      "--id",
+      "rem_1",
+      "--recurrence",
+      JSON.stringify({ frequency: "weekly", daysOfTheWeek: ["friday"] }),
     ]);
   });
 });

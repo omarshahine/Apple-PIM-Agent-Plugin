@@ -32,7 +32,11 @@ import {
 import {
   applyDefaultCalendar,
   applyDefaultReminderList,
+  buildCalendarCreateArgs,
   buildCalendarDeleteArgs,
+  buildCalendarUpdateArgs,
+  buildReminderCreateArgs,
+  buildReminderUpdateArgs,
 } from "./tool-args.js";
 import { formatMailGetResult } from "./mail-format.js";
 
@@ -1767,23 +1771,10 @@ async function handleTool(name, args) {
         targetCalendar = await getDefaultCalendar();
       }
 
-      cliArgs.push("create", "--title", args.title, "--start", args.start);
-      if (args.end) cliArgs.push("--end", args.end);
-      if (args.duration) cliArgs.push("--duration", String(args.duration));
-      if (targetCalendar) cliArgs.push("--calendar", targetCalendar);
-      if (args.location) cliArgs.push("--location", args.location);
-      if (args.notes) cliArgs.push("--notes", args.notes);
-      if (args.url) cliArgs.push("--url", args.url);
-      if (args.allDay) cliArgs.push("--all-day");
-      if (args.alarm) {
-        for (const minutes of args.alarm) {
-          cliArgs.push("--alarm", String(minutes));
-        }
-      }
-      if (args.recurrence) {
-        cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
-      }
-      return await runCLI("calendar-cli", cliArgs);
+      return await runCLI(
+        "calendar-cli",
+        buildCalendarCreateArgs(args, targetCalendar)
+      );
     }
 
     case "calendar_update": {
@@ -1799,18 +1790,7 @@ async function handleTool(name, args) {
         }
       }
 
-      cliArgs.push("update", "--id", args.id);
-      if (args.title) cliArgs.push("--title", args.title);
-      if (args.start) cliArgs.push("--start", args.start);
-      if (args.end) cliArgs.push("--end", args.end);
-      if (args.location) cliArgs.push("--location", args.location);
-      if (args.notes) cliArgs.push("--notes", args.notes);
-      if (args.url) cliArgs.push("--url", args.url);
-      if (args.recurrence) {
-        cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
-      }
-      if (args.futureEvents) cliArgs.push("--future-events");
-      return await runCLI("calendar-cli", cliArgs);
+      return await runCLI("calendar-cli", buildCalendarUpdateArgs(args));
     }
 
     case "calendar_delete": {
@@ -1947,25 +1927,10 @@ async function handleTool(name, args) {
         targetList = await getDefaultReminderList();
       }
 
-      cliArgs.push("create", "--title", args.title);
-      if (targetList) cliArgs.push("--list", targetList);
-      if (args.due) cliArgs.push("--due", args.due);
-      if (args.notes) cliArgs.push("--notes", args.notes);
-      if (args.priority !== undefined)
-        cliArgs.push("--priority", String(args.priority));
-      if (args.url) cliArgs.push("--url", args.url);
-      if (args.alarm) {
-        for (const minutes of args.alarm) {
-          cliArgs.push("--alarm", String(minutes));
-        }
-      }
-      if (args.location) {
-        cliArgs.push("--location", JSON.stringify(args.location));
-      }
-      if (args.recurrence) {
-        cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
-      }
-      return await runCLI("reminder-cli", cliArgs);
+      return await runCLI(
+        "reminder-cli",
+        buildReminderCreateArgs(args, targetList)
+      );
     }
 
     case "reminder_complete": {
@@ -1999,20 +1964,7 @@ async function handleTool(name, args) {
         }
       }
 
-      cliArgs.push("update", "--id", args.id);
-      if (args.title) cliArgs.push("--title", args.title);
-      if (args.due) cliArgs.push("--due", args.due);
-      if (args.notes) cliArgs.push("--notes", args.notes);
-      if (args.priority !== undefined)
-        cliArgs.push("--priority", String(args.priority));
-      if (args.url !== undefined) cliArgs.push("--url", args.url);
-      if (args.location) {
-        cliArgs.push("--location", JSON.stringify(args.location));
-      }
-      if (args.recurrence) {
-        cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
-      }
-      return await runCLI("reminder-cli", cliArgs);
+      return await runCLI("reminder-cli", buildReminderUpdateArgs(args));
     }
 
     case "reminder_delete": {

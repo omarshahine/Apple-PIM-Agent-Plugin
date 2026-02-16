@@ -4744,6 +4744,7 @@ var require_pattern = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var code_1 = require_code2();
+    var util_1 = require_util();
     var codegen_1 = require_codegen();
     var error2 = {
       message: ({ schemaCode }) => (0, codegen_1.str)`must match pattern "${schemaCode}"`,
@@ -4756,10 +4757,18 @@ var require_pattern = __commonJS({
       $data: true,
       error: error2,
       code(cxt) {
-        const { data, $data, schema: schema2, schemaCode, it } = cxt;
+        const { gen, data, $data, schema: schema2, schemaCode, it } = cxt;
         const u = it.opts.unicodeRegExp ? "u" : "";
-        const regExp = $data ? (0, codegen_1._)`(new RegExp(${schemaCode}, ${u}))` : (0, code_1.usePattern)(cxt, schema2);
-        cxt.fail$data((0, codegen_1._)`!${regExp}.test(${data})`);
+        if ($data) {
+          const { regExp } = it.opts.code;
+          const regExpCode = regExp.code === "new RegExp" ? (0, codegen_1._)`new RegExp` : (0, util_1.useFunc)(gen, regExp);
+          const valid = gen.let("valid");
+          gen.try(() => gen.assign(valid, (0, codegen_1._)`${regExpCode}(${schemaCode}, ${u}).test(${data})`), () => gen.assign(valid, false));
+          cxt.fail$data((0, codegen_1._)`!${valid}`);
+        } else {
+          const regExp = (0, code_1.usePattern)(cxt, schema2);
+          cxt.fail$data((0, codegen_1._)`!${regExp}.test(${data})`);
+        }
       }
     };
     exports.default = def;
@@ -68778,7 +68787,7 @@ var Doc = class {
 var version = {
   major: 4,
   minor: 3,
-  patch: 5
+  patch: 6
 };
 
 // node_modules/zod/v4/core/schemas.js
@@ -70069,7 +70078,7 @@ var $ZodRecord = /* @__PURE__ */ $constructor("$ZodRecord", (inst, def) => {
         if (keyResult instanceof Promise) {
           throw new Error("Async schemas not supported in object keys currently");
         }
-        const checkNumericKey = typeof key === "string" && number.test(key) && keyResult.issues.length && keyResult.issues.some((iss) => iss.code === "invalid_type" && iss.expected === "number");
+        const checkNumericKey = typeof key === "string" && number.test(key) && keyResult.issues.length;
         if (checkNumericKey) {
           const retryResult = def.keyType._zod.run({ value: Number(key), issues: [] }, ctx);
           if (retryResult instanceof Promise) {
@@ -71914,7 +71923,7 @@ function finalize(ctx, schema2) {
           }
         }
       }
-      if (refSchema.$ref) {
+      if (refSchema.$ref && refSeen.def) {
         for (const key in schema3) {
           if (key === "$ref" || key === "allOf")
             continue;
@@ -75713,6 +75722,9 @@ var Protocol = class {
    * The Protocol object assumes ownership of the Transport, replacing any callbacks that have already been set, and expects that it is the only user of the Transport instance going forward.
    */
   async connect(transport2) {
+    if (this._transport) {
+      throw new Error("Already connected to a transport. Call close() before connecting to a new transport, or use a separate Protocol instance per connection.");
+    }
     this._transport = transport2;
     const _onclose = this.transport?.onclose;
     this._transport.onclose = () => {
@@ -75745,6 +75757,10 @@ var Protocol = class {
     this._progressHandlers.clear();
     this._taskProgressTokens.clear();
     this._pendingDebouncedNotifications.clear();
+    for (const controller of this._requestHandlerAbortControllers.values()) {
+      controller.abort();
+    }
+    this._requestHandlerAbortControllers.clear();
     const error2 = McpError.fromError(ErrorCode.ConnectionClosed, "Connection closed");
     this._transport = void 0;
     this.onclose?.();
@@ -75795,6 +75811,8 @@ var Protocol = class {
       sessionId: capturedTransport?.sessionId,
       _meta: request.params?._meta,
       sendNotification: async (notification) => {
+        if (abortController.signal.aborted)
+          return;
         const notificationOptions = { relatedRequestId: request.id };
         if (relatedTaskId) {
           notificationOptions.relatedTask = { taskId: relatedTaskId };
@@ -75802,6 +75820,9 @@ var Protocol = class {
         await this.notification(notification, notificationOptions);
       },
       sendRequest: async (r, resultSchema, options) => {
+        if (abortController.signal.aborted) {
+          throw new McpError(ErrorCode.ConnectionClosed, "Request was cancelled");
+        }
         const requestOptions = { ...options, relatedRequestId: request.id };
         if (relatedTaskId && !requestOptions.relatedTask) {
           requestOptions.relatedTask = { taskId: relatedTaskId };
@@ -80119,6 +80140,52 @@ function buildCalendarDeleteArgs(args) {
     deleteArgs.push("--future-events");
   return deleteArgs;
 }
+function buildCalendarCreateArgs(args, targetCalendar) {
+  const cliArgs = ["create", "--title", args.title, "--start", args.start];
+  if (args.end)
+    cliArgs.push("--end", args.end);
+  if (args.duration)
+    cliArgs.push("--duration", String(args.duration));
+  if (targetCalendar)
+    cliArgs.push("--calendar", targetCalendar);
+  if (args.location)
+    cliArgs.push("--location", args.location);
+  if (args.notes)
+    cliArgs.push("--notes", args.notes);
+  if (args.url)
+    cliArgs.push("--url", args.url);
+  if (args.allDay)
+    cliArgs.push("--all-day");
+  if (args.alarm) {
+    for (const minutes of args.alarm) {
+      cliArgs.push("--alarm", String(minutes));
+    }
+  }
+  if (args.recurrence) {
+    cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
+  }
+  return cliArgs;
+}
+function buildCalendarUpdateArgs(args) {
+  const cliArgs = ["update", "--id", args.id];
+  if (args.title)
+    cliArgs.push("--title", args.title);
+  if (args.start)
+    cliArgs.push("--start", args.start);
+  if (args.end)
+    cliArgs.push("--end", args.end);
+  if (args.location)
+    cliArgs.push("--location", args.location);
+  if (args.notes)
+    cliArgs.push("--notes", args.notes);
+  if (args.url)
+    cliArgs.push("--url", args.url);
+  if (args.recurrence)
+    cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
+  if (args.futureEvents)
+    cliArgs.push("--future-events");
+  return cliArgs;
+}
 function applyDefaultCalendar(events, defaultCalendar) {
   return events.map((event) => ({
     ...event,
@@ -80130,6 +80197,47 @@ function applyDefaultReminderList(reminders, defaultList) {
     ...reminder,
     list: reminder.list || defaultList
   }));
+}
+function buildReminderCreateArgs(args, targetList) {
+  const cliArgs = ["create", "--title", args.title];
+  if (targetList)
+    cliArgs.push("--list", targetList);
+  if (args.due)
+    cliArgs.push("--due", args.due);
+  if (args.notes)
+    cliArgs.push("--notes", args.notes);
+  if (args.priority !== void 0)
+    cliArgs.push("--priority", String(args.priority));
+  if (args.url)
+    cliArgs.push("--url", args.url);
+  if (args.alarm) {
+    for (const minutes of args.alarm) {
+      cliArgs.push("--alarm", String(minutes));
+    }
+  }
+  if (args.location)
+    cliArgs.push("--location", JSON.stringify(args.location));
+  if (args.recurrence)
+    cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
+  return cliArgs;
+}
+function buildReminderUpdateArgs(args) {
+  const cliArgs = ["update", "--id", args.id];
+  if (args.title)
+    cliArgs.push("--title", args.title);
+  if (args.due)
+    cliArgs.push("--due", args.due);
+  if (args.notes)
+    cliArgs.push("--notes", args.notes);
+  if (args.priority !== void 0)
+    cliArgs.push("--priority", String(args.priority));
+  if (args.url !== void 0)
+    cliArgs.push("--url", args.url);
+  if (args.location)
+    cliArgs.push("--location", JSON.stringify(args.location));
+  if (args.recurrence)
+    cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
+  return cliArgs;
 }
 
 // mail-format.js
@@ -81815,30 +81923,10 @@ Run /apple-pim:configure to add it.`
       if (!targetCalendar) {
         targetCalendar = await getDefaultCalendar();
       }
-      cliArgs.push("create", "--title", args.title, "--start", args.start);
-      if (args.end)
-        cliArgs.push("--end", args.end);
-      if (args.duration)
-        cliArgs.push("--duration", String(args.duration));
-      if (targetCalendar)
-        cliArgs.push("--calendar", targetCalendar);
-      if (args.location)
-        cliArgs.push("--location", args.location);
-      if (args.notes)
-        cliArgs.push("--notes", args.notes);
-      if (args.url)
-        cliArgs.push("--url", args.url);
-      if (args.allDay)
-        cliArgs.push("--all-day");
-      if (args.alarm) {
-        for (const minutes of args.alarm) {
-          cliArgs.push("--alarm", String(minutes));
-        }
-      }
-      if (args.recurrence) {
-        cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
-      }
-      return await runCLI("calendar-cli", cliArgs);
+      return await runCLI(
+        "calendar-cli",
+        buildCalendarCreateArgs(args, targetCalendar)
+      );
     }
     case "calendar_update": {
       const event = await runCLI("calendar-cli", ["get", "--id", args.id]);
@@ -81851,25 +81939,7 @@ Run /apple-pim:configure to add it.`
           );
         }
       }
-      cliArgs.push("update", "--id", args.id);
-      if (args.title)
-        cliArgs.push("--title", args.title);
-      if (args.start)
-        cliArgs.push("--start", args.start);
-      if (args.end)
-        cliArgs.push("--end", args.end);
-      if (args.location)
-        cliArgs.push("--location", args.location);
-      if (args.notes)
-        cliArgs.push("--notes", args.notes);
-      if (args.url)
-        cliArgs.push("--url", args.url);
-      if (args.recurrence) {
-        cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
-      }
-      if (args.futureEvents)
-        cliArgs.push("--future-events");
-      return await runCLI("calendar-cli", cliArgs);
+      return await runCLI("calendar-cli", buildCalendarUpdateArgs(args));
     }
     case "calendar_delete": {
       const event = await runCLI("calendar-cli", ["get", "--id", args.id]);
@@ -81978,29 +82048,10 @@ Run /apple-pim:configure to add it.`
       if (!targetList) {
         targetList = await getDefaultReminderList();
       }
-      cliArgs.push("create", "--title", args.title);
-      if (targetList)
-        cliArgs.push("--list", targetList);
-      if (args.due)
-        cliArgs.push("--due", args.due);
-      if (args.notes)
-        cliArgs.push("--notes", args.notes);
-      if (args.priority !== void 0)
-        cliArgs.push("--priority", String(args.priority));
-      if (args.url)
-        cliArgs.push("--url", args.url);
-      if (args.alarm) {
-        for (const minutes of args.alarm) {
-          cliArgs.push("--alarm", String(minutes));
-        }
-      }
-      if (args.location) {
-        cliArgs.push("--location", JSON.stringify(args.location));
-      }
-      if (args.recurrence) {
-        cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
-      }
-      return await runCLI("reminder-cli", cliArgs);
+      return await runCLI(
+        "reminder-cli",
+        buildReminderCreateArgs(args, targetList)
+      );
     }
     case "reminder_complete": {
       const reminder = await runCLI("reminder-cli", ["get", "--id", args.id]);
@@ -82029,24 +82080,7 @@ Run /apple-pim:configure to add it.`
           );
         }
       }
-      cliArgs.push("update", "--id", args.id);
-      if (args.title)
-        cliArgs.push("--title", args.title);
-      if (args.due)
-        cliArgs.push("--due", args.due);
-      if (args.notes)
-        cliArgs.push("--notes", args.notes);
-      if (args.priority !== void 0)
-        cliArgs.push("--priority", String(args.priority));
-      if (args.url !== void 0)
-        cliArgs.push("--url", args.url);
-      if (args.location) {
-        cliArgs.push("--location", JSON.stringify(args.location));
-      }
-      if (args.recurrence) {
-        cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
-      }
-      return await runCLI("reminder-cli", cliArgs);
+      return await runCLI("reminder-cli", buildReminderUpdateArgs(args));
     }
     case "reminder_delete": {
       const reminder = await runCLI("reminder-cli", ["get", "--id", args.id]);
