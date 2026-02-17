@@ -1,5 +1,7 @@
 # Apple PIM Plugin
 
+Claude Code plugin that exposes macOS PIM (Personal Information Management) data — calendars, reminders, contacts, and Mail.app — via MCP tools. Built as a thin Node.js MCP server that delegates to native Swift CLIs using EventKit, Contacts framework, and JXA.
+
 ## Quick Commands
 
 ```bash
@@ -18,15 +20,27 @@ npm test
 npm run build
 ```
 
+## Architecture
+
+The MCP server doesn't access macOS APIs directly. Instead it defines tool schemas and maps MCP tool calls to CLI arguments, spawning the appropriate Swift binary:
+
+```
+Claude Code ←stdio→ mcp-server/server.js ←spawn→ swift/Sources/*CLI (EventKit / Contacts / JXA)
+```
+
+Each Swift CLI is a standalone binary that reads from macOS frameworks and writes JSON to stdout.
+
 ## Repo Layout
 
-- `swift/Sources/CalendarCLI`: EventKit calendar CLI
-- `swift/Sources/ReminderCLI`: EventKit reminders CLI
-- `swift/Sources/ContactsCLI`: Contacts framework CLI
-- `swift/Sources/MailCLI`: Mail.app JXA-based CLI
-- `mcp-server/server.js`: MCP tool schema and CLI argument mapping layer
-- `mcp-server/dist/server.js`: Bundled server artifact built from `server.js`
-- `.github/workflows/tests.yml`: CI checks for Node and Swift test jobs
+| Path | Purpose |
+|------|---------|
+| `swift/Sources/CalendarCLI` | EventKit calendar CLI |
+| `swift/Sources/ReminderCLI` | EventKit reminders CLI |
+| `swift/Sources/ContactsCLI` | Contacts framework CLI |
+| `swift/Sources/MailCLI` | Mail.app JXA-based CLI |
+| `mcp-server/server.js` | MCP tool schema and CLI argument mapping layer |
+| `mcp-server/dist/server.js` | Bundled server artifact (rebuild after source changes) |
+| `.github/workflows/tests.yml` | CI checks for Node and Swift test jobs |
 
 ## Testing Notes
 
