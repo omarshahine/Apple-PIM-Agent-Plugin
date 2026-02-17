@@ -1,6 +1,14 @@
 ---
+name: apple-pim
 description: |
-  Provides knowledge about Apple's EventKit, Contacts, and Mail.app scripting for managing calendars, reminders, contacts, and local mail on macOS. Use this skill when discussing EventKit APIs, calendar data models, reminder structures, contact fields, Mail.app JXA scripting, authorization/permissions, or best practices for personal information management.
+  Native macOS personal information management for calendars, reminders, contacts, and local Mail.app. Use when the user wants to schedule meetings, create events, check their calendar, create or complete reminders, look up contacts, find someone's phone number or email, manage tasks and to-do lists, triage local Mail.app messages, or troubleshoot EventKit, Contacts, or Mail.app permissions on macOS.
+license: MIT
+compatibility: |
+  macOS only. Requires TCC permissions for Calendars, Reminders, and Contacts via Privacy & Security settings. Mail features require Mail.app running with Automation permission granted.
+metadata:
+  author: Omar Shahine
+  version: 2.3.0
+  mcp-server: apple-pim
 ---
 
 # Apple PIM (EventKit, Contacts & Mail)
@@ -13,6 +21,11 @@ Apple provides frameworks and scripting interfaces for personal information mana
 - **Mail.app**: Local email via JXA (JavaScript for Automation)
 
 EventKit and Contacts require explicit user permission via privacy prompts. Mail.app requires Automation permission and must be running.
+
+For detailed API property tables and code examples, see:
+- `references/eventkit-api.md` — EKEvent, EKReminder, EKCalendar, recurrence rules, alarms
+- `references/contacts-api.md` — CNContact, labeled values, groups
+- `references/mail-jxa.md` — JXA message properties, batch fetching, Mail.app vs Fastmail scope
 
 ## Authorization & Permissions
 
@@ -37,203 +50,9 @@ Each PIM domain requires separate macOS authorization:
 | `restricted` | System policy (MDM, parental) | Cannot override |
 | `writeOnly` | Limited write access (macOS 17+) | Upgrade to Full Access in Settings |
 
-### macOS 14+ (Sonoma)
-
-EventKit requires full access:
-```swift
-try await eventStore.requestFullAccessToEvents()
-try await eventStore.requestFullAccessToReminders()
-```
-
-### Earlier macOS Versions
-
-```swift
-try await eventStore.requestAccess(to: .event)
-try await eventStore.requestAccess(to: .reminder)
-```
-
-### Contacts
-
-```swift
-let status = CNContactStore.authorizationStatus(for: .contacts)
-try await contactStore.requestAccess(for: .contacts)
-```
-
 ### SSH Sessions
 
 Permissions must be granted on the Mac where the CLI runs. SSH does not inherit GUI-level permission dialogs. Grant permissions locally first.
-
-## EventKit Framework
-
-### Calendar Events
-
-Events are represented by `EKEvent` with these key properties:
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `eventIdentifier` | String | Unique stable identifier |
-| `title` | String | Event title |
-| `startDate` | Date | Start date/time |
-| `endDate` | Date | End date/time |
-| `isAllDay` | Bool | All-day event flag |
-| `location` | String? | Location text |
-| `notes` | String? | Notes/description |
-| `calendar` | EKCalendar | Parent calendar |
-| `url` | URL? | Associated URL |
-| `recurrenceRules` | [EKRecurrenceRule]? | Repeat rules |
-| `alarms` | [EKAlarm]? | Reminders/alerts |
-| `attendees` | [EKParticipant]? | Invitees (read-only) |
-
-### Reminders
-
-Reminders are represented by `EKReminder`:
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `calendarItemIdentifier` | String | Unique identifier |
-| `title` | String | Reminder title |
-| `isCompleted` | Bool | Completion status |
-| `completionDate` | Date? | When marked complete |
-| `dueDateComponents` | DateComponents? | Due date |
-| `startDateComponents` | DateComponents? | Start date |
-| `priority` | Int | 0=none, 1=high, 5=medium, 9=low |
-| `notes` | String? | Notes text |
-| `url` | URL? | Associated URL |
-| `calendar` | EKCalendar | Parent reminder list |
-| `alarms` | [EKAlarm]? | Time-based and location-based alarms |
-
-### Reminder Filtering
-
-The MCP server supports date-based filtering at the server level:
-
-| Filter | Behavior |
-|--------|----------|
-| `overdue` | Incomplete reminders with due date before today |
-| `today` | Due today + overdue (incomplete with due <= end of today) |
-| `tomorrow` | Due date falls on tomorrow |
-| `week` | Due date falls within current calendar week |
-| `upcoming` | All incomplete reminders with any due date |
-| `completed` | Finished reminders |
-| `all` | Everything |
-
-Results are sorted by due date (earliest first), with undated items last.
-
-### Calendars and Lists
-
-`EKCalendar` represents both calendars (for events) and reminder lists:
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `calendarIdentifier` | String | Unique identifier |
-| `title` | String | Display name |
-| `type` | EKCalendarType | local, caldav, exchange, etc. |
-| `source` | EKSource | Account (iCloud, Exchange, etc.) |
-| `allowsContentModifications` | Bool | Read-only check |
-| `cgColor` | CGColor? | Calendar color |
-
-### Recurrence Rules
-
-`EKRecurrenceRule` defines repeating patterns:
-
-```swift
-// Daily for 10 occurrences
-let rule = EKRecurrenceRule(
-    recurrenceWith: .daily,
-    interval: 1,
-    end: EKRecurrenceEnd(occurrenceCount: 10)
-)
-
-// Weekly on Mon/Wed/Fri
-let rule = EKRecurrenceRule(
-    recurrenceWith: .weekly,
-    interval: 1,
-    daysOfTheWeek: [.monday, .wednesday, .friday],
-    daysOfTheMonth: nil,
-    monthsOfTheYear: nil,
-    weeksOfTheYear: nil,
-    daysOfTheYear: nil,
-    setPositions: nil,
-    end: nil
-)
-```
-
-### Alarms
-
-`EKAlarm` provides notifications:
-
-```swift
-// 15 minutes before
-let alarm = EKAlarm(relativeOffset: -15 * 60)
-
-// At specific time
-let alarm = EKAlarm(absoluteDate: alertDate)
-```
-
-### Location-Based Alarms
-
-`EKAlarm` can trigger based on arriving at or departing from a geofenced location:
-
-```swift
-let location = EKStructuredLocation(title: "Home")
-location.geoLocation = CLLocation(latitude: 37.33, longitude: -122.03)
-location.radius = 100.0 // meters
-
-let alarm = EKAlarm()
-alarm.structuredLocation = location
-alarm.proximity = .enter // .enter = arriving, .leave = departing
-
-reminder.addAlarm(alarm)
-```
-
-This enables "Remind me when I arrive home" or "Remind me when I leave the office" style reminders.
-
-## Contacts Framework
-
-### CNContact Properties
-
-Key contact fields:
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `identifier` | String | Unique identifier |
-| `givenName` | String | First name |
-| `familyName` | String | Last name |
-| `middleName` | String | Middle name |
-| `namePrefix` | String | Mr., Dr., etc. |
-| `nameSuffix` | String | Jr., PhD, etc. |
-| `nickname` | String | Nickname |
-| `organizationName` | String | Company |
-| `jobTitle` | String | Job title |
-| `departmentName` | String | Department |
-| `emailAddresses` | [CNLabeledValue<NSString>] | Email addresses |
-| `phoneNumbers` | [CNLabeledValue<CNPhoneNumber>] | Phone numbers |
-| `postalAddresses` | [CNLabeledValue<CNPostalAddress>] | Addresses |
-| `urlAddresses` | [CNLabeledValue<NSString>] | URLs |
-| `birthday` | DateComponents? | Birthday |
-| `note` | String | Notes |
-| `imageData` | Data? | Contact photo |
-| `contactRelations` | [CNLabeledValue<CNContactRelation>] | Related people |
-| `socialProfiles` | [CNLabeledValue<CNSocialProfile>] | Social accounts |
-
-### Labeled Values
-
-Multi-value properties use `CNLabeledValue<T>`:
-
-```swift
-// Standard labels
-CNLabelHome, CNLabelWork, CNLabelOther
-CNLabelPhoneNumberMain, CNLabelPhoneNumberMobile
-CNLabelEmailiCloud
-```
-
-### Contact Groups
-
-`CNGroup` represents contact groups:
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `identifier` | String | Unique identifier |
-| `name` | String | Group name |
 
 ## Best Practices
 
@@ -332,76 +151,3 @@ Support flexible input:
 - Use predicates to filter server-side
 - Fetch only needed contact keys
 - Use batch operations for multi-item actions
-
-## Mail.app via JXA
-
-### Why JXA?
-
-Mail.app has no native Swift framework (unlike EventKit/Contacts). JXA (JavaScript for Automation) provides:
-- Native JSON output via `JSON.stringify()`
-- Full access to Mail.app's scripting dictionary
-- Array-level property access for batch operations
-
-The Swift CLI (`mail-cli`) wraps JXA via `Process` calling `osascript -l JavaScript`.
-
-### Key Constraint
-
-**Mail.app must be running.** Unlike EventKit/Contacts which work headlessly, Mail.app is a GUI application. The CLI checks `NSWorkspace.shared.runningApplications` upfront and returns a clear error.
-
-### Message Properties
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `messageId` | String | RFC 2822 message ID (stable identifier) |
-| `subject` | String | Message subject |
-| `sender` | String | Sender address |
-| `dateReceived` | Date | When received |
-| `dateSent` | Date | When sent |
-| `readStatus` | Bool | Read/unread |
-| `flaggedStatus` | Bool | Flagged/unflagged |
-| `junkMailStatus` | Bool | Junk/not junk |
-| `content` | String | Plain text body |
-| `mailbox` | Mailbox | Parent mailbox |
-
-### Batch Property Fetching
-
-JXA's scripting bridge supports array-level property access -- much faster than per-message iteration:
-
-```javascript
-// FAST: One IPC call per property, returns array
-const subjects = mbox.messages.subject();
-const senders = mbox.messages.sender();
-const dates = mbox.messages.dateReceived();
-
-// SLOW: N IPC calls (one per message)
-for (const msg of mbox.messages()) {
-    msg.subject(); // individual IPC call
-}
-```
-
-### Message ID
-
-Uses RFC 2822 `messageId` property as the stable identifier. This persists across mailbox moves, unlike internal Mail.app IDs. Use `.whose({messageId: targetId})` for lookups.
-
-### Permissions
-
-Mail.app requires Automation permission:
-- System Settings > Privacy & Security > Automation
-- The terminal/app must be allowed to control Mail.app
-- First run triggers a system permission dialog
-
-### Scope vs Fastmail MCP
-
-| Capability | mail-cli (local) | Fastmail MCP (cloud) |
-|------------|-----------------|---------------------|
-| Read messages | Yes | Yes |
-| Search | Local index | Server-side |
-| Update flags | Yes | Yes |
-| Move/delete | Yes | Yes |
-| Send email | No | Yes |
-| Compose drafts | No | Yes |
-| Folder management | No | Yes |
-| "On My Mac" mailboxes | Yes | No |
-| Offline access | Yes | No |
-| Batch flag updates | Yes | Yes |
-| Batch delete | Yes | Yes |
