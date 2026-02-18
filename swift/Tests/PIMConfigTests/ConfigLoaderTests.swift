@@ -139,6 +139,50 @@ struct ConfigLoaderTests {
         #expect(decoded == profile)
     }
 
+    // MARK: - Profile name validation
+
+    @Test("Valid profile names are accepted")
+    func testValidProfileNames() throws {
+        try ConfigLoader.validateProfileName("default")
+        try ConfigLoader.validateProfileName("agent-1")
+        try ConfigLoader.validateProfileName("my_profile")
+    }
+
+    @Test("Path traversal in profile name is rejected")
+    func testPathTraversalRejected() {
+        #expect(throws: ConfigError.self) {
+            try ConfigLoader.validateProfileName("../../etc/passwd")
+        }
+        #expect(throws: ConfigError.self) {
+            try ConfigLoader.validateProfileName("foo/bar")
+        }
+        #expect(throws: ConfigError.self) {
+            try ConfigLoader.validateProfileName("foo\\bar")
+        }
+    }
+
+    @Test("Hidden file profile names are rejected")
+    func testHiddenFileNamesRejected() {
+        #expect(throws: ConfigError.self) {
+            try ConfigLoader.validateProfileName(".hidden")
+        }
+    }
+
+    @Test("Empty profile name is rejected")
+    func testEmptyProfileNameRejected() {
+        #expect(throws: ConfigError.self) {
+            try ConfigLoader.validateProfileName("")
+        }
+    }
+
+    @Test("profilePath strips path components as defense-in-depth")
+    func testProfilePathStripsPathComponents() {
+        // Even without validation, profilePath uses lastPathComponent
+        let path = ConfigLoader.profilePath(for: "../../evil")
+        #expect(path.lastPathComponent == "evil.json")
+        #expect(!path.path.contains("../../"))
+    }
+
     @Test("Profile with only some fields omits others in JSON")
     func testProfilePartialEncoding() throws {
         let profile = PIMProfileOverride(

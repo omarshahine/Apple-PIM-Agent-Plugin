@@ -17,7 +17,9 @@ public struct ConfigWriter {
 
     /// Write a named profile to `~/.config/apple-pim/profiles/{name}.json`.
     /// Creates the profiles directory if it doesn't exist.
+    /// - Throws: `ConfigError.invalidProfileName` if name contains path separators.
     public static func writeProfile(_ profile: PIMProfileOverride, named name: String) throws {
+        try ConfigLoader.validateProfileName(name)
         let profileDir = ConfigLoader.profilesDir
         try FileManager.default.createDirectory(at: profileDir, withIntermediateDirectories: true)
 

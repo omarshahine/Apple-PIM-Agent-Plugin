@@ -1,5 +1,20 @@
 import Foundation
 
+/// Errors from loading or validating PIM configuration.
+public enum ConfigError: Error, CustomStringConvertible {
+    case invalidProfileName(String, reason: String)
+    case malformedConfig(path: String, underlying: Error)
+
+    public var description: String {
+        switch self {
+        case .invalidProfileName(let name, let reason):
+            return "Invalid profile name '\(name)': \(reason)"
+        case .malformedConfig(let path, let underlying):
+            return "Malformed config at \(path): \(underlying.localizedDescription)"
+        }
+    }
+}
+
 /// Loads PIM configuration from disk with optional profile override.
 ///
 /// Resolution order for profile selection:
@@ -40,9 +55,17 @@ public struct ConfigLoader {
             return base
         }
 
+        do {
+            try validateProfileName(profileName)
+        } catch {
+            FileHandle.standardError.write(
+                Data("[apple-pim] Warning: \(error). Using base config.\n".utf8)
+            )
+            return base
+        }
+
         let override = loadProfile(named: profileName)
         if override == nil {
-            // Log warning so the user knows the profile wasn't found
             FileHandle.standardError.write(
                 Data("[apple-pim] Warning: profile '\(profileName)' not found at \(profilePath(for: profileName).path). Using base config.\n".utf8)
             )
@@ -60,9 +83,26 @@ public struct ConfigLoader {
         return loadJSON(from: profilePath(for: name))
     }
 
-    /// Path for a named profile.
+    /// Validate that a profile name is safe for use as a filename.
+    /// Rejects names containing path separators or traversal sequences.
+    public static func validateProfileName(_ name: String) throws {
+        guard !name.isEmpty else {
+            throw ConfigError.invalidProfileName(name, reason: "name cannot be empty")
+        }
+        guard !name.contains("/"), !name.contains("\\"), !name.contains("..") else {
+            throw ConfigError.invalidProfileName(name, reason: "name cannot contain '/', '\\', or '..'")
+        }
+        // Reject hidden files and other problematic names
+        guard !name.hasPrefix(".") else {
+            throw ConfigError.invalidProfileName(name, reason: "name cannot start with '.'")
+        }
+    }
+
+    /// Path for a named profile. Validates the name to prevent path traversal.
     public static func profilePath(for name: String) -> URL {
-        profilesDir.appendingPathComponent("\(name).json")
+        // Use lastPathComponent to strip any accidental path separators as a defense-in-depth
+        let safeName = (name as NSString).lastPathComponent
+        return profilesDir.appendingPathComponent("\(safeName).json")
     }
 
     /// Merge a base config with an optional profile override.
@@ -83,7 +123,16 @@ public struct ConfigLoader {
     // MARK: - Private
 
     private static func loadJSON<T: Decodable>(from url: URL) -> T? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(T.self, from: data)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+
+        do {
+            let data = try Data(contentsOf: url)
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            FileHandle.standardError.write(
+                Data("[apple-pim] Warning: failed to parse \(url.path): \(error.localizedDescription). Using defaults.\n".utf8)
+            )
+            return nil
+        }
     }
 }
