@@ -992,17 +992,29 @@ struct ConfigShow: ParsableCommand {
 
     func run() throws {
         let config = pimOptions.loadConfig()
+        let ctx = pimOptions.outputContext
+        let activeProfile = pimOptions.profile ?? ProcessInfo.processInfo.environment["APPLE_PIM_PROFILE"]
+
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(config)
 
-        outputJSON([
-            "success": true,
-            "configPath": ConfigLoader.defaultConfigPath.path,
-            "profilesDir": ConfigLoader.profilesDir.path,
-            "activeProfile": (pimOptions.profile ?? ProcessInfo.processInfo.environment["APPLE_PIM_PROFILE"]) as Any,
-            "config": (try? JSONSerialization.jsonObject(with: data)) ?? [:]
-        ])
+        pimOutput(
+            [
+                "success": true,
+                "configPath": ConfigLoader.defaultConfigPath.path,
+                "profilesDir": ConfigLoader.profilesDir.path,
+                "activeProfile": activeProfile as Any,
+                "config": (try? JSONSerialization.jsonObject(with: data)) ?? [:]
+            ],
+            text: ConfigFormatter.formatConfigShow(
+                config: config,
+                configPath: ConfigLoader.defaultConfigPath.path,
+                profilesDir: ConfigLoader.profilesDir.path,
+                activeProfile: activeProfile
+            ),
+            context: ctx
+        )
     }
 }
 
@@ -1012,8 +1024,11 @@ struct ConfigInit: AsyncParsableCommand {
         abstract: "List available calendars and reminder lists for configuration setup"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     func run() async throws {
         try await requestCalendarAccess()
+        let ctx = pimOptions.outputContext
 
         let calendars = eventStore.calendars(for: .event).map { calendarToDict($0) }
 
@@ -1025,15 +1040,29 @@ struct ConfigInit: AsyncParsableCommand {
         }
         let lists = eventStore.calendars(for: .reminder).map { listToDict($0) }
 
-        outputJSON([
-            "success": true,
-            "configPath": ConfigLoader.defaultConfigPath.path,
-            "profilesDir": ConfigLoader.profilesDir.path,
-            "availableCalendars": calendars,
-            "availableReminderLists": lists,
-            "defaultCalendar": eventStore.defaultCalendarForNewEvents?.title ?? "",
-            "defaultReminderList": eventStore.defaultCalendarForNewReminders()?.title ?? ""
-        ])
+        let defaultCal = eventStore.defaultCalendarForNewEvents?.title ?? ""
+        let defaultRem = eventStore.defaultCalendarForNewReminders()?.title ?? ""
+
+        pimOutput(
+            [
+                "success": true,
+                "configPath": ConfigLoader.defaultConfigPath.path,
+                "profilesDir": ConfigLoader.profilesDir.path,
+                "availableCalendars": calendars,
+                "availableReminderLists": lists,
+                "defaultCalendar": defaultCal,
+                "defaultReminderList": defaultRem
+            ],
+            text: ConfigFormatter.formatConfigInit(
+                configPath: ConfigLoader.defaultConfigPath.path,
+                profilesDir: ConfigLoader.profilesDir.path,
+                calendars: calendars,
+                reminderLists: lists,
+                defaultCalendar: defaultCal,
+                defaultReminderList: defaultRem
+            ),
+            context: ctx
+        )
     }
 }
 

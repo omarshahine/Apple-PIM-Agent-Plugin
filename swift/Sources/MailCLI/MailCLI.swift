@@ -1178,16 +1178,28 @@ struct ConfigShow: ParsableCommand {
 
     func run() throws {
         let config = pimOptions.loadConfig()
+        let ctx = pimOptions.outputContext
+        let activeProfile = pimOptions.profile ?? ProcessInfo.processInfo.environment["APPLE_PIM_PROFILE"]
+
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(config)
 
-        outputJSON([
-            "success": true,
-            "configPath": ConfigLoader.defaultConfigPath.path,
-            "profilesDir": ConfigLoader.profilesDir.path,
-            "activeProfile": (pimOptions.profile ?? ProcessInfo.processInfo.environment["APPLE_PIM_PROFILE"]) as Any,
-            "config": (try? JSONSerialization.jsonObject(with: data)) ?? [:]
-        ])
+        pimOutput(
+            [
+                "success": true,
+                "configPath": ConfigLoader.defaultConfigPath.path,
+                "profilesDir": ConfigLoader.profilesDir.path,
+                "activeProfile": activeProfile as Any,
+                "config": (try? JSONSerialization.jsonObject(with: data)) ?? [:]
+            ],
+            text: ConfigFormatter.formatConfigShow(
+                config: config,
+                configPath: ConfigLoader.defaultConfigPath.path,
+                profilesDir: ConfigLoader.profilesDir.path,
+                activeProfile: activeProfile
+            ),
+            context: ctx
+        )
     }
 }
