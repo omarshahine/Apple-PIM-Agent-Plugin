@@ -86,6 +86,7 @@ You can optionally restrict which domains and items the plugin can access. This 
 - Privacy — hide calendars you don't need Claude to see
 - Reducing noise — only show relevant reminder lists
 - Avoiding conflicts — disable mail here if you use Fastmail MCP for email
+- Multi-agent setups — give each agent a profile with different access
 
 ### Interactive Setup
 
@@ -102,34 +103,57 @@ This will:
 4. Set default calendars for new events/reminders
 5. Write the config file
 
+### CLI Config Commands
+
+Each CLI has built-in config commands:
+
+```bash
+# Show current effective configuration
+./calendar-cli config show
+./reminder-cli config show
+
+# Initialize config from available calendars/lists
+./calendar-cli config init
+./reminder-cli config init
+```
+
 ### Manual Configuration
 
-Create `data/config.local.md` in the plugin directory with YAML frontmatter:
+Config files are stored at `~/.config/apple-pim/`:
 
-```yaml
----
-calendars:
-  enabled: true
-  mode: allowlist  # allowlist | blocklist | all
-  items:
-    - "Personal"
-    - "Work"
-reminders:
-  enabled: true
-  mode: allowlist
-  items:
-    - "Reminders"
-    - "Shopping"
-contacts:
-  enabled: true
-  mode: all
-mail:
-  enabled: true
-default_calendar: "Personal"
-default_reminder_list: "Reminders"
----
+```
+~/.config/apple-pim/
+├── config.json              # Base configuration
+└── profiles/
+    ├── work.json            # Work agent profile
+    └── personal.json        # Personal agent profile
+```
 
-# Apple PIM Configuration
+**Base config** (`~/.config/apple-pim/config.json`):
+
+```json
+{
+  "calendars": {
+    "enabled": true,
+    "mode": "allowlist",
+    "items": ["Personal", "Work"]
+  },
+  "reminders": {
+    "enabled": true,
+    "mode": "allowlist",
+    "items": ["Reminders", "Shopping"]
+  },
+  "contacts": {
+    "enabled": true,
+    "mode": "all",
+    "items": []
+  },
+  "mail": {
+    "enabled": true
+  },
+  "default_calendar": "Personal",
+  "default_reminder_list": "Reminders"
+}
 ```
 
 ### Configuration Options
@@ -138,18 +162,35 @@ default_reminder_list: "Reminders"
 |--------|--------|-------------|
 | `enabled` | `true`, `false` | Enable or disable an entire domain |
 | `mode` | `allowlist`, `blocklist`, `all` | How to filter items (calendars/reminders/contacts) |
-| `items` | List of names | Calendar/list names to allow or block |
-| `default_calendar` | Calendar name | Where new events are created |
-| `default_reminder_list` | List name | Where new reminders are created |
+| `items` | List of names | Calendar/list names to allow or block (emoji prefixes are matched fuzzy) |
+| `default_calendar` | Calendar name | Where new events are created when no calendar is specified |
+| `default_reminder_list` | List name | Where new reminders are created when no list is specified |
+
+### Profiles
+
+Profiles let you give different agents different access. A profile overrides entire domain sections from the base config — fields not specified in the profile are inherited from the base.
+
+**Profile file** (`~/.config/apple-pim/profiles/work.json`):
+
+```json
+{
+  "calendars": {
+    "enabled": true,
+    "mode": "allowlist",
+    "items": ["Work"]
+  },
+  "default_calendar": "Work"
+}
+```
+
+**Profile selection** (in priority order):
+1. `--profile work` CLI flag
+2. `APPLE_PIM_PROFILE=work` environment variable
+3. No profile — base config only
 
 ### Domain Enable/Disable
 
-Set `enabled: false` on any domain to completely hide its tools from Claude Code. This is useful when you have another MCP server handling the same domain (e.g., Fastmail MCP for email).
-
-When a domain is disabled:
-- Its tools don't appear in the tool list
-- Any attempt to call its tools returns an error
-- No data from that domain is accessible
+Set `enabled: false` on any domain to disable it. When disabled, CLI commands for that domain return an access denied error.
 
 ### Filter Modes
 
@@ -157,12 +198,14 @@ When a domain is disabled:
 - **blocklist**: All EXCEPT listed items are accessible
 - **all**: No filtering (default if no config file exists)
 
+Calendar and reminder list names are matched with emoji-stripping — a config item `"Personal"` matches a calendar named `"Personal"` in the system.
+
 ### Notes
 
-- Config is stored in the plugin's `data/` folder (excluded from git via `.gitignore`)
-- Changes take effect immediately (config is read fresh on each tool call)
+- Config is read fresh on each CLI invocation — changes take effect immediately
 - No config file = all domains enabled, all items accessible (backwards compatible)
-- Write operations to blocked calendars fail with a helpful error message
+- Write operations to blocked calendars/lists fail with a descriptive error message
+- Profile names are validated — path traversal attempts are rejected
 
 ## Usage
 
@@ -232,14 +275,15 @@ The `pim-assistant` agent triggers proactively for natural language requests:
 
 ## MCP Tools
 
-The plugin exposes 32 MCP tools:
+The plugin exposes 38 MCP tools:
 
 | Category | Tools | Count |
 |----------|-------|-------|
 | **Calendar** | `calendar_list`, `calendar_events`, `calendar_get`, `calendar_search`, `calendar_create`, `calendar_update`, `calendar_delete`, `calendar_batch_create` | 8 |
-| **Reminders** | `reminder_lists`, `reminder_items`, `reminder_get`, `reminder_search`, `reminder_create`, `reminder_complete`, `reminder_update`, `reminder_delete`, `reminder_batch_create` | 9 |
+| **Reminders** | `reminder_lists`, `reminder_items`, `reminder_get`, `reminder_search`, `reminder_create`, `reminder_complete`, `reminder_update`, `reminder_delete`, `reminder_batch_create`, `reminder_batch_complete`, `reminder_batch_delete` | 11 |
 | **Contacts** | `contact_groups`, `contact_list`, `contact_search`, `contact_get`, `contact_create`, `contact_update`, `contact_delete` (birthday support in create/update/get) | 7 |
-| **Mail** | `mail_accounts`, `mail_mailboxes`, `mail_messages`, `mail_get`, `mail_search`, `mail_update`, `mail_move`, `mail_delete` | 8 |
+| **Mail** | `mail_accounts`, `mail_mailboxes`, `mail_messages`, `mail_get`, `mail_search`, `mail_update`, `mail_move`, `mail_delete`, `mail_batch_update`, `mail_batch_delete` | 10 |
+| **PIM** | `pim_status`, `pim_authorize` | 2 |
 
 ### Recurrence Rules
 
@@ -282,18 +326,27 @@ Batch operations commit all changes in a single transaction, improving performan
 
 ## Architecture
 
+The MCP server is a thin pass-through — it defines tool schemas and maps MCP tool calls to CLI arguments. All access control, filtering, and default resolution is handled by the Swift CLIs via the shared `PIMConfig` library.
+
 ```
 apple-pim/
 ├── swift/                    # Native Swift CLI tools
 │   ├── Sources/
+│   │   ├── PIMConfig/        # Shared config library (filtering, profiles, validation)
 │   │   ├── CalendarCLI/      # EventKit calendar operations
 │   │   ├── ReminderCLI/      # EventKit reminder operations
 │   │   ├── ContactsCLI/      # Contacts framework operations
 │   │   └── MailCLI/          # Mail.app via JXA (osascript)
+│   ├── Tests/
+│   │   ├── PIMConfigTests/   # Config filtering, profile merging, security tests
+│   │   ├── CalendarCLITests/ # Event parsing, recurrence, batch validation
+│   │   ├── ReminderCLITests/ # Reminder parsing, recurrence
+│   │   ├── ContactsCLITests/ # Contact parsing helpers
+│   │   └── MailCLITests/     # JXA script generation
 │   └── Package.swift
 ├── mcp-server/               # Node.js MCP server wrapper
-│   ├── server.js             # Shells out to Swift CLIs
-│   ├── config.js             # Per-domain enable/disable + filtering
+│   ├── server.js             # Tool schemas + CLI argument mapping
+│   ├── tool-args.js          # Argument builder functions
 │   └── package.json
 ├── commands/                 # Slash commands
 ├── agents/                   # pim-assistant agent
@@ -393,10 +446,29 @@ cd swift/.build/release
 ./mail-cli get --id "<message-id>"
 ```
 
+### Using Profiles
+
+```bash
+# Use a named profile
+./calendar-cli --profile work events --from today --to tomorrow
+./reminder-cli --profile personal items
+
+# Or set via environment variable
+export APPLE_PIM_PROFILE=work
+./calendar-cli events --from today --to tomorrow
+
+# View effective config for a profile
+./calendar-cli --profile work config show
+```
+
 ### Rebuilding After Changes
 
 ```bash
+# Swift CLIs
 cd swift && swift build -c release
+
+# MCP server bundle (after editing server.js or tool-args.js)
+cd mcp-server && npm run build
 ```
 
 ## License

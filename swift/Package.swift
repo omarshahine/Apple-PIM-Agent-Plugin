@@ -7,6 +7,7 @@ let package = Package(
         .macOS(.v13)
     ],
     products: [
+        .library(name: "PIMConfig", targets: ["PIMConfig"]),
         .executable(name: "calendar-cli", targets: ["CalendarCLI"]),
         .executable(name: "reminder-cli", targets: ["ReminderCLI"]),
         .executable(name: "contacts-cli", targets: ["ContactsCLI"]),
@@ -16,10 +17,18 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
     ],
     targets: [
+        .target(
+            name: "PIMConfig",
+            dependencies: [
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ],
+            path: "Sources/PIMConfig"
+        ),
         .executableTarget(
             name: "CalendarCLI",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                "PIMConfig",
             ],
             path: "Sources/CalendarCLI"
         ),
@@ -27,6 +36,7 @@ let package = Package(
             name: "ReminderCLI",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                "PIMConfig",
             ],
             path: "Sources/ReminderCLI"
         ),
@@ -34,6 +44,7 @@ let package = Package(
             name: "ContactsCLI",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                "PIMConfig",
             ],
             path: "Sources/ContactsCLI"
         ),
@@ -41,8 +52,14 @@ let package = Package(
             name: "MailCLI",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                "PIMConfig",
             ],
             path: "Sources/MailCLI"
+        ),
+        .testTarget(
+            name: "PIMConfigTests",
+            dependencies: ["PIMConfig"],
+            path: "Tests/PIMConfigTests"
         ),
         .testTarget(
             name: "CalendarCLITests",

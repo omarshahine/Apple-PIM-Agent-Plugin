@@ -1,7 +1,7 @@
 {
   "name": "apple-pim-mcp",
-  "version": "1.0.2",
-  "description": "MCP server for Apple PIM (Calendar, Reminders, Contacts)",
+  "version": "2.4.0",
+  "description": "MCP server for Apple PIM (Calendar, Reminders, Contacts, Mail)",
   "type": "module",
   "main": "dist/server.js",
   "scripts": {

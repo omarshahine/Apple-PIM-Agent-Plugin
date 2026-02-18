@@ -1,6 +1,7 @@
 import ArgumentParser
 import Contacts
 import Foundation
+import PIMConfig
 
 @main
 struct ContactsCLI: AsyncParsableCommand {
@@ -16,6 +17,7 @@ struct ContactsCLI: AsyncParsableCommand {
             CreateContact.self,
             UpdateContact.self,
             DeleteContact.self,
+            ConfigCommand.self,
         ]
     )
 }
@@ -76,6 +78,14 @@ enum CLIError: Error, LocalizedError {
         case .notFound(let msg): return msg
         case .invalidInput(let msg): return msg
         }
+    }
+}
+
+// MARK: - PIMConfig Helpers
+
+func checkContactsEnabled(config: PIMConfiguration) throws {
+    guard config.contacts.enabled else {
+        throw CLIError.accessDenied("Contacts access is disabled by PIM configuration")
     }
 }
 
@@ -491,8 +501,12 @@ struct ListGroups: AsyncParsableCommand {
         abstract: "List all contact groups"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     func run() async throws {
         try await requestContactsAccess()
+        let config = pimOptions.loadConfig()
+        try checkContactsEnabled(config: config)
 
         let groups = try contactStore.groups(matching: nil)
         let result = groups.map { groupToDict($0) }
@@ -510,6 +524,8 @@ struct ListContacts: AsyncParsableCommand {
         abstract: "List contacts"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     @Option(name: .long, help: "Group name or ID to filter by")
     var group: String?
 
@@ -518,6 +534,8 @@ struct ListContacts: AsyncParsableCommand {
 
     func run() async throws {
         try await requestContactsAccess()
+        let config = pimOptions.loadConfig()
+        try checkContactsEnabled(config: config)
 
         var contacts: [CNContact] = []
 
@@ -560,6 +578,8 @@ struct SearchContacts: AsyncParsableCommand {
         abstract: "Search contacts by name, email, or phone"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     @Argument(help: "Search query")
     var query: String
 
@@ -568,6 +588,8 @@ struct SearchContacts: AsyncParsableCommand {
 
     func run() async throws {
         try await requestContactsAccess()
+        let config = pimOptions.loadConfig()
+        try checkContactsEnabled(config: config)
 
         let predicate = CNContact.predicateForContacts(matchingName: query)
         var contacts = try contactStore.unifiedContacts(matching: predicate, keysToFetch: keysToFetch)
@@ -633,11 +655,15 @@ struct GetContact: AsyncParsableCommand {
         abstract: "Get full details for a contact"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     @Option(name: .long, help: "Contact ID")
     var id: String
 
     func run() async throws {
         try await requestContactsAccess()
+        let config = pimOptions.loadConfig()
+        try checkContactsEnabled(config: config)
 
         let predicate = CNContact.predicateForContacts(withIdentifiers: [id])
         let contacts = try contactStore.unifiedContacts(matching: predicate, keysToFetch: keysToFetch)
@@ -658,6 +684,8 @@ struct CreateContact: AsyncParsableCommand {
         commandName: "create",
         abstract: "Create a new contact"
     )
+
+    @OptionGroup var pimOptions: PIMOptions
 
     // Name fields
     @Option(name: .long, help: "First name")
@@ -753,6 +781,8 @@ struct CreateContact: AsyncParsableCommand {
 
     func run() async throws {
         try await requestContactsAccess()
+        let config = pimOptions.loadConfig()
+        try checkContactsEnabled(config: config)
 
         let contact = CNMutableContact()
 
@@ -839,6 +869,8 @@ struct UpdateContact: AsyncParsableCommand {
         commandName: "update",
         abstract: "Update an existing contact"
     )
+
+    @OptionGroup var pimOptions: PIMOptions
 
     @Option(name: .long, help: "Contact ID to update")
     var id: String
@@ -934,6 +966,8 @@ struct UpdateContact: AsyncParsableCommand {
 
     func run() async throws {
         try await requestContactsAccess()
+        let config = pimOptions.loadConfig()
+        try checkContactsEnabled(config: config)
 
         let maxAttempts = 3
         var attempts = 0
@@ -1055,11 +1089,15 @@ struct DeleteContact: AsyncParsableCommand {
         abstract: "Delete a contact"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     @Option(name: .long, help: "Contact ID to delete")
     var id: String
 
     func run() async throws {
         try await requestContactsAccess()
+        let config = pimOptions.loadConfig()
+        try checkContactsEnabled(config: config)
 
         let predicate = CNContact.predicateForContacts(withIdentifiers: [id])
         let contacts = try contactStore.unifiedContacts(matching: predicate, keysToFetch: keysToFetch)
@@ -1079,6 +1117,40 @@ struct DeleteContact: AsyncParsableCommand {
             "success": true,
             "message": "Contact deleted successfully",
             "deletedContact": contactInfo
+        ])
+    }
+}
+
+// MARK: - Config Command
+
+struct ConfigCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "config",
+        abstract: "Manage PIM configuration",
+        subcommands: [ConfigShow.self]
+    )
+}
+
+struct ConfigShow: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "show",
+        abstract: "Display the resolved configuration (base + profile)"
+    )
+
+    @OptionGroup var pimOptions: PIMOptions
+
+    func run() throws {
+        let config = pimOptions.loadConfig()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(config)
+
+        outputJSON([
+            "success": true,
+            "configPath": ConfigLoader.defaultConfigPath.path,
+            "profilesDir": ConfigLoader.profilesDir.path,
+            "activeProfile": (pimOptions.profile ?? ProcessInfo.processInfo.environment["APPLE_PIM_PROFILE"]) as Any,
+            "config": (try? JSONSerialization.jsonObject(with: data)) ?? [:]
         ])
     }
 }

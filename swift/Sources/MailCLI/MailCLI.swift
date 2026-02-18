@@ -1,6 +1,7 @@
 import ArgumentParser
 import AppKit
 import Foundation
+import PIMConfig
 
 @main
 struct MailCLI: AsyncParsableCommand {
@@ -19,6 +20,7 @@ struct MailCLI: AsyncParsableCommand {
             DeleteMessage.self,
             BatchUpdateMessages.self,
             BatchDeleteMessages.self,
+            ConfigCommand.self,
         ]
     )
 }
@@ -92,6 +94,14 @@ enum CLIError: Error, LocalizedError {
         case .timeout(let msg): return msg
         case .accessDenied(let msg): return msg
         }
+    }
+}
+
+// MARK: - PIMConfig Helpers
+
+func checkMailEnabled(config: PIMConfiguration) throws {
+    guard config.mail.enabled else {
+        throw CLIError.accessDenied("Mail access is disabled by PIM configuration")
     }
 }
 
@@ -328,8 +338,12 @@ struct ListAccounts: AsyncParsableCommand {
         abstract: "List all mail accounts"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     func run() async throws {
         try ensureMailRunning()
+        let config = pimOptions.loadConfig()
+        try checkMailEnabled(config: config)
 
         let script = """
         const Mail = Application("Mail");
@@ -358,11 +372,15 @@ struct ListMailboxes: AsyncParsableCommand {
         abstract: "List mailboxes with unread counts"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     @Option(name: .long, help: "Filter by account name")
     var account: String?
 
     func run() async throws {
         try ensureMailRunning()
+        let config = pimOptions.loadConfig()
+        try checkMailEnabled(config: config)
 
         let accountFilter = account.map { "'\(escapeForJXA($0))'" } ?? "null"
 
@@ -421,6 +439,8 @@ struct ListMessages: AsyncParsableCommand {
         abstract: "List messages in a mailbox"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     @Option(name: .long, help: "Mailbox name (default: INBOX)")
     var mailbox: String = "INBOX"
 
@@ -435,6 +455,8 @@ struct ListMessages: AsyncParsableCommand {
 
     func run() async throws {
         try ensureMailRunning()
+        let config = pimOptions.loadConfig()
+        try checkMailEnabled(config: config)
 
         let accountFilter = account.map { "'\(escapeForJXA($0))'" } ?? "null"
         let mailboxName = escapeForJXA(mailbox)
@@ -530,6 +552,8 @@ struct GetMessage: AsyncParsableCommand {
         abstract: "Get a single message by message ID"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     @Option(name: .long, help: "RFC 2822 message ID")
     var id: String
 
@@ -544,6 +568,8 @@ struct GetMessage: AsyncParsableCommand {
 
     func run() async throws {
         try ensureMailRunning()
+        let config = pimOptions.loadConfig()
+        try checkMailEnabled(config: config)
 
         let findHelper = findMessageJXA(targetId: id, mailbox: mailbox, account: account)
 
@@ -614,6 +640,8 @@ struct SearchMessages: AsyncParsableCommand {
         abstract: "Search messages by subject, sender, or content"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     @Argument(help: "Search query")
     var query: String
 
@@ -631,6 +659,8 @@ struct SearchMessages: AsyncParsableCommand {
 
     func run() async throws {
         try ensureMailRunning()
+        let config = pimOptions.loadConfig()
+        try checkMailEnabled(config: config)
 
         let escapedQuery = escapeForJXA(query.lowercased())
         let accountFilter = account.map { "'\(escapeForJXA($0))'" } ?? "null"
@@ -722,6 +752,8 @@ struct UpdateMessage: AsyncParsableCommand {
         abstract: "Update message flags (read/unread, flagged, junk)"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     @Option(name: .long, help: "RFC 2822 message ID")
     var id: String
 
@@ -742,6 +774,8 @@ struct UpdateMessage: AsyncParsableCommand {
 
     func run() async throws {
         try ensureMailRunning()
+        let config = pimOptions.loadConfig()
+        try checkMailEnabled(config: config)
 
         var updates = [String]()
         if let read = read {
@@ -799,6 +833,8 @@ struct MoveMessage: AsyncParsableCommand {
         abstract: "Move message to a different mailbox"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     @Option(name: .long, help: "RFC 2822 message ID")
     var id: String
 
@@ -816,6 +852,8 @@ struct MoveMessage: AsyncParsableCommand {
 
     func run() async throws {
         try ensureMailRunning()
+        let config = pimOptions.loadConfig()
+        try checkMailEnabled(config: config)
 
         let escapedMailbox = escapeForJXA(toMailbox)
         let toAccountFilter = toAccount.map { "'\(escapeForJXA($0))'" } ?? "null"
@@ -880,6 +918,8 @@ struct DeleteMessage: AsyncParsableCommand {
         abstract: "Delete message (move to Trash)"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     @Option(name: .long, help: "RFC 2822 message ID")
     var id: String
 
@@ -891,6 +931,8 @@ struct DeleteMessage: AsyncParsableCommand {
 
     func run() async throws {
         try ensureMailRunning()
+        let config = pimOptions.loadConfig()
+        try checkMailEnabled(config: config)
 
         let findHelper = findMessageJXA(targetId: id, mailbox: mailbox, account: account)
 
@@ -943,6 +985,8 @@ struct BatchUpdateMessages: AsyncParsableCommand {
         abstract: "Update flags on multiple messages in a single JXA call"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     @Option(name: .long, help: "JSON array of update objects: [{\"id\": \"...\", \"read\": true}, ...]")
     var json: String
 
@@ -954,6 +998,8 @@ struct BatchUpdateMessages: AsyncParsableCommand {
 
     func run() async throws {
         try ensureMailRunning()
+        let config = pimOptions.loadConfig()
+        try checkMailEnabled(config: config)
 
         guard let data = json.data(using: .utf8),
               let updates = try? JSONDecoder().decode([BatchUpdateInput].self, from: data) else {
@@ -1037,6 +1083,8 @@ struct BatchDeleteMessages: AsyncParsableCommand {
         abstract: "Delete multiple messages in a single JXA call (moves to Trash)"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     @Option(name: .long, help: "JSON array of RFC 2822 message IDs to delete")
     var json: String
 
@@ -1048,6 +1096,8 @@ struct BatchDeleteMessages: AsyncParsableCommand {
 
     func run() async throws {
         try ensureMailRunning()
+        let config = pimOptions.loadConfig()
+        try checkMailEnabled(config: config)
 
         guard let data = json.data(using: .utf8),
               let ids = try? JSONDecoder().decode([String].self, from: data) else {
@@ -1104,6 +1154,40 @@ struct BatchDeleteMessages: AsyncParsableCommand {
             "deletedCount": results.count,
             "errors": errors,
             "errorCount": errors.count
+        ])
+    }
+}
+
+// MARK: - Config Command
+
+struct ConfigCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "config",
+        abstract: "Manage PIM configuration",
+        subcommands: [ConfigShow.self]
+    )
+}
+
+struct ConfigShow: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "show",
+        abstract: "Display the resolved configuration (base + profile)"
+    )
+
+    @OptionGroup var pimOptions: PIMOptions
+
+    func run() throws {
+        let config = pimOptions.loadConfig()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(config)
+
+        outputJSON([
+            "success": true,
+            "configPath": ConfigLoader.defaultConfigPath.path,
+            "profilesDir": ConfigLoader.profilesDir.path,
+            "activeProfile": (pimOptions.profile ?? ProcessInfo.processInfo.environment["APPLE_PIM_PROFILE"]) as Any,
+            "config": (try? JSONSerialization.jsonObject(with: data)) ?? [:]
         ])
     }
 }

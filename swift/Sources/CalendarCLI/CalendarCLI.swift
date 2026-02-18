@@ -1,6 +1,7 @@
 import ArgumentParser
 import EventKit
 import Foundation
+import PIMConfig
 
 @main
 struct CalendarCLI: AsyncParsableCommand {
@@ -17,6 +18,7 @@ struct CalendarCLI: AsyncParsableCommand {
             UpdateEvent.self,
             DeleteEvent.self,
             BatchCreateEvent.self,
+            ConfigCommand.self,
         ]
     )
 }
@@ -276,6 +278,51 @@ func participantRoleString(_ role: EKParticipantRole) -> String {
     }
 }
 
+// MARK: - Config Helpers
+
+/// Get only the calendars allowed by the current PIM config.
+func allowedCalendars(config: PIMConfiguration) -> [EKCalendar] {
+    let all = eventStore.calendars(for: .event)
+    return ItemFilter.filter(items: all, config: config.calendars, name: { $0.title }, id: { $0.calendarIdentifier })
+}
+
+/// Validate that an event's calendar is accessible under the current config.
+/// Throws CLIError.accessDenied if blocked.
+func validateEventAccess(_ event: EKEvent, config: PIMConfiguration) throws {
+    guard let cal = event.calendar else { return }
+    guard ItemFilter.isAllowed(name: cal.title, id: cal.calendarIdentifier, config: config.calendars) else {
+        throw CLIError.accessDenied("Calendar '\(cal.title)' is not in your allowed list. Run /apple-pim:configure to update access.")
+    }
+}
+
+/// Find a calendar by name or ID, validating it's in the allowed list.
+func findAllowedCalendar(nameOrId: String, config: PIMConfiguration) throws -> EKCalendar {
+    let allCalendars = eventStore.calendars(for: .event)
+    guard let cal = allCalendars.first(where: {
+        $0.calendarIdentifier == nameOrId || $0.title.lowercased() == nameOrId.lowercased()
+    }) else {
+        throw CLIError.notFound("Calendar not found: \(nameOrId)")
+    }
+    guard ItemFilter.isAllowed(name: cal.title, id: cal.calendarIdentifier, config: config.calendars) else {
+        throw CLIError.accessDenied("Calendar '\(cal.title)' is not in your allowed list. Run /apple-pim:configure to update access.")
+    }
+    return cal
+}
+
+/// Resolve the target calendar for a create operation: explicit name > config default > system default.
+func resolveTargetCalendar(explicit: String?, config: PIMConfiguration) throws -> EKCalendar {
+    if let name = explicit {
+        return try findAllowedCalendar(nameOrId: name, config: config)
+    }
+    if let defaultName = config.defaultCalendar {
+        return try findAllowedCalendar(nameOrId: defaultName, config: config)
+    }
+    guard let systemDefault = eventStore.defaultCalendarForNewEvents else {
+        throw CLIError.notFound("No default calendar available")
+    }
+    return systemDefault
+}
+
 // MARK: - Recurrence Helpers
 
 struct RecurrenceJSON: Codable {
@@ -384,10 +431,13 @@ struct ListCalendars: AsyncParsableCommand {
         abstract: "List all calendars"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     func run() async throws {
         try await requestCalendarAccess()
 
-        let calendars = eventStore.calendars(for: .event)
+        let config = pimOptions.loadConfig()
+        let calendars = allowedCalendars(config: config)
         let result = calendars.map { calendarToDict($0) }
 
         outputJSON([
@@ -402,6 +452,8 @@ struct ListEvents: AsyncParsableCommand {
         commandName: "events",
         abstract: "List events within a date range"
     )
+
+    @OptionGroup var pimOptions: PIMOptions
 
     @Option(name: .long, help: "Calendar name or ID to filter by")
     var calendar: String?
@@ -418,6 +470,8 @@ struct ListEvents: AsyncParsableCommand {
     func run() async throws {
         try await requestCalendarAccess()
 
+        let config = pimOptions.loadConfig()
+
         guard let startDate = parseDate(from) else {
             throw CLIError.invalidInput("Invalid start date: \(from)")
         }
@@ -432,15 +486,14 @@ struct ListEvents: AsyncParsableCommand {
             endDate = Calendar.current.date(byAdding: .day, value: 7, to: startDate) ?? startDate
         }
 
+        // Resolve calendars: explicit filter > all allowed calendars
         var calendars: [EKCalendar]?
         if let calendarFilter = calendar {
-            let allCalendars = eventStore.calendars(for: .event)
-            calendars = allCalendars.filter {
-                $0.calendarIdentifier == calendarFilter || $0.title.lowercased() == calendarFilter.lowercased()
-            }
-            if calendars?.isEmpty == true {
-                throw CLIError.notFound("Calendar not found: \(calendarFilter)")
-            }
+            let cal = try findAllowedCalendar(nameOrId: calendarFilter, config: config)
+            calendars = [cal]
+        } else if config.calendars.mode != .all {
+            // Restrict to allowed calendars only
+            calendars = allowedCalendars(config: config)
         }
 
         let predicate = eventStore.predicateForEvents(withStart: startDate, end: endDate, calendars: calendars)
@@ -466,15 +519,21 @@ struct GetEvent: AsyncParsableCommand {
         abstract: "Get a single event by ID"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     @Option(name: .long, help: "Event ID")
     var id: String
 
     func run() async throws {
         try await requestCalendarAccess()
 
+        let config = pimOptions.loadConfig()
+
         guard let event = eventStore.event(withIdentifier: id) else {
             throw CLIError.notFound("Event not found: \(id)")
         }
+
+        try validateEventAccess(event, config: config)
 
         outputJSON([
             "success": true,
@@ -488,6 +547,8 @@ struct SearchEvents: AsyncParsableCommand {
         commandName: "search",
         abstract: "Search events by title"
     )
+
+    @OptionGroup var pimOptions: PIMOptions
 
     @Argument(help: "Search query")
     var query: String
@@ -507,15 +568,18 @@ struct SearchEvents: AsyncParsableCommand {
     func run() async throws {
         try await requestCalendarAccess()
 
+        let config = pimOptions.loadConfig()
+
         let startDate = from.flatMap { parseDate($0) } ?? Calendar.current.date(byAdding: .day, value: -30, to: Date())!
         let endDate = to.flatMap { parseDate($0) } ?? Calendar.current.date(byAdding: .year, value: 1, to: Date())!
 
+        // Resolve calendars: explicit filter > all allowed calendars
         var calendars: [EKCalendar]?
         if let calendarFilter = calendar {
-            let allCalendars = eventStore.calendars(for: .event)
-            calendars = allCalendars.filter {
-                $0.calendarIdentifier == calendarFilter || $0.title.lowercased() == calendarFilter.lowercased()
-            }
+            let cal = try findAllowedCalendar(nameOrId: calendarFilter, config: config)
+            calendars = [cal]
+        } else if config.calendars.mode != .all {
+            calendars = allowedCalendars(config: config)
         }
 
         let predicate = eventStore.predicateForEvents(withStart: startDate, end: endDate, calendars: calendars)
@@ -544,6 +608,8 @@ struct CreateEvent: AsyncParsableCommand {
         commandName: "create",
         abstract: "Create a new calendar event"
     )
+
+    @OptionGroup var pimOptions: PIMOptions
 
     @Option(name: .long, help: "Event title")
     var title: String
@@ -581,6 +647,8 @@ struct CreateEvent: AsyncParsableCommand {
     func run() async throws {
         try await requestCalendarAccess()
 
+        let config = pimOptions.loadConfig()
+
         guard let startDate = parseDate(start) else {
             throw CLIError.invalidInput("Invalid start date: \(start)")
         }
@@ -602,16 +670,7 @@ struct CreateEvent: AsyncParsableCommand {
         event.startDate = startDate
         event.endDate = endDate
         event.isAllDay = allDay
-
-        if let calendarName = calendar {
-            let calendars = eventStore.calendars(for: .event)
-            guard let cal = calendars.first(where: { $0.calendarIdentifier == calendarName || $0.title.lowercased() == calendarName.lowercased() }) else {
-                throw CLIError.notFound("Calendar not found: \(calendarName)")
-            }
-            event.calendar = cal
-        } else {
-            event.calendar = eventStore.defaultCalendarForNewEvents
-        }
+        event.calendar = try resolveTargetCalendar(explicit: calendar, config: config)
 
         if let loc = location {
             event.location = loc
@@ -649,6 +708,8 @@ struct UpdateEvent: AsyncParsableCommand {
         abstract: "Update an existing event"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     @Option(name: .long, help: "Event ID to update")
     var id: String
 
@@ -679,9 +740,13 @@ struct UpdateEvent: AsyncParsableCommand {
     func run() async throws {
         try await requestCalendarAccess()
 
+        let config = pimOptions.loadConfig()
+
         guard let event = eventStore.event(withIdentifier: id) else {
             throw CLIError.notFound("Event not found: \(id)")
         }
+
+        try validateEventAccess(event, config: config)
 
         if let newTitle = title {
             event.title = newTitle
@@ -740,6 +805,8 @@ struct DeleteEvent: AsyncParsableCommand {
         abstract: "Delete an event"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     @Option(name: .long, help: "Event ID to delete")
     var id: String
 
@@ -749,9 +816,13 @@ struct DeleteEvent: AsyncParsableCommand {
     func run() async throws {
         try await requestCalendarAccess()
 
+        let config = pimOptions.loadConfig()
+
         guard let event = eventStore.event(withIdentifier: id) else {
             throw CLIError.notFound("Event not found: \(id)")
         }
+
+        try validateEventAccess(event, config: config)
 
         let eventInfo = eventToDict(event)
         let span: EKSpan = futureEvents ? .futureEvents : .thisEvent
@@ -820,12 +891,15 @@ struct BatchCreateEvent: AsyncParsableCommand {
         abstract: "Create multiple calendar events in a single transaction"
     )
 
+    @OptionGroup var pimOptions: PIMOptions
+
     @Option(name: .long, help: "JSON array of events to create")
     var json: String
 
     func run() async throws {
         try await requestCalendarAccess()
 
+        let config = pimOptions.loadConfig()
         let events = try decodeBatchEvents(json)
 
         var createdEvents: [[String: Any]] = []
@@ -842,16 +916,7 @@ struct BatchCreateEvent: AsyncParsableCommand {
                 event.startDate = startDate
                 event.endDate = endDate
                 event.isAllDay = eventInput.allDay ?? false
-
-                if let calendarName = eventInput.calendar {
-                    let calendars = eventStore.calendars(for: .event)
-                    guard let cal = calendars.first(where: { $0.calendarIdentifier == calendarName || $0.title.lowercased() == calendarName.lowercased() }) else {
-                        throw CLIError.notFound("Calendar not found: \(calendarName)")
-                    }
-                    event.calendar = cal
-                } else {
-                    event.calendar = eventStore.defaultCalendarForNewEvents
-                }
+                event.calendar = try resolveTargetCalendar(explicit: eventInput.calendar, config: config)
 
                 if let loc = eventInput.location {
                     event.location = loc
@@ -905,4 +970,79 @@ struct BatchCreateEvent: AsyncParsableCommand {
             "errorCount": errors.count
         ])
     }
+}
+
+// MARK: - Config Commands
+
+struct ConfigCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "config",
+        abstract: "Manage PIM configuration",
+        subcommands: [ConfigShow.self, ConfigInit.self]
+    )
+}
+
+struct ConfigShow: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "show",
+        abstract: "Display the resolved configuration (base + profile)"
+    )
+
+    @OptionGroup var pimOptions: PIMOptions
+
+    func run() throws {
+        let config = pimOptions.loadConfig()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(config)
+
+        outputJSON([
+            "success": true,
+            "configPath": ConfigLoader.defaultConfigPath.path,
+            "profilesDir": ConfigLoader.profilesDir.path,
+            "activeProfile": (pimOptions.profile ?? ProcessInfo.processInfo.environment["APPLE_PIM_PROFILE"]) as Any,
+            "config": (try? JSONSerialization.jsonObject(with: data)) ?? [:]
+        ])
+    }
+}
+
+struct ConfigInit: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "init",
+        abstract: "List available calendars and reminder lists for configuration setup"
+    )
+
+    func run() async throws {
+        try await requestCalendarAccess()
+
+        let calendars = eventStore.calendars(for: .event).map { calendarToDict($0) }
+
+        // Also request reminder access to list those
+        if #available(macOS 14.0, *) {
+            let _ = try? await eventStore.requestFullAccessToReminders()
+        } else {
+            let _ = try? await eventStore.requestAccess(to: .reminder)
+        }
+        let lists = eventStore.calendars(for: .reminder).map { listToDict($0) }
+
+        outputJSON([
+            "success": true,
+            "configPath": ConfigLoader.defaultConfigPath.path,
+            "profilesDir": ConfigLoader.profilesDir.path,
+            "availableCalendars": calendars,
+            "availableReminderLists": lists,
+            "defaultCalendar": eventStore.defaultCalendarForNewEvents?.title ?? "",
+            "defaultReminderList": eventStore.defaultCalendarForNewReminders()?.title ?? ""
+        ])
+    }
+}
+
+func listToDict(_ calendar: EKCalendar) -> [String: Any] {
+    return [
+        "id": calendar.calendarIdentifier,
+        "title": calendar.title,
+        "color": calendar.cgColor?.components?.map { Int($0 * 255) } ?? [],
+        "allowsModifications": calendar.allowsContentModifications,
+        "source": calendar.source?.title ?? "Unknown"
+    ]
 }
