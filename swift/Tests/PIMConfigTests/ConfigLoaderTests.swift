@@ -198,3 +198,52 @@ struct ConfigLoaderTests {
         #expect(json["reminders"] == nil)
     }
 }
+
+// MARK: - Environment-mutating tests (serialized to avoid data races)
+
+@Suite("ConfigLoader - env isolation", .serialized)
+struct ConfigLoaderEnvTests {
+
+    @Test("APPLE_PIM_CONFIG_DIR overrides default config directory")
+    func testConfigDirEnvOverride() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pim-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        // Write a config with contacts disabled so we can detect it was loaded
+        let config = PIMConfiguration(
+            contacts: DomainFilterConfig(enabled: false)
+        )
+        let data = try JSONEncoder().encode(config)
+        try data.write(to: tmpDir.appendingPathComponent("config.json"))
+
+        // setenv so ConfigLoader picks it up
+        setenv("APPLE_PIM_CONFIG_DIR", tmpDir.path, 1)
+        defer { unsetenv("APPLE_PIM_CONFIG_DIR") }
+
+        #expect(ConfigLoader.configDir.path == tmpDir.path)
+        #expect(ConfigLoader.defaultConfigPath.path == tmpDir.appendingPathComponent("config.json").path)
+        #expect(ConfigLoader.profilesDir.path == tmpDir.appendingPathComponent("profiles").path)
+
+        let loaded = ConfigLoader.loadBaseConfig()
+        #expect(loaded.contacts.enabled == false)
+    }
+
+    @Test("loadProfile returns nil when profile file does not exist")
+    func testLoadProfileReturnsNilForMissing() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pim-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        setenv("APPLE_PIM_CONFIG_DIR", tmpDir.path, 1)
+        defer { unsetenv("APPLE_PIM_CONFIG_DIR") }
+
+        // No profiles directory exists, so loadProfile should return nil
+        // Note: the exit(1) behavior in load(profile:) for missing profiles
+        // requires subprocess testing and is not covered here.
+        let result = ConfigLoader.loadProfile(named: "nonexistent")
+        #expect(result == nil)
+    }
+}

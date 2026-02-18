@@ -22,14 +22,18 @@ public enum ConfigError: Error, CustomStringConvertible {
 /// 2. `APPLE_PIM_PROFILE` environment variable
 /// 3. No profile — base config only
 ///
-/// File locations:
+/// File locations (default, overridable via `APPLE_PIM_CONFIG_DIR`):
 /// - Base config: `~/.config/apple-pim/config.json`
 /// - Profiles: `~/.config/apple-pim/profiles/{name}.json`
 public struct ConfigLoader {
 
     /// Root directory for all PIM config files.
+    /// Override with the `APPLE_PIM_CONFIG_DIR` environment variable.
     public static var configDir: URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        if let dir = ProcessInfo.processInfo.environment["APPLE_PIM_CONFIG_DIR"] {
+            return URL(fileURLWithPath: dir)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".config/apple-pim")
     }
 
@@ -59,16 +63,18 @@ public struct ConfigLoader {
             try validateProfileName(profileName)
         } catch {
             FileHandle.standardError.write(
-                Data("[apple-pim] Warning: \(error). Using base config.\n".utf8)
+                Data("[apple-pim] Error: \(error). Refusing to fall back to base config.\n".utf8)
             )
-            return base
+            Foundation.exit(1)
         }
 
         let override = loadProfile(named: profileName)
         if override == nil {
+            // Fail closed: explicit profile not found is an error, not a warning
             FileHandle.standardError.write(
-                Data("[apple-pim] Warning: profile '\(profileName)' not found at \(profilePath(for: profileName).path). Using base config.\n".utf8)
+                Data("[apple-pim] Error: profile '\(profileName)' not found at \(profilePath(for: profileName).path). Refusing to fall back to base config.\n".utf8)
             )
+            Foundation.exit(1)
         }
         return merge(base: base, profile: override)
     }
