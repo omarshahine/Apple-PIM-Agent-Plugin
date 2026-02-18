@@ -22,18 +22,22 @@ npm run build
 
 ## Architecture
 
-The MCP server doesn't access macOS APIs directly. Instead it defines tool schemas and maps MCP tool calls to CLI arguments, spawning the appropriate Swift binary:
+The MCP server is a thin pass-through that maps tool schemas to CLI arguments. All access control, filtering, and default resolution is handled by the Swift CLIs via the shared `PIMConfig` library:
 
 ```
 Claude Code ←stdio→ mcp-server/server.js ←spawn→ swift/Sources/*CLI (EventKit / Contacts / JXA)
+                                                        ↑
+                                                   PIMConfig library
+                                              (~/.config/apple-pim/)
 ```
 
-Each Swift CLI is a standalone binary that reads from macOS frameworks and writes JSON to stdout.
+Each Swift CLI is a standalone binary that reads from macOS frameworks, validates access via PIMConfig, and writes JSON to stdout.
 
 ## Repo Layout
 
 | Path | Purpose |
 |------|---------|
+| `swift/Sources/PIMConfig` | Shared config library (filtering, profiles, validation) |
 | `swift/Sources/CalendarCLI` | EventKit calendar CLI |
 | `swift/Sources/ReminderCLI` | EventKit reminders CLI |
 | `swift/Sources/ContactsCLI` | Contacts framework CLI |
@@ -42,9 +46,18 @@ Each Swift CLI is a standalone binary that reads from macOS frameworks and write
 | `mcp-server/dist/server.js` | Bundled server artifact (rebuild after source changes) |
 | `.github/workflows/tests.yml` | CI checks for Node and Swift test jobs |
 
+## Configuration (PIMConfig)
+
+- Config lives at `~/.config/apple-pim/config.json` (base) with optional profiles at `~/.config/apple-pim/profiles/{name}.json`.
+- All four CLIs share the `PIMConfig` library for allowlist/blocklist filtering, domain enable/disable, and defaults.
+- Profile selection: `--profile` flag > `APPLE_PIM_PROFILE` env var > base config only.
+- Profile overrides replace entire domain sections (not field-by-field merge).
+- The MCP server does NOT do any config filtering — it passes `--profile` to CLIs when set.
+
 ## Testing Notes
 
 - Keep pure parsing/argument mapping logic extractable and unit tested.
+- PIMConfig tests (`swift/Tests/PIMConfigTests/`) cover filtering logic, config round-trips, profile merging, and security validation.
 - Prefer unit tests for logic seams (`swift/Tests/*`, `mcp-server/test/*`) over tests that require macOS permissions.
 - Full EventKit/Contacts/Mail integration paths can require local TCC permissions and Mail.app running.
 

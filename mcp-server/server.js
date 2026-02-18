@@ -2038,7 +2038,7 @@ async function handleTool(name, args) {
 const server = new Server(
   {
     name: "apple-pim",
-    version: "2.1.0",
+    version: "2.4.0",
   },
   {
     capabilities: {
