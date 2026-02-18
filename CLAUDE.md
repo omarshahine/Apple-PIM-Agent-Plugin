@@ -54,6 +54,7 @@ Each Swift CLI is a standalone binary that reads from macOS frameworks, validate
 - Profile selection: `--profile` flag > `APPLE_PIM_PROFILE` env var > base config only.
 - **Fail-closed profiles:** If a profile is explicitly requested (via `--profile` or `APPLE_PIM_PROFILE`) but the file doesn't exist, the CLI exits with an error instead of falling back to the base config.
 - Profile overrides replace entire domain sections (not field-by-field merge).
+- The MCP server passes `APPLE_PIM_CONFIG_DIR` and `APPLE_PIM_PROFILE` from its own environment to the Swift CLIs via process inheritance. Set these in plugin.json `env` or the outer shell.
 - The MCP server does NOT do any config filtering — it passes `--profile` to CLIs when set.
 
 ## Testing Notes
