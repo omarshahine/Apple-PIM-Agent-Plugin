@@ -37,20 +37,6 @@ export function buildCalendarUpdateArgs(args) {
   return cliArgs;
 }
 
-export function applyDefaultCalendar(events, defaultCalendar) {
-  return events.map((event) => ({
-    ...event,
-    calendar: event.calendar || defaultCalendar,
-  }));
-}
-
-export function applyDefaultReminderList(reminders, defaultList) {
-  return reminders.map((reminder) => ({
-    ...reminder,
-    list: reminder.list || defaultList,
-  }));
-}
-
 export function buildReminderCreateArgs(args, targetList) {
   const cliArgs = ["create", "--title", args.title];
   if (targetList) cliArgs.push("--list", targetList);

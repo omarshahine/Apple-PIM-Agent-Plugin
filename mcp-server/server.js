@@ -12,26 +12,10 @@ import { fileURLToPath } from "url";
 import { existsSync } from "fs";
 import { homedir } from "os";
 import {
-  loadConfig,
-  isDomainEnabled,
-  filterCalendars,
-  filterReminderLists,
-  filterEvents,
-  filterReminders,
-  isCalendarAllowed,
-  isReminderListAllowed,
-  validateCalendarForWrite,
-  validateReminderListForWrite,
-  getDefaultCalendar,
-  getDefaultReminderList,
-} from "./config.js";
-import {
   markToolResult,
   getDatamarkingPreamble,
 } from "./sanitize.js";
 import {
-  applyDefaultCalendar,
-  applyDefaultReminderList,
   buildCalendarCreateArgs,
   buildCalendarDeleteArgs,
   buildCalendarUpdateArgs,
@@ -1678,27 +1662,10 @@ async function handleTool(name, args) {
 
   switch (name) {
     // Calendar tools
-    case "calendar_list": {
-      const result = await runCLI("calendar-cli", ["list"]);
-      // Filter calendars based on config
-      if (result.calendars) {
-        result.calendars = await filterCalendars(result.calendars);
-      }
-      return result;
-    }
+    case "calendar_list":
+      return await runCLI("calendar-cli", ["list"]);
 
     case "calendar_events": {
-      // Validate calendar filter if specified
-      if (args.calendar) {
-        const allowed = await isCalendarAllowed(args.calendar);
-        if (!allowed) {
-          throw new Error(
-            `Calendar '${args.calendar}' is not in your allowed list.\n` +
-              `Run /apple-pim:configure to add it.`
-          );
-        }
-      }
-
       cliArgs.push("events");
       if (args.calendar) cliArgs.push("--calendar", args.calendar);
       // Support both from/to and lastDays/nextDays
@@ -1713,277 +1680,87 @@ async function handleTool(name, args) {
         cliArgs.push("--to", args.to);
       }
       if (args.limit) cliArgs.push("--limit", String(args.limit));
-
-      const result = await runCLI("calendar-cli", cliArgs);
-      // Filter events based on config (in case no specific calendar was requested)
-      if (result.events) {
-        result.events = await filterEvents(result.events);
-      }
-      return result;
+      return await runCLI("calendar-cli", cliArgs);
     }
 
-    case "calendar_get": {
-      const result = await runCLI("calendar-cli", ["get", "--id", args.id]);
-      // Check if event's calendar is allowed
-      if (result.calendar) {
-        const allowed = await isCalendarAllowed(result.calendar);
-        if (!allowed) {
-          throw new Error(
-            `This event belongs to calendar '${result.calendar}' which is not in your allowed list.\n` +
-              `Run /apple-pim:configure to add it.`
-          );
-        }
-      }
-      return result;
-    }
+    case "calendar_get":
+      return await runCLI("calendar-cli", ["get", "--id", args.id]);
 
     case "calendar_search": {
-      // Validate calendar filter if specified
-      if (args.calendar) {
-        const allowed = await isCalendarAllowed(args.calendar);
-        if (!allowed) {
-          throw new Error(
-            `Calendar '${args.calendar}' is not in your allowed list.\n` +
-              `Run /apple-pim:configure to add it.`
-          );
-        }
-      }
-
       cliArgs.push("search", args.query);
       if (args.calendar) cliArgs.push("--calendar", args.calendar);
       if (args.from) cliArgs.push("--from", args.from);
       if (args.to) cliArgs.push("--to", args.to);
       if (args.limit) cliArgs.push("--limit", String(args.limit));
-
-      const result = await runCLI("calendar-cli", cliArgs);
-      // Filter results based on config
-      if (result.events) {
-        result.events = await filterEvents(result.events);
-      }
-      return result;
+      return await runCLI("calendar-cli", cliArgs);
     }
 
-    case "calendar_create": {
-      // Validate target calendar
-      await validateCalendarForWrite(args.calendar);
-
-      // Use default calendar from config if not specified
-      let targetCalendar = args.calendar;
-      if (!targetCalendar) {
-        targetCalendar = await getDefaultCalendar();
-      }
-
+    case "calendar_create":
       return await runCLI(
         "calendar-cli",
-        buildCalendarCreateArgs(args, targetCalendar)
+        buildCalendarCreateArgs(args, args.calendar)
       );
-    }
 
-    case "calendar_update": {
-      // First get the event to check its calendar
-      const event = await runCLI("calendar-cli", ["get", "--id", args.id]);
-      if (event.calendar) {
-        const allowed = await isCalendarAllowed(event.calendar);
-        if (!allowed) {
-          throw new Error(
-            `This event belongs to calendar '${event.calendar}' which is not in your allowed list.\n` +
-              `Run /apple-pim:configure to add it.`
-          );
-        }
-      }
-
+    case "calendar_update":
       return await runCLI("calendar-cli", buildCalendarUpdateArgs(args));
-    }
 
-    case "calendar_delete": {
-      // First get the event to check its calendar
-      const event = await runCLI("calendar-cli", ["get", "--id", args.id]);
-      if (event.calendar) {
-        const allowed = await isCalendarAllowed(event.calendar);
-        if (!allowed) {
-          throw new Error(
-            `This event belongs to calendar '${event.calendar}' which is not in your allowed list.\n` +
-              `Run /apple-pim:configure to add it.`
-          );
-        }
-      }
-
+    case "calendar_delete":
       return await runCLI("calendar-cli", buildCalendarDeleteArgs(args));
-    }
 
     case "calendar_batch_create": {
       if (!args.events || !Array.isArray(args.events) || args.events.length === 0) {
         throw new Error("Events array is required and cannot be empty");
       }
-
-      // Validate all calendars before proceeding
-      for (const event of args.events) {
-        if (event.calendar) {
-          await validateCalendarForWrite(event.calendar);
-        }
-      }
-
-      // Get default calendar for events without one specified
-      const defaultCalendar = await getDefaultCalendar();
-
-      // Transform events to include default calendar if not specified
-      const eventsWithDefaults = applyDefaultCalendar(
-        args.events,
-        defaultCalendar
-      );
-
       return await runCLI("calendar-cli", [
         "batch-create",
         "--json",
-        JSON.stringify(eventsWithDefaults),
+        JSON.stringify(args.events),
       ]);
     }
 
     // Reminder tools
-    case "reminder_lists": {
-      const result = await runCLI("reminder-cli", ["lists"]);
-      // Filter lists based on config
-      if (result.lists) {
-        result.lists = await filterReminderLists(result.lists);
-      }
-      return result;
-    }
+    case "reminder_lists":
+      return await runCLI("reminder-cli", ["lists"]);
 
     case "reminder_items": {
-      // Validate list filter if specified
-      if (args.list) {
-        const allowed = await isReminderListAllowed(args.list);
-        if (!allowed) {
-          throw new Error(
-            `Reminder list '${args.list}' is not in your allowed list.\n` +
-              `Run /apple-pim:configure to add it.`
-          );
-        }
-      }
-
       cliArgs.push("items");
       if (args.list) cliArgs.push("--list", args.list);
-
       // Pass filter directly to CLI (native filtering + sorting)
       if (args.filter) cliArgs.push("--filter", args.filter);
       // Legacy completed flag (overridden by filter if both set)
       if (!args.filter && args.completed) cliArgs.push("--completed");
       if (args.limit) cliArgs.push("--limit", String(args.limit));
-
-      const result = await runCLI("reminder-cli", cliArgs);
-      // Filter reminders based on config (in case no specific list was requested)
-      if (result.reminders) {
-        result.reminders = await filterReminders(result.reminders);
-      }
-
-      return result;
+      return await runCLI("reminder-cli", cliArgs);
     }
 
-    case "reminder_get": {
-      const result = await runCLI("reminder-cli", ["get", "--id", args.id]);
-      // Check if reminder's list is allowed
-      if (result.list) {
-        const allowed = await isReminderListAllowed(result.list);
-        if (!allowed) {
-          throw new Error(
-            `This reminder belongs to list '${result.list}' which is not in your allowed list.\n` +
-              `Run /apple-pim:configure to add it.`
-          );
-        }
-      }
-      return result;
-    }
+    case "reminder_get":
+      return await runCLI("reminder-cli", ["get", "--id", args.id]);
 
     case "reminder_search": {
-      // Validate list filter if specified
-      if (args.list) {
-        const allowed = await isReminderListAllowed(args.list);
-        if (!allowed) {
-          throw new Error(
-            `Reminder list '${args.list}' is not in your allowed list.\n` +
-              `Run /apple-pim:configure to add it.`
-          );
-        }
-      }
-
       cliArgs.push("search", args.query);
       if (args.list) cliArgs.push("--list", args.list);
       if (args.completed) cliArgs.push("--completed");
       if (args.limit) cliArgs.push("--limit", String(args.limit));
-
-      const result = await runCLI("reminder-cli", cliArgs);
-      // Filter results based on config
-      if (result.reminders) {
-        result.reminders = await filterReminders(result.reminders);
-      }
-      return result;
+      return await runCLI("reminder-cli", cliArgs);
     }
 
-    case "reminder_create": {
-      // Validate target list
-      await validateReminderListForWrite(args.list);
-
-      // Use default list from config if not specified
-      let targetList = args.list;
-      if (!targetList) {
-        targetList = await getDefaultReminderList();
-      }
-
+    case "reminder_create":
       return await runCLI(
         "reminder-cli",
-        buildReminderCreateArgs(args, targetList)
+        buildReminderCreateArgs(args, args.list)
       );
-    }
 
     case "reminder_complete": {
-      // First get the reminder to check its list
-      const reminder = await runCLI("reminder-cli", ["get", "--id", args.id]);
-      if (reminder.list) {
-        const allowed = await isReminderListAllowed(reminder.list);
-        if (!allowed) {
-          throw new Error(
-            `This reminder belongs to list '${reminder.list}' which is not in your allowed list.\n` +
-              `Run /apple-pim:configure to add it.`
-          );
-        }
-      }
-
       cliArgs.push("complete", "--id", args.id);
       if (args.undo) cliArgs.push("--undo");
       return await runCLI("reminder-cli", cliArgs);
     }
 
-    case "reminder_update": {
-      // First get the reminder to check its list
-      const reminder = await runCLI("reminder-cli", ["get", "--id", args.id]);
-      if (reminder.list) {
-        const allowed = await isReminderListAllowed(reminder.list);
-        if (!allowed) {
-          throw new Error(
-            `This reminder belongs to list '${reminder.list}' which is not in your allowed list.\n` +
-              `Run /apple-pim:configure to add it.`
-          );
-        }
-      }
-
+    case "reminder_update":
       return await runCLI("reminder-cli", buildReminderUpdateArgs(args));
-    }
 
-    case "reminder_delete": {
-      // First get the reminder to check its list
-      const reminder = await runCLI("reminder-cli", ["get", "--id", args.id]);
-      if (reminder.list) {
-        const allowed = await isReminderListAllowed(reminder.list);
-        if (!allowed) {
-          throw new Error(
-            `This reminder belongs to list '${reminder.list}' which is not in your allowed list.\n` +
-              `Run /apple-pim:configure to add it.`
-          );
-        }
-      }
-
+    case "reminder_delete":
       return await runCLI("reminder-cli", ["delete", "--id", args.id]);
-    }
 
     case "reminder_batch_create": {
       if (
@@ -1993,27 +1770,10 @@ async function handleTool(name, args) {
       ) {
         throw new Error("Reminders array is required and cannot be empty");
       }
-
-      // Validate all lists before proceeding
-      for (const reminder of args.reminders) {
-        if (reminder.list) {
-          await validateReminderListForWrite(reminder.list);
-        }
-      }
-
-      // Get default list for reminders without one specified
-      const defaultList = await getDefaultReminderList();
-
-      // Transform reminders to include default list if not specified
-      const remindersWithDefaults = applyDefaultReminderList(
-        args.reminders,
-        defaultList
-      );
-
       return await runCLI("reminder-cli", [
         "batch-create",
         "--json",
-        JSON.stringify(remindersWithDefaults),
+        JSON.stringify(args.reminders),
       ]);
     }
 
@@ -2133,16 +1893,6 @@ async function handleTool(name, args) {
       };
 
       for (const domain of domains) {
-        const enabled = await isDomainEnabled(domain.name);
-        if (!enabled) {
-          status[domain.name] = {
-            enabled: false,
-            authorization: "unavailable",
-            message: "Domain disabled in plugin configuration",
-          };
-          continue;
-        }
-
         try {
           const result = await runCLI(domain.cli, ["auth-status"]);
           const auth = result.authorization || "unknown";
@@ -2153,7 +1903,7 @@ async function handleTool(name, args) {
           };
         } catch (err) {
           status[domain.name] = {
-            enabled: true,
+            enabled: false,
             authorization: "error",
             message: err.message,
           };
@@ -2179,16 +1929,6 @@ async function handleTool(name, args) {
         : domains;
 
       for (const domain of toAuthorize) {
-        const enabled = await isDomainEnabled(domain.name);
-        if (!enabled) {
-          results[domain.name] = {
-            success: false,
-            message:
-              "Domain disabled in plugin configuration. Run /apple-pim:configure to enable it.",
-          };
-          continue;
-        }
-
         try {
           // Running the CLI triggers the permission prompt if not yet determined
           await runCLI(domain.cli, domain.args);
@@ -2232,44 +1972,13 @@ async function handleTool(name, args) {
         throw new Error("IDs array is required and cannot be empty");
       }
 
-      // Check list authorization for each reminder before batch operation
-      const allowedCompleteIds = [];
-      const deniedComplete = [];
-      for (const id of args.ids) {
-        try {
-          const reminder = await runCLI("reminder-cli", ["get", "--id", id]);
-          if (reminder.list) {
-            const allowed = await isReminderListAllowed(reminder.list);
-            if (!allowed) {
-              deniedComplete.push({ id, list: reminder.list });
-              continue;
-            }
-          }
-          allowedCompleteIds.push(id);
-        } catch (err) {
-          deniedComplete.push({ id, error: err.message });
-        }
-      }
-
-      if (allowedCompleteIds.length === 0) {
-        throw new Error(
-          `None of the reminders are in allowed lists. Denied: ${JSON.stringify(deniedComplete)}\n` +
-            `Run /apple-pim:configure to update your allowed lists.`
-        );
-      }
-
       const completeArgs = [
         "batch-complete",
         "--json",
-        JSON.stringify(allowedCompleteIds),
+        JSON.stringify(args.ids),
       ];
       if (args.undo) completeArgs.push("--undo");
-      const completeResult = await runCLI("reminder-cli", completeArgs);
-      if (deniedComplete.length > 0) {
-        completeResult.denied = deniedComplete;
-        completeResult.deniedCount = deniedComplete.length;
-      }
-      return completeResult;
+      return await runCLI("reminder-cli", completeArgs);
     }
 
     case "reminder_batch_delete": {
@@ -2277,42 +1986,11 @@ async function handleTool(name, args) {
         throw new Error("IDs array is required and cannot be empty");
       }
 
-      // Check list authorization for each reminder before batch operation
-      const allowedDeleteIds = [];
-      const deniedDelete = [];
-      for (const id of args.ids) {
-        try {
-          const reminder = await runCLI("reminder-cli", ["get", "--id", id]);
-          if (reminder.list) {
-            const allowed = await isReminderListAllowed(reminder.list);
-            if (!allowed) {
-              deniedDelete.push({ id, list: reminder.list });
-              continue;
-            }
-          }
-          allowedDeleteIds.push(id);
-        } catch (err) {
-          deniedDelete.push({ id, error: err.message });
-        }
-      }
-
-      if (allowedDeleteIds.length === 0) {
-        throw new Error(
-          `None of the reminders are in allowed lists. Denied: ${JSON.stringify(deniedDelete)}\n` +
-            `Run /apple-pim:configure to update your allowed lists.`
-        );
-      }
-
-      const deleteResult = await runCLI("reminder-cli", [
+      return await runCLI("reminder-cli", [
         "batch-delete",
         "--json",
-        JSON.stringify(allowedDeleteIds),
+        JSON.stringify(args.ids),
       ]);
-      if (deniedDelete.length > 0) {
-        deleteResult.denied = deniedDelete;
-        deleteResult.deniedCount = deniedDelete.length;
-      }
-      return deleteResult;
     }
 
     // Batch mail operations (native CLI — single JXA call)
@@ -2356,17 +2034,6 @@ async function handleTool(name, args) {
   }
 }
 
-// Map tool name prefix to config domain
-function toolDomain(toolName) {
-  if (toolName.startsWith("calendar_")) return "calendars";
-  if (toolName.startsWith("reminder_")) return "reminders";
-  if (toolName.startsWith("contact_")) return "contacts";
-  if (toolName.startsWith("mail_")) return "mail";
-  // pim_ tools are cross-domain, always available
-  if (toolName.startsWith("pim_")) return null;
-  return null;
-}
-
 // Create and run server
 const server = new Server(
   {
@@ -2381,30 +2048,13 @@ const server = new Server(
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  // Filter out tools whose domain is disabled
-  const enabledTools = [];
-  for (const tool of tools) {
-    const domain = toolDomain(tool.name);
-    if (!domain || (await isDomainEnabled(domain))) {
-      enabledTools.push(tool);
-    }
-  }
-  return { tools: enabledTools };
+  return { tools };
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
-    // Check if tool's domain is enabled
-    const domain = toolDomain(name);
-    if (domain && !(await isDomainEnabled(domain))) {
-      throw new Error(
-        `The ${domain} domain is disabled in your configuration.\n` +
-          `Run /apple-pim:configure to enable it.`
-      );
-    }
-
     const result = await handleTool(name, args || {});
 
     // Apply datamarking to untrusted PIM content fields
