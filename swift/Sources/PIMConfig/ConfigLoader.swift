@@ -30,7 +30,7 @@ public struct ConfigLoader {
     /// Root directory for all PIM config files.
     /// Override with the `APPLE_PIM_CONFIG_DIR` environment variable.
     public static var configDir: URL {
-        if let dir = ProcessInfo.processInfo.environment["APPLE_PIM_CONFIG_DIR"] {
+        if let dir = ProcessInfo.processInfo.environment["APPLE_PIM_CONFIG_DIR"], !dir.isEmpty {
             return URL(fileURLWithPath: dir)
         }
         return FileManager.default.homeDirectoryForCurrentUser
