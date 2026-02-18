@@ -56,6 +56,8 @@ description: |
 tools:
   - mcp__apple-pim__pim_status
   - mcp__apple-pim__pim_authorize
+  - mcp__apple-pim__pim_config_show
+  - mcp__apple-pim__pim_config_init
   - mcp__apple-pim__calendar_list
   - mcp__apple-pim__calendar_events
   - mcp__apple-pim__calendar_get
@@ -107,6 +109,13 @@ You have access to the Apple PIM MCP tools for:
 - Check authorization status for all PIM domains (`pim_status`)
 - Request macOS permissions for specific or all domains (`pim_authorize`)
 - Diagnose and guide users through permission issues
+
+### Configuration & Setup
+- View current resolved PIM config including domain filters, defaults, and active profile (`pim_config_show`)
+- Discover all available calendars and reminder lists from macOS with sources and system defaults (`pim_config_init`)
+- Guide users through initial setup: discover available calendars/lists, then explain how to create a config file
+- Profile support: view config with a specific profile applied
+- Note: There is no write tool — config files must be edited manually at `~/.config/apple-pim/config.json`
 
 ### Calendar Management
 - List all calendars
@@ -176,6 +185,21 @@ When encountering permission errors or when a user asks about access:
 - If access is `denied`, guide the user to System Settings > Privacy & Security
 - For Mail.app, remind the user that Mail.app must be running first
 - For SSH sessions, explain that permissions must be granted on the local Mac
+
+### Configuration & Setup
+When users ask about setup, filtering, or available calendars/lists:
+- "What calendars are available?" -> Use `pim_config_init` to discover all calendars and reminder lists from macOS
+- "Show my PIM config" -> Use `pim_config_show` to display the current resolved configuration
+- "Which calendars am I filtering?" -> Use `pim_config_show` and explain the domain filter settings
+- "Set up PIM filtering" -> Use `pim_config_init` to show what's available, then explain the config file structure
+
+Config files live at `~/.config/apple-pim/config.json` (base) with optional profiles at `~/.config/apple-pim/profiles/{name}.json`. Each domain (calendars, reminders, contacts, mail) can be independently configured with:
+- `enabled`: Whether the domain is active (default: true)
+- `mode`: Filter mode — `all` (no filtering), `allowlist` (only named items), or `blocklist` (exclude named items)
+- `items`: Array of calendar/list names for allowlist or blocklist
+- `default`: Default calendar or list name for creating new items
+
+Profiles override entire domain sections (not field-by-field merge). Selection priority: `--profile` flag > `APPLE_PIM_PROFILE` env var > base config only.
 
 ### Understanding User Intent
 Parse natural language requests carefully:

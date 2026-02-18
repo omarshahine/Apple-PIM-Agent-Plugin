@@ -54,6 +54,85 @@ Each PIM domain requires separate macOS authorization:
 
 Permissions must be granted on the Mac where the CLI runs. SSH does not inherit GUI-level permission dialogs. Grant permissions locally first.
 
+## Configuration (PIMConfig)
+
+The PIM CLIs share a configuration system for filtering calendars/reminder lists and setting defaults.
+
+### Config File Locations
+
+| Path | Purpose |
+|------|---------|
+| `~/.config/apple-pim/config.json` | Base configuration |
+| `~/.config/apple-pim/profiles/{name}.json` | Named profile overrides |
+
+### Example Config
+
+```json
+{
+  "calendars": {
+    "enabled": true,
+    "mode": "blocklist",
+    "items": ["US Holidays", "Birthdays"],
+    "default": "Personal"
+  },
+  "reminders": {
+    "enabled": true,
+    "mode": "allowlist",
+    "items": ["Tasks", "Shopping", "Work"],
+    "default": "Tasks"
+  },
+  "contacts": {
+    "enabled": true
+  },
+  "mail": {
+    "enabled": true
+  }
+}
+```
+
+### Domain Filter Config
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `enabled` | boolean | Whether the domain is active (default: `true`) |
+| `mode` | string | Filter mode: `all`, `allowlist`, or `blocklist` (default: `all`) |
+| `items` | string[] | Calendar/list names for allowlist or blocklist |
+| `default` | string | Default calendar or list for creating new items |
+
+### Filter Modes
+
+| Mode | Behavior |
+|------|----------|
+| `all` | No filtering — all calendars/lists are visible (default) |
+| `allowlist` | Only calendars/lists named in `items` are visible |
+| `blocklist` | All calendars/lists are visible EXCEPT those named in `items` |
+
+### Profiles
+
+Profiles allow different configurations for different contexts (e.g., work vs personal).
+
+**Selection priority**: `--profile` CLI flag > `APPLE_PIM_PROFILE` env var > base config only.
+
+**Merge semantics**: A profile replaces entire domain sections. If a profile defines `calendars`, it completely replaces the base `calendars` config (not a field-by-field merge).
+
+### Discovery Tools
+
+- **`pim_config_show`**: Returns the current resolved config after profile merging. Shows domains, filters, defaults, and paths.
+- **`pim_config_init`**: Lists all available calendars and reminder lists from macOS with their sources and system defaults. Does NOT write any files.
+
+Both accept an optional `profile` parameter.
+
+### Defaults Resolution
+
+When creating events or reminders, the default calendar/list is resolved in this order:
+1. Explicit `--calendar` or `--list` parameter
+2. Config `default` value for the domain
+3. System default calendar/list from EventKit
+
+### Note
+
+There is no MCP tool for writing config files. Users must manually create or edit `~/.config/apple-pim/config.json`. Use `pim_config_init` to discover available calendars/lists, then guide the user on creating the config.
+
 ## Best Practices
 
 ### Calendar Management
@@ -140,6 +219,12 @@ Support flexible input:
 - Check System Settings > Privacy & Security
 - Terminal/app must be granted access
 - Restart app after granting permission
+
+### Configuration Issues
+- **Unexpected filtering**: Use `pim_config_show` to verify the active config. Check if an unexpected profile is being applied via `APPLE_PIM_PROFILE` env var.
+- **Missing calendars/lists**: Use `pim_config_init` to see all available calendars/lists from macOS, then compare with `pim_config_show` to see what's being filtered.
+- **Profile not applying**: Check profile selection priority: `--profile` flag > `APPLE_PIM_PROFILE` env var > base config. Profile files must be at `~/.config/apple-pim/profiles/{name}.json`.
+- **Malformed config**: If `config.json` has invalid JSON, CLIs fall back to default behavior (all domains enabled, no filtering). Use `pim_config_show` to verify — it reports the config path and whether it was loaded successfully.
 
 ### Missing Data
 - Ensure keys are requested when fetching contacts

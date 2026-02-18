@@ -78913,6 +78913,33 @@ var tools = [
       }
     }
   },
+  // PIM configuration tools
+  {
+    name: "pim_config_show",
+    description: "Show the current resolved PIM configuration including domain filters, defaults, and active profile. Returns the effective config after profile merging.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        profile: {
+          type: "string",
+          description: "Profile name to apply (optional). Overrides APPLE_PIM_PROFILE env var."
+        }
+      }
+    }
+  },
+  {
+    name: "pim_config_init",
+    description: "Discover all available calendars and reminder lists from macOS with their sources and system defaults. Useful for initial setup or verifying which calendars/lists exist. Does NOT write any files.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        profile: {
+          type: "string",
+          description: "Profile name to apply (optional). Overrides APPLE_PIM_PROFILE env var."
+        }
+      }
+    }
+  },
   // Batch reminder operations
   {
     name: "reminder_batch_complete",
@@ -79351,6 +79378,18 @@ async function handleTool(name, args) {
       if (args.account)
         batchArgs.push("--account", args.account);
       return await runCLI("mail-cli", batchArgs);
+    }
+    case "pim_config_show": {
+      const configArgs = ["config", "show"];
+      if (args.profile)
+        configArgs.push("--profile", args.profile);
+      return await runCLI("calendar-cli", configArgs);
+    }
+    case "pim_config_init": {
+      const configArgs = ["config", "init"];
+      if (args.profile)
+        configArgs.push("--profile", args.profile);
+      return await runCLI("calendar-cli", configArgs);
     }
     default:
       throw new Error(`Unknown tool: ${name}`);
