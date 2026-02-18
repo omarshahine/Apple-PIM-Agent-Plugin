@@ -63,9 +63,9 @@ public struct ConfigLoader {
             try validateProfileName(profileName)
         } catch {
             FileHandle.standardError.write(
-                Data("[apple-pim] Warning: \(error). Using base config.\n".utf8)
+                Data("[apple-pim] Error: \(error). Refusing to fall back to base config.\n".utf8)
             )
-            return base
+            Foundation.exit(1)
         }
 
         let override = loadProfile(named: profileName)

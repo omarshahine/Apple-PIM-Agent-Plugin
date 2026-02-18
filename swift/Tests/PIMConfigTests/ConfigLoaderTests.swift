@@ -175,7 +175,34 @@ struct ConfigLoaderTests {
         }
     }
 
-    // MARK: - Config dir override
+    @Test("profilePath strips path components as defense-in-depth")
+    func testProfilePathStripsPathComponents() {
+        // Even without validation, profilePath uses lastPathComponent
+        let path = ConfigLoader.profilePath(for: "../../evil")
+        #expect(path.lastPathComponent == "evil.json")
+        #expect(!path.path.contains("../../"))
+    }
+
+    @Test("Profile with only some fields omits others in JSON")
+    func testProfilePartialEncoding() throws {
+        let profile = PIMProfileOverride(
+            calendars: DomainFilterConfig(enabled: true, mode: .allowlist, items: ["Family"])
+        )
+
+        let data = try JSONEncoder().encode(profile)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        // calendars should be present
+        #expect(json["calendars"] != nil)
+        // reminders should NOT be present (nil in profile)
+        #expect(json["reminders"] == nil)
+    }
+}
+
+// MARK: - Environment-mutating tests (serialized to avoid data races)
+
+@Suite("ConfigLoader - env isolation", .serialized)
+struct ConfigLoaderEnvTests {
 
     @Test("APPLE_PIM_CONFIG_DIR overrides default config directory")
     func testConfigDirEnvOverride() throws {
@@ -203,10 +230,8 @@ struct ConfigLoaderTests {
         #expect(loaded.contacts.enabled == false)
     }
 
-    // MARK: - Fail-closed profile loading
-
-    @Test("Missing explicit profile name causes profilePath to point to nonexistent file")
-    func testMissingProfileReturnsNil() throws {
+    @Test("loadProfile returns nil when profile file does not exist")
+    func testLoadProfileReturnsNilForMissing() throws {
         let tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("pim-test-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
@@ -216,30 +241,9 @@ struct ConfigLoaderTests {
         defer { unsetenv("APPLE_PIM_CONFIG_DIR") }
 
         // No profiles directory exists, so loadProfile should return nil
+        // Note: the exit(1) behavior in load(profile:) for missing profiles
+        // requires subprocess testing and is not covered here.
         let result = ConfigLoader.loadProfile(named: "nonexistent")
         #expect(result == nil)
-    }
-
-    @Test("profilePath strips path components as defense-in-depth")
-    func testProfilePathStripsPathComponents() {
-        // Even without validation, profilePath uses lastPathComponent
-        let path = ConfigLoader.profilePath(for: "../../evil")
-        #expect(path.lastPathComponent == "evil.json")
-        #expect(!path.path.contains("../../"))
-    }
-
-    @Test("Profile with only some fields omits others in JSON")
-    func testProfilePartialEncoding() throws {
-        let profile = PIMProfileOverride(
-            calendars: DomainFilterConfig(enabled: true, mode: .allowlist, items: ["Family"])
-        )
-
-        let data = try JSONEncoder().encode(profile)
-        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-
-        // calendars should be present
-        #expect(json["calendars"] != nil)
-        // reminders should NOT be present (nil in profile)
-        #expect(json["reminders"] == nil)
     }
 }
