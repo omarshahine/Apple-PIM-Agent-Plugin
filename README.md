@@ -80,6 +80,27 @@ cd Apple-PIM-Agent-Plugin
 claude --plugin-dir .
 ```
 
+### Global CLI Installation
+
+Make the CLIs available system-wide so you can run `calendar-cli`, `reminder-cli`, etc. from anywhere:
+
+```bash
+# Build and install symlinks to ~/.local/bin
+./setup.sh --install
+
+# Add to your shell profile (if not already there)
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+
+# Verify
+calendar-cli list
+reminder-cli lists
+contacts-cli groups
+mail-cli accounts
+```
+
+The install creates symlinks, so rebuilding (`swift build -c release`) automatically updates the global commands — no need to reinstall.
+
 ## Configuration
 
 You can optionally restrict which domains and items the plugin can access. This is useful for:
@@ -168,9 +189,14 @@ Config files are stored at `~/.config/apple-pim/`:
 
 ### Profiles
 
-Profiles let you give different agents different access. A profile overrides entire domain sections from the base config — fields not specified in the profile are inherited from the base.
+Profiles let you give different agents different access to your PIM data. Each profile overrides specific domain sections from the base config — fields not in the profile are inherited from the base.
 
-**Profile file** (`~/.config/apple-pim/profiles/work.json`):
+**Profile selection** (in priority order):
+1. `--profile work` CLI flag (on the subcommand)
+2. `APPLE_PIM_PROFILE=work` environment variable
+3. No profile — base config only
+
+**Example profile** (`~/.config/apple-pim/profiles/work.json`):
 
 ```json
 {
@@ -179,14 +205,189 @@ Profiles let you give different agents different access. A profile overrides ent
     "mode": "allowlist",
     "items": ["Work"]
   },
+  "mail": {
+    "enabled": false
+  },
   "default_calendar": "Work"
 }
 ```
 
-**Profile selection** (in priority order):
-1. `--profile work` CLI flag
-2. `APPLE_PIM_PROFILE=work` environment variable
-3. No profile — base config only
+This profile restricts calendar access to just "Work", disables mail entirely, and inherits reminders and contacts settings from the base config.
+
+### Multi-Agent / Multi-Workspace Setup
+
+When running multiple agents (e.g., via [OpenClaw](https://github.com/AnttiHamalaworkclaw), Claude Code teams, or separate workspace sessions), each agent can have its own profile with isolated access to your PIM data. This prevents a travel-planning agent from seeing your work calendar, or a work agent from accessing personal reminders.
+
+#### Step 1: Create the base config
+
+The base config defines the superset of access. All profiles inherit from it.
+
+```bash
+# Auto-discover your calendars and reminder lists
+calendar-cli config init
+```
+
+Then create `~/.config/apple-pim/config.json` with everything enabled:
+
+```json
+{
+  "calendars": {
+    "enabled": true,
+    "mode": "all",
+    "items": []
+  },
+  "reminders": {
+    "enabled": true,
+    "mode": "all",
+    "items": []
+  },
+  "contacts": {
+    "enabled": true,
+    "mode": "all",
+    "items": []
+  },
+  "mail": {
+    "enabled": true
+  },
+  "default_calendar": "Personal",
+  "default_reminder_list": "Reminders"
+}
+```
+
+#### Step 2: Create profiles for each agent
+
+```
+~/.config/apple-pim/profiles/
+├── personal.json     # Personal assistant agent
+├── travel.json       # Travel planning agent
+├── work.json         # Work/productivity agent
+└── family.json       # Family coordination agent
+```
+
+**`personal.json`** — Full personal access, no work calendar:
+```json
+{
+  "calendars": {
+    "enabled": true,
+    "mode": "blocklist",
+    "items": ["Work", "9th Grade Calendar"]
+  },
+  "default_calendar": "Personal"
+}
+```
+
+**`travel.json`** — Only travel-related calendars and reminders:
+```json
+{
+  "calendars": {
+    "enabled": true,
+    "mode": "allowlist",
+    "items": ["Travel", "Flighty", "NetJets Itinerary"]
+  },
+  "reminders": {
+    "enabled": true,
+    "mode": "allowlist",
+    "items": ["Travel"]
+  },
+  "mail": {
+    "enabled": false
+  },
+  "contacts": {
+    "enabled": false
+  },
+  "default_calendar": "Travel",
+  "default_reminder_list": "Travel"
+}
+```
+
+**`work.json`** — Work calendar only, no personal data:
+```json
+{
+  "calendars": {
+    "enabled": true,
+    "mode": "allowlist",
+    "items": ["Work"]
+  },
+  "reminders": {
+    "enabled": true,
+    "mode": "allowlist",
+    "items": ["Work"]
+  },
+  "contacts": {
+    "enabled": true,
+    "mode": "all",
+    "items": []
+  },
+  "mail": {
+    "enabled": false
+  },
+  "default_calendar": "Work",
+  "default_reminder_list": "Work"
+}
+```
+
+#### Step 3: Assign profiles to agents
+
+**Option A: Environment variable** (recommended for multi-agent orchestration)
+
+Set `APPLE_PIM_PROFILE` in each agent's environment. The MCP server and CLIs will pick it up automatically.
+
+```bash
+# In your orchestrator / workspace config
+APPLE_PIM_PROFILE=travel   # for the travel agent workspace
+APPLE_PIM_PROFILE=work     # for the work agent workspace
+APPLE_PIM_PROFILE=personal # for the personal assistant workspace
+```
+
+For OpenClaw or similar multi-workspace tools, set this in each workspace's environment variables or `.env` file.
+
+**Option B: CLI flag** (for direct CLI usage or testing)
+
+```bash
+# Each command specifies its profile
+calendar-cli list --profile travel
+reminder-cli items --profile work
+calendar-cli config show --profile personal
+```
+
+**Option C: Project-level CLAUDE.md** (for Claude Code workspaces)
+
+Add to the workspace's `CLAUDE.md`:
+
+```markdown
+## PIM Configuration
+
+When using Apple PIM tools, always pass `--profile travel` to CLI commands.
+This workspace should only access travel-related calendars and reminders.
+```
+
+#### Step 4: Verify isolation
+
+Confirm each profile sees only its allowed data:
+
+```bash
+# Personal sees everything except Work
+calendar-cli list --profile personal | jq '.calendars[].title'
+
+# Travel sees only travel calendars
+calendar-cli list --profile travel | jq '.calendars[].title'
+
+# Work sees only Work calendar
+calendar-cli list --profile work | jq '.calendars[].title'
+```
+
+#### How profile inheritance works
+
+Profiles use **whole-section replacement**, not field-level merge:
+
+| Base config | Profile | Result |
+|-------------|---------|--------|
+| `calendars: {mode: "all"}` | `calendars: {mode: "allowlist", items: ["Work"]}` | Profile's calendars config used entirely |
+| `reminders: {mode: "allowlist", items: ["A", "B"]}` | *(not specified)* | Base's reminders config inherited |
+| `default_calendar: "Personal"` | `default_calendar: "Work"` | Profile's default used |
+| `mail: {enabled: true}` | `mail: {enabled: false}` | Mail disabled for this profile |
+
+This means if a profile specifies `calendars`, it replaces the *entire* calendars section (mode + items), not just individual fields within it.
 
 ### Domain Enable/Disable
 
@@ -449,16 +650,17 @@ cd swift/.build/release
 ### Using Profiles
 
 ```bash
-# Use a named profile
-./calendar-cli --profile work events --from today --to tomorrow
-./reminder-cli --profile personal items
+# Use a named profile (flag goes on the subcommand)
+calendar-cli list --profile work
+calendar-cli events --profile travel --from today --to tomorrow
+reminder-cli items --profile personal
 
 # Or set via environment variable
 export APPLE_PIM_PROFILE=work
-./calendar-cli events --from today --to tomorrow
+calendar-cli events --from today --to tomorrow
 
 # View effective config for a profile
-./calendar-cli --profile work config show
+calendar-cli config show --profile travel
 ```
 
 ### Rebuilding After Changes
