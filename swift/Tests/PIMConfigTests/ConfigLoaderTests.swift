@@ -195,9 +195,9 @@ struct ConfigLoaderTests {
         setenv("APPLE_PIM_CONFIG_DIR", tmpDir.path, 1)
         defer { unsetenv("APPLE_PIM_CONFIG_DIR") }
 
-        #expect(ConfigLoader.configDir == tmpDir)
-        #expect(ConfigLoader.defaultConfigPath == tmpDir.appendingPathComponent("config.json"))
-        #expect(ConfigLoader.profilesDir == tmpDir.appendingPathComponent("profiles"))
+        #expect(ConfigLoader.configDir.path == tmpDir.path)
+        #expect(ConfigLoader.defaultConfigPath.path == tmpDir.appendingPathComponent("config.json").path)
+        #expect(ConfigLoader.profilesDir.path == tmpDir.appendingPathComponent("profiles").path)
 
         let loaded = ConfigLoader.loadBaseConfig()
         #expect(loaded.contacts.enabled == false)
