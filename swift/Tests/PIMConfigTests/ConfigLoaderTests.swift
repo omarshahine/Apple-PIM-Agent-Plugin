@@ -175,6 +175,51 @@ struct ConfigLoaderTests {
         }
     }
 
+    // MARK: - Config dir override
+
+    @Test("APPLE_PIM_CONFIG_DIR overrides default config directory")
+    func testConfigDirEnvOverride() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pim-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        // Write a config with contacts disabled so we can detect it was loaded
+        let config = PIMConfiguration(
+            contacts: DomainFilterConfig(enabled: false)
+        )
+        let data = try JSONEncoder().encode(config)
+        try data.write(to: tmpDir.appendingPathComponent("config.json"))
+
+        // setenv so ConfigLoader picks it up
+        setenv("APPLE_PIM_CONFIG_DIR", tmpDir.path, 1)
+        defer { unsetenv("APPLE_PIM_CONFIG_DIR") }
+
+        #expect(ConfigLoader.configDir == tmpDir)
+        #expect(ConfigLoader.defaultConfigPath == tmpDir.appendingPathComponent("config.json"))
+        #expect(ConfigLoader.profilesDir == tmpDir.appendingPathComponent("profiles"))
+
+        let loaded = ConfigLoader.loadBaseConfig()
+        #expect(loaded.contacts.enabled == false)
+    }
+
+    // MARK: - Fail-closed profile loading
+
+    @Test("Missing explicit profile name causes profilePath to point to nonexistent file")
+    func testMissingProfileReturnsNil() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pim-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        setenv("APPLE_PIM_CONFIG_DIR", tmpDir.path, 1)
+        defer { unsetenv("APPLE_PIM_CONFIG_DIR") }
+
+        // No profiles directory exists, so loadProfile should return nil
+        let result = ConfigLoader.loadProfile(named: "nonexistent")
+        #expect(result == nil)
+    }
+
     @Test("profilePath strips path components as defense-in-depth")
     func testProfilePathStripsPathComponents() {
         // Even without validation, profilePath uses lastPathComponent
