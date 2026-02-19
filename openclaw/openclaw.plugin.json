@@ -1,0 +1,31 @@
+{
+  "id": "apple-pim-cli",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "binDir": {
+        "type": "string",
+        "description": "Path to Swift CLI binaries directory"
+      },
+      "profile": {
+        "type": "string",
+        "description": "Default PIM config profile name"
+      },
+      "configDir": {
+        "type": "string",
+        "description": "Default PIM config directory"
+      }
+    }
+  },
+  "uiHints": {
+    "binDir": {
+      "label": "CLI Binary Directory"
+    },
+    "profile": {
+      "label": "PIM Profile"
+    },
+    "configDir": {
+      "label": "Config Directory"
+    }
+  }
+}

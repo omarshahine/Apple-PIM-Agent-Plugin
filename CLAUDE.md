@@ -1,6 +1,6 @@
 # Apple PIM Plugin
 
-Claude Code plugin that exposes macOS PIM (Personal Information Management) data — calendars, reminders, contacts, and Mail.app — via MCP tools. Built as a thin Node.js MCP server that delegates to native Swift CLIs using EventKit, Contacts framework, and JXA.
+macOS PIM (Personal Information Management) tools for Calendar, Reminders, Contacts, and Mail.app. Works with Claude Code (via MCP) and OpenClaw (via native tool registration). Both adapters share a common `lib/` layer that delegates to native Swift CLIs using EventKit, Contacts framework, and JXA.
 
 ## Quick Commands
 
@@ -22,13 +22,15 @@ npm run build
 
 ## Architecture
 
-The MCP server is a thin pass-through that maps tool schemas to CLI arguments. All access control, filtering, and default resolution is handled by the Swift CLIs via the shared `PIMConfig` library:
+Handler logic, schemas, and sanitization live in `lib/` (shared). The MCP server and OpenClaw plugin are thin adapters. All access control, filtering, and default resolution is handled by the Swift CLIs via the shared `PIMConfig` library:
 
 ```
-Claude Code ←stdio→ mcp-server/server.js ←spawn→ swift/Sources/*CLI (EventKit / Contacts / JXA)
-                                                        ↑
-                                                   PIMConfig library
-                                              (~/.config/apple-pim/)
+Claude Code  <--MCP-->  mcp-server/server.js  ---+
+                                                  +--> lib/ (handlers, schemas, sanitize)
+OpenClaw  <--tools-->  openclaw/src/index.ts  ---+           |
+                                                        Swift CLIs (EventKit / Contacts / JXA)
+                                                             |
+                                                        PIMConfig (~/.config/apple-pim/)
 ```
 
 Each Swift CLI is a standalone binary that reads from macOS frameworks, validates access via PIMConfig, and writes JSON to stdout.
@@ -37,13 +39,17 @@ Each Swift CLI is a standalone binary that reads from macOS frameworks, validate
 
 | Path | Purpose |
 |------|---------|
+| `lib/` | Shared handler logic, schemas, sanitize (used by both MCP and OpenClaw) |
+| `lib/handlers/` | Domain handlers: calendar, reminder, contact, mail, apple-pim |
 | `swift/Sources/PIMConfig` | Shared config library (filtering, profiles, validation) |
 | `swift/Sources/CalendarCLI` | EventKit calendar CLI |
 | `swift/Sources/ReminderCLI` | EventKit reminders CLI |
 | `swift/Sources/ContactsCLI` | Contacts framework CLI |
 | `swift/Sources/MailCLI` | Mail.app JXA-based CLI |
-| `mcp-server/server.js` | MCP tool schema and CLI argument mapping layer |
+| `mcp-server/server.js` | MCP adapter (imports lib/, thin pass-through) |
 | `mcp-server/dist/server.js` | Bundled server artifact (rebuild after source changes) |
+| `openclaw/` | OpenClaw plugin package (NPM: apple-pim-cli) |
+| `openclaw/src/index.ts` | OpenClaw tool registration with per-call isolation |
 | `.github/workflows/tests.yml` | CI checks for Node and Swift test jobs |
 
 ## Configuration (PIMConfig)
@@ -54,7 +60,8 @@ Each Swift CLI is a standalone binary that reads from macOS frameworks, validate
 - **Fail-closed profiles:** If a profile is explicitly requested (via `--profile` or `APPLE_PIM_PROFILE`) but the file doesn't exist, the CLI exits with an error instead of falling back to the base config.
 - Profile overrides replace entire domain sections (not field-by-field merge).
 - The MCP server does NOT do any config filtering — it passes `--profile` to CLIs when set.
-- **Direct CLI usage (OpenClaw):** `APPLE_PIM_CONFIG_DIR` overrides the config root directory; `APPLE_PIM_PROFILE` selects a profile. These are for frameworks that invoke the Swift CLIs directly — not used by the Claude Code plugin. See [`docs/multi-agent-setup.md`](docs/multi-agent-setup.md).
+- **OpenClaw plugin** (`openclaw/`): Registers tools that spawn CLIs directly (no MCP). Supports per-call `configDir`/`profile` parameters for multi-agent workspace isolation. See [`docs/multi-agent-setup.md`](docs/multi-agent-setup.md).
+- **Direct CLI usage:** `APPLE_PIM_CONFIG_DIR` overrides the config root directory; `APPLE_PIM_PROFILE` selects a profile.
 
 ## Testing Notes
 
@@ -80,8 +87,10 @@ Each Swift CLI is a standalone binary that reads from macOS frameworks, validate
 
 ## Gotchas
 
-- `mcp-server/dist/server.js` is generated; rebuild it after MCP server source changes.
+- `mcp-server/dist/server.js` is generated; rebuild it after editing `lib/` or `mcp-server/` source files.
+- OpenClaw loads TypeScript directly — no build step needed after editing `openclaw/` or `lib/`.
 - Mail features depend on Mail.app being open and Automation permissions being granted.
+- `lib/` has shared deps (`mailparser`, `turndown`) installed at the repo root `package.json`. Run `npm install` at root after cloning.
 ## Claude Code GitHub Actions
 
 This repo uses Claude Code GitHub Actions for PR automation:

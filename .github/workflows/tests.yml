@@ -23,6 +23,9 @@ jobs:
           cache: npm
           cache-dependency-path: mcp-server/package.json
 
+      - name: Install root dependencies
+        run: npm install --prefix ..
+
       - name: Install dependencies
         run: npm install
 
