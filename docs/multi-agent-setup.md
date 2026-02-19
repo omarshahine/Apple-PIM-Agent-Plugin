@@ -28,14 +28,16 @@ A typical multi-agent workspace looks like this:
 │   └── bin/
 │       ├── calendar-cli          # wrapper script
 │       ├── reminder-cli
-│       └── contacts-cli
+│       ├── contacts-cli
+│       └── mail-cli
 ├── agent-b/
 │   ├── apple-pim/
 │   │   └── config.json          # agent-b's base config (different access)
 │   └── bin/
 │       ├── calendar-cli
 │       ├── reminder-cli
-│       └── contacts-cli
+│       ├── contacts-cli
+│       └── mail-cli
 ```
 
 ## Wrapper Script Template
@@ -45,10 +47,10 @@ Each wrapper sets the env var and delegates to the real CLI:
 ```bash
 #!/bin/bash
 export APPLE_PIM_CONFIG_DIR="$(dirname "$0")/../apple-pim"
-exec ~/GitHub/Apple-PIM-Agent-Plugin/swift/.build/release/calendar-cli "$@"
+exec /path/to/Apple-PIM-Agent-Plugin/swift/.build/release/calendar-cli "$@"  # Replace with your build path
 ```
 
-Create one per CLI (`calendar-cli`, `reminder-cli`, `contacts-cli`), replacing the binary name in the `exec` line.
+Create one per CLI (`calendar-cli`, `reminder-cli`, `contacts-cli`, `mail-cli`), replacing the binary name in the `exec` line. Note: `mail-cli` also requires Automation permissions for Mail.app granted separately in System Settings.
 
 ## Config Examples
 
@@ -82,4 +84,4 @@ Create one per CLI (`calendar-cli`, `reminder-cli`, `contacts-cli`), replacing t
 
 ## Common Mistake
 
-> **This uses base configs, not profiles.** There is no `profiles/` directory involved in workspace isolation. Each agent's `APPLE_PIM_CONFIG_DIR` points to a directory containing a plain `config.json` — that's the base config for that agent. Profiles (`~/.config/apple-pim/profiles/*.json`) are a separate optional feature for switching access within a single config root.
+> **This uses base configs, not profiles.** There is no `profiles/` directory involved in workspace isolation. Each agent's `APPLE_PIM_CONFIG_DIR` points to a directory containing a plain `config.json` — that's the base config for that agent. Profiles are a separate, optional layer for switching access within a config root — independent of which root `APPLE_PIM_CONFIG_DIR` points to.
