@@ -1,12 +1,12 @@
 {
   "name": "apple-pim-mcp",
-  "version": "2.5.0",
+  "version": "2.5.1",
   "description": "MCP server for Apple PIM (Calendar, Reminders, Contacts, Mail)",
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
     "start": "node dist/server.js",
-    "build": "esbuild server.js --bundle --platform=node --target=node18 --format=esm --outfile=dist/server.js --external:child_process --external:fs --external:path --external:url",
+    "build": "node build.mjs",
     "test": "vitest run",
     "prepublish": "npm run build"
   },
