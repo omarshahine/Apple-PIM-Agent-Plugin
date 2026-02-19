@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMailGetResult, markdownFromEmailSource } from "../mail-format.js";
+import { formatMailGetResult, markdownFromEmailSource } from "../../lib/mail-format.js";
 
 const multipartMessage = `From: sender@example.com
 To: user@example.com

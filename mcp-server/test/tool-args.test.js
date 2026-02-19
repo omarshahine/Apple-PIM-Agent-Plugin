@@ -7,7 +7,7 @@ import {
   buildContactUpdateArgs,
   buildReminderCreateArgs,
   buildReminderUpdateArgs,
-} from "../tool-args.js";
+} from "../../lib/tool-args.js";
 
 describe("buildCalendarDeleteArgs", () => {
   it("uses safe single-occurrence delete by default", () => {
