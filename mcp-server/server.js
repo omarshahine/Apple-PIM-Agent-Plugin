@@ -891,7 +891,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // Apply datamarking to untrusted PIM content fields
     const markedResult = markToolResult(result, name);
-    const preamble = getDatamarkingPreamble();
+    const preamble = getDatamarkingPreamble(name);
 
     return {
       content: [
