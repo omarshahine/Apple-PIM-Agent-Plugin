@@ -77137,8 +77137,6 @@ function untrustedEnd(domain2) {
   const label = (domain2 || "PIM").toUpperCase();
   return `[/UNTRUSTED_${label}_DATA_${SESSION_TOKEN}]`;
 }
-var UNTRUSTED_START = untrustedStart("PIM");
-var UNTRUSTED_END = untrustedEnd("PIM");
 var SUSPICIOUS_PATTERNS = [
   // Direct instruction patterns
   /\b(ignore|disregard|forget|override)\b.{0,30}\b(previous|above|prior|all|system|instructions?)\b/i,
@@ -77956,8 +77954,12 @@ async function handleCalendar(args) {
         cliArgs.push("--limit", String(args.limit));
       return await runCLI("calendar-cli", cliArgs);
     case "get":
+      if (!args.id)
+        throw new Error("Event ID is required for calendar get");
       return await runCLI("calendar-cli", ["get", "--id", args.id]);
     case "search":
+      if (!args.query)
+        throw new Error("Search query is required for calendar search");
       cliArgs.push("search", args.query);
       if (args.calendar)
         cliArgs.push("--calendar", args.calendar);
@@ -78007,8 +78009,12 @@ async function handleReminder(args) {
         cliArgs.push("--limit", String(args.limit));
       return await runCLI("reminder-cli", cliArgs);
     case "get":
+      if (!args.id)
+        throw new Error("Reminder ID is required for reminder get");
       return await runCLI("reminder-cli", ["get", "--id", args.id]);
     case "search":
+      if (!args.query)
+        throw new Error("Search query is required for reminder search");
       cliArgs.push("search", args.query);
       if (args.list)
         cliArgs.push("--list", args.list);
@@ -78023,6 +78029,8 @@ async function handleReminder(args) {
         buildReminderCreateArgs(args, args.list)
       );
     case "complete":
+      if (!args.id)
+        throw new Error("Reminder ID is required for reminder complete");
       cliArgs.push("complete", "--id", args.id);
       if (args.undo)
         cliArgs.push("--undo");
@@ -78030,6 +78038,8 @@ async function handleReminder(args) {
     case "update":
       return await runCLI("reminder-cli", buildReminderUpdateArgs(args));
     case "delete":
+      if (!args.id)
+        throw new Error("Reminder ID is required for reminder delete");
       return await runCLI("reminder-cli", ["delete", "--id", args.id]);
     case "batch_create":
       if (!args.reminders || !Array.isArray(args.reminders) || args.reminders.length === 0) {
@@ -78074,17 +78084,23 @@ async function handleContact(args) {
         cliArgs.push("--limit", String(args.limit));
       return await runCLI("contacts-cli", cliArgs);
     case "search":
+      if (!args.query)
+        throw new Error("Search query is required for contact search");
       cliArgs.push("search", args.query);
       if (args.limit)
         cliArgs.push("--limit", String(args.limit));
       return await runCLI("contacts-cli", cliArgs);
     case "get":
+      if (!args.id)
+        throw new Error("Contact ID is required for contact get");
       return await runCLI("contacts-cli", ["get", "--id", args.id]);
     case "create":
       return await runCLI("contacts-cli", buildContactCreateArgs(args));
     case "update":
       return await runCLI("contacts-cli", buildContactUpdateArgs(args));
     case "delete":
+      if (!args.id)
+        throw new Error("Contact ID is required for contact delete");
       return await runCLI("contacts-cli", ["delete", "--id", args.id]);
     default:
       throw new Error(`Unknown contact action: ${args.action}`);
@@ -78112,6 +78128,8 @@ async function handleMail(args) {
         cliArgs.push("--filter", args.filter);
       return await runCLI("mail-cli", cliArgs);
     case "get": {
+      if (!args.id)
+        throw new Error("Message ID is required for mail get");
       const getArgs = ["get", "--id", args.id];
       if (args.mailbox)
         getArgs.push("--mailbox", args.mailbox);
@@ -78123,6 +78141,8 @@ async function handleMail(args) {
       return await formatMailGetResult(result, args.format || "plain");
     }
     case "search":
+      if (!args.query)
+        throw new Error("Search query is required for mail search");
       cliArgs.push("search", args.query);
       if (args.field)
         cliArgs.push("--field", args.field);
@@ -78134,6 +78154,8 @@ async function handleMail(args) {
         cliArgs.push("--limit", String(args.limit));
       return await runCLI("mail-cli", cliArgs);
     case "update": {
+      if (!args.id)
+        throw new Error("Message ID is required for mail update");
       const updateArgs = ["update", "--id", args.id];
       if (args.read !== void 0)
         updateArgs.push("--read", String(args.read));
@@ -78148,6 +78170,10 @@ async function handleMail(args) {
       return await runCLI("mail-cli", updateArgs);
     }
     case "move": {
+      if (!args.id)
+        throw new Error("Message ID is required for mail move");
+      if (!args.toMailbox)
+        throw new Error("Target mailbox (toMailbox) is required for mail move");
       const moveArgs = ["move", "--id", args.id, "--to-mailbox", args.toMailbox];
       if (args.toAccount)
         moveArgs.push("--to-account", args.toAccount);
@@ -78158,6 +78184,8 @@ async function handleMail(args) {
       return await runCLI("mail-cli", moveArgs);
     }
     case "delete": {
+      if (!args.id)
+        throw new Error("Message ID is required for mail delete");
       const delArgs = ["delete", "--id", args.id];
       if (args.mailbox)
         delArgs.push("--mailbox", args.mailbox);
@@ -78263,7 +78291,7 @@ async function handleApplePim(args) {
 3. Enable access for the terminal application
 4. Restart the terminal and try again`
             };
-          } else if (msg.includes("not running")) {
+          } else if (msg.includes("not running") && domain2.name === "mail") {
             results[domain2.name] = {
               success: false,
               message: "Mail.app must be running before authorization can be requested."

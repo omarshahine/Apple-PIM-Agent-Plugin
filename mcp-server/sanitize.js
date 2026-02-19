@@ -26,10 +26,6 @@ function untrustedEnd(domain) {
   return `[/UNTRUSTED_${label}_DATA_${SESSION_TOKEN}]`;
 }
 
-// Legacy exports for preamble (uses generic PIM)
-const UNTRUSTED_START = untrustedStart("PIM");
-const UNTRUSTED_END = untrustedEnd("PIM");
-
 /**
  * Patterns that indicate potential prompt injection in PIM data.
  * These are phrases/patterns that look like instructions to an LLM rather than
@@ -251,6 +247,4 @@ export {
   markUntrustedText,
   detectSuspiciousContent,
   getDatamarkingPreamble,
-  UNTRUSTED_START,
-  UNTRUSTED_END,
 };

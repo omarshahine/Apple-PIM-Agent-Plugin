@@ -505,9 +505,11 @@ async function handleCalendar(args) {
       return await runCLI("calendar-cli", cliArgs);
 
     case "get":
+      if (!args.id) throw new Error("Event ID is required for calendar get");
       return await runCLI("calendar-cli", ["get", "--id", args.id]);
 
     case "search":
+      if (!args.query) throw new Error("Search query is required for calendar search");
       cliArgs.push("search", args.query);
       if (args.calendar) cliArgs.push("--calendar", args.calendar);
       if (args.from) cliArgs.push("--from", args.from);
@@ -558,9 +560,11 @@ async function handleReminder(args) {
       return await runCLI("reminder-cli", cliArgs);
 
     case "get":
+      if (!args.id) throw new Error("Reminder ID is required for reminder get");
       return await runCLI("reminder-cli", ["get", "--id", args.id]);
 
     case "search":
+      if (!args.query) throw new Error("Search query is required for reminder search");
       cliArgs.push("search", args.query);
       if (args.list) cliArgs.push("--list", args.list);
       if (args.completed) cliArgs.push("--completed");
@@ -574,6 +578,7 @@ async function handleReminder(args) {
       );
 
     case "complete":
+      if (!args.id) throw new Error("Reminder ID is required for reminder complete");
       cliArgs.push("complete", "--id", args.id);
       if (args.undo) cliArgs.push("--undo");
       return await runCLI("reminder-cli", cliArgs);
@@ -582,6 +587,7 @@ async function handleReminder(args) {
       return await runCLI("reminder-cli", buildReminderUpdateArgs(args));
 
     case "delete":
+      if (!args.id) throw new Error("Reminder ID is required for reminder delete");
       return await runCLI("reminder-cli", ["delete", "--id", args.id]);
 
     case "batch_create":
@@ -631,11 +637,13 @@ async function handleContact(args) {
       return await runCLI("contacts-cli", cliArgs);
 
     case "search":
+      if (!args.query) throw new Error("Search query is required for contact search");
       cliArgs.push("search", args.query);
       if (args.limit) cliArgs.push("--limit", String(args.limit));
       return await runCLI("contacts-cli", cliArgs);
 
     case "get":
+      if (!args.id) throw new Error("Contact ID is required for contact get");
       return await runCLI("contacts-cli", ["get", "--id", args.id]);
 
     case "create":
@@ -645,6 +653,7 @@ async function handleContact(args) {
       return await runCLI("contacts-cli", buildContactUpdateArgs(args));
 
     case "delete":
+      if (!args.id) throw new Error("Contact ID is required for contact delete");
       return await runCLI("contacts-cli", ["delete", "--id", args.id]);
 
     default:
@@ -673,6 +682,7 @@ async function handleMail(args) {
       return await runCLI("mail-cli", cliArgs);
 
     case "get": {
+      if (!args.id) throw new Error("Message ID is required for mail get");
       const getArgs = ["get", "--id", args.id];
       if (args.mailbox) getArgs.push("--mailbox", args.mailbox);
       if (args.account) getArgs.push("--account", args.account);
@@ -682,6 +692,7 @@ async function handleMail(args) {
     }
 
     case "search":
+      if (!args.query) throw new Error("Search query is required for mail search");
       cliArgs.push("search", args.query);
       if (args.field) cliArgs.push("--field", args.field);
       if (args.mailbox) cliArgs.push("--mailbox", args.mailbox);
@@ -690,6 +701,7 @@ async function handleMail(args) {
       return await runCLI("mail-cli", cliArgs);
 
     case "update": {
+      if (!args.id) throw new Error("Message ID is required for mail update");
       const updateArgs = ["update", "--id", args.id];
       if (args.read !== undefined) updateArgs.push("--read", String(args.read));
       if (args.flagged !== undefined) updateArgs.push("--flagged", String(args.flagged));
@@ -700,6 +712,8 @@ async function handleMail(args) {
     }
 
     case "move": {
+      if (!args.id) throw new Error("Message ID is required for mail move");
+      if (!args.toMailbox) throw new Error("Target mailbox (toMailbox) is required for mail move");
       const moveArgs = ["move", "--id", args.id, "--to-mailbox", args.toMailbox];
       if (args.toAccount) moveArgs.push("--to-account", args.toAccount);
       if (args.mailbox) moveArgs.push("--mailbox", args.mailbox);
@@ -708,6 +722,7 @@ async function handleMail(args) {
     }
 
     case "delete": {
+      if (!args.id) throw new Error("Message ID is required for mail delete");
       const delArgs = ["delete", "--id", args.id];
       if (args.mailbox) delArgs.push("--mailbox", args.mailbox);
       if (args.account) delArgs.push("--account", args.account);
@@ -817,7 +832,7 @@ async function handleApplePim(args) {
                 "3. Enable access for the terminal application\n" +
                 "4. Restart the terminal and try again",
             };
-          } else if (msg.includes("not running")) {
+          } else if (msg.includes("not running") && domain.name === "mail") {
             results[domain.name] = {
               success: false,
               message: "Mail.app must be running before authorization can be requested.",
