@@ -49,13 +49,12 @@ Each Swift CLI is a standalone binary that reads from macOS frameworks, validate
 ## Configuration (PIMConfig)
 
 - Config lives at `~/.config/apple-pim/config.json` (base) with optional profiles at `~/.config/apple-pim/profiles/{name}.json`.
-- **`APPLE_PIM_CONFIG_DIR`** env var overrides the config root directory. When set, all config paths (base config, profiles) resolve relative to this directory instead of `~/.config/apple-pim/`. Useful for workspace-isolated agent configs. See [`docs/multi-agent-setup.md`](docs/multi-agent-setup.md) for the full pattern.
 - All four CLIs share the `PIMConfig` library for allowlist/blocklist filtering, domain enable/disable, and defaults.
 - Profile selection: `--profile` flag > `APPLE_PIM_PROFILE` env var > base config only.
 - **Fail-closed profiles:** If a profile is explicitly requested (via `--profile` or `APPLE_PIM_PROFILE`) but the file doesn't exist, the CLI exits with an error instead of falling back to the base config.
 - Profile overrides replace entire domain sections (not field-by-field merge).
-- The MCP server passes `APPLE_PIM_CONFIG_DIR` and `APPLE_PIM_PROFILE` from its own environment to the Swift CLIs via process inheritance. Set these in plugin.json `env` or the outer shell.
 - The MCP server does NOT do any config filtering — it passes `--profile` to CLIs when set.
+- **Direct CLI usage (OpenClaw):** `APPLE_PIM_CONFIG_DIR` overrides the config root directory; `APPLE_PIM_PROFILE` selects a profile. These are for frameworks that invoke the Swift CLIs directly — not used by the Claude Code plugin. See [`docs/multi-agent-setup.md`](docs/multi-agent-setup.md).
 
 ## Testing Notes
 

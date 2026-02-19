@@ -1,5 +1,7 @@
 # Multi-Agent Workspace Isolation
 
+> **Note:** This pattern is for direct CLI usage (e.g., OpenClaw or custom agent frameworks that invoke the Swift CLIs directly). The Claude Code plugin uses the default `~/.config/apple-pim/` path and does not use `APPLE_PIM_CONFIG_DIR`.
+
 Give each agent its own base config by setting `APPLE_PIM_CONFIG_DIR`. Each agent gets independent access control without needing profiles — just a separate `config.json` per workspace.
 
 ## How It Works
@@ -58,9 +60,12 @@ Create one per CLI (`calendar-cli`, `reminder-cli`, `contacts-cli`, `mail-cli`),
 
 ```json
 {
-  "calendars": { "mode": "all" },
-  "reminders": { "mode": "all" },
-  "contacts": { "mode": "all" }
+  "calendars": { "enabled": true, "mode": "all", "items": [] },
+  "reminders": { "enabled": true, "mode": "all", "items": [] },
+  "contacts": { "enabled": true, "mode": "all", "items": [] },
+  "mail": { "enabled": true },
+  "default_calendar": "Personal",
+  "default_reminder_list": "Reminders"
 }
 ```
 
@@ -69,16 +74,19 @@ Create one per CLI (`calendar-cli`, `reminder-cli`, `contacts-cli`, `mail-cli`),
 ```json
 {
   "calendars": {
+    "enabled": true,
     "mode": "blocklist",
-    "blocked": ["Private", "Family"]
+    "items": ["Private", "Family"]
   },
-  "reminders": { "mode": "all" },
+  "reminders": { "enabled": true, "mode": "all", "items": [] },
   "contacts": {
+    "enabled": true,
     "mode": "allowlist",
-    "allowed": ["Work"]
+    "items": ["Work"]
   },
-  "defaultCalendar": "Work",
-  "defaultReminderList": "Tasks"
+  "mail": { "enabled": false },
+  "default_calendar": "Work",
+  "default_reminder_list": "Tasks"
 }
 ```
 

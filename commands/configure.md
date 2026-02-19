@@ -1,14 +1,12 @@
 ---
 description: Configure which domains, calendars, and reminder lists the plugin can access
 allowed-tools:
-  - mcp__plugin_apple-pim_apple-pim__calendar_list
-  - mcp__plugin_apple-pim_apple-pim__reminder_lists
-  - mcp__plugin_apple-pim_apple-pim__contact_list
   - mcp__apple-pim__pim_status
   - mcp__apple-pim__pim_authorize
+  - mcp__apple-pim__pim_config_show
+  - mcp__apple-pim__pim_config_init
   - Write
   - Read
-  - Glob
   - AskUserQuestion
 ---
 
@@ -18,93 +16,74 @@ Help the user configure which domains, calendars, and reminder lists the apple-p
 
 **Tip:** If you encounter permission errors during configuration, use `/apple-pim:authorize` to check and request macOS permissions first.
 
-## Finding the Plugin Path
+## Configuration Location
 
-First, locate the plugin directory by searching for the plugin.json file:
-```
-Glob: ~/.claude/plugins/**/apple-pim/**/plugin.json
-```
-
-The config file goes in the `data/` folder next to where `plugin.json` is found.
-For example, if plugin.json is at `~/.claude/plugins/cache/<marketplace>/apple-pim/<version>/.claude-plugin/plugin.json`,
-the config file goes at `~/.claude/plugins/cache/<marketplace>/apple-pim/<version>/.claude-plugin/data/config.local.md`.
+The config file is at `~/.config/apple-pim/config.json` (JSON format).
+The Swift CLIs read this file directly via the `PIMConfig` library.
+**Do NOT write to any plugin cache directory or use YAML/markdown format.**
 
 ## Process
 
-1. **Find plugin path** using Glob to locate plugin.json
-2. **Read existing config** from `<plugin_path>/data/config.local.md` if it exists
-3. **Check permissions** with `pim_status` to ensure macOS access is granted
+1. **Check permissions** with `pim_config_show` to see current config and `pim_status` for macOS access
    - If any domain shows `notDetermined`, run `pim_authorize` to trigger prompts
    - If any domain shows `denied`, warn the user and guide to System Settings
+2. **Discover available items** with `pim_config_init` — this lists ALL calendars and reminder lists from macOS
+3. **Read existing config** from `~/.config/apple-pim/config.json` if it exists
 4. **Ask which domains to enable** (Calendars, Reminders, Contacts, Mail) — multi-select
 5. **For enabled domains with filtering** (Calendars, Reminders):
-   - List available items using MCP tools
+   - Use the discovery data from `pim_config_init` (do NOT call `calendar_list` — that returns filtered results)
    - Ask user which to allow
 6. **Set defaults** for new events/reminders
-7. **Write config file** to `<plugin_path>/data/config.local.md`
+7. **Write config file** as JSON to `~/.config/apple-pim/config.json`
 8. **Confirm changes** are effective immediately (no restart needed)
 
 ## Configuration File Format
 
-Write the config file in this exact format:
+Write the config file as JSON to `~/.config/apple-pim/config.json`:
 
-```yaml
----
-calendars:
-  enabled: true
-  mode: allowlist  # allowlist | blocklist | all
-  items:
-    - "Calendar Name 1"
-    - "Calendar Name 2"
-reminders:
-  enabled: true
-  mode: allowlist
-  items:
-    - "List Name 1"
-    - "List Name 2"
-contacts:
-  enabled: true
-  mode: all
-mail:
-  enabled: true
-default_calendar: "Calendar Name"
-default_reminder_list: "List Name"
----
-
-# Apple PIM Configuration
-
-This file controls which domains and items Claude Code can access.
-
-## Domains
-
-Each domain (calendars, reminders, contacts, mail) can be enabled or disabled.
-Set `enabled: false` to completely hide all tools for that domain.
-
-## Filter Modes (Calendars, Reminders, Contacts)
-
-- **allowlist**: Only the listed items are accessible
-- **blocklist**: All items EXCEPT the listed ones are accessible
-- **all**: All items are accessible (default)
-
-## Defaults
-
-The `default_calendar` and `default_reminder_list` settings specify where new
-events and reminders are created when no specific calendar/list is specified.
-
-## Changes
-
-Edit this file to modify access. Changes take effect immediately.
+```json
+{
+  "calendars": {
+    "enabled": true,
+    "mode": "allowlist",
+    "items": ["Calendar Name 1", "Calendar Name 2"]
+  },
+  "reminders": {
+    "enabled": true,
+    "mode": "allowlist",
+    "items": ["List Name 1", "List Name 2"]
+  },
+  "contacts": {
+    "enabled": true,
+    "mode": "all",
+    "items": []
+  },
+  "mail": {
+    "enabled": true
+  },
+  "default_calendar": "Calendar Name",
+  "default_reminder_list": "List Name"
+}
 ```
+
+### Field Reference
+
+- **mode**: `"all"` (no filtering), `"allowlist"` (only listed items), `"blocklist"` (all except listed)
+- **items**: Array of calendar/list names to allow or block (only used when mode is allowlist or blocklist)
+- **enabled**: `true`/`false` to enable/disable an entire domain
+- **default_calendar**: Name of the calendar for new events when none specified
+- **default_reminder_list**: Name of the list for new reminders when none specified
 
 ## Workflow
 
-1. First, read existing config if it exists
-2. **Ask domain enable/disable first** using AskUserQuestion with multi-select:
+1. Call `pim_config_show` and `pim_config_init` in parallel to get current config AND available items
+2. Read `~/.config/apple-pim/config.json` if it exists (for preserving user choices)
+3. **Ask domain enable/disable first** using AskUserQuestion with multi-select:
    - Present all 4 domains: Calendars, Reminders, Contacts, Mail
    - Default to all enabled (or preserve existing settings)
    - This is important for users who have Fastmail MCP and want to disable mail here
-3. For enabled domains that support filtering (calendars, reminders):
-   - Call `calendar_list` and/or `reminder_lists` to get available options
+4. For enabled domains that support filtering (calendars, reminders):
+   - Use the `pim_config_init` results (these show ALL items, unfiltered)
    - **Plan the questions carefully:**
      - AskUserQuestion allows max 4 options per question
      - Calculate how many questions needed: `ceil(item_count / 4)`
@@ -116,9 +95,15 @@ Edit this file to modify access. Changes take effect immediately.
      - Present ALL reminder lists across multiple questions (multi-select)
      - Which calendar should be the default for new events?
      - Which list should be the default for new reminders?
-4. **Verify before writing:** Double-check that user was asked about every calendar and reminder list
-5. Write the configuration file with `enabled` flags for all 4 domains
-6. Display a summary (changes take effect immediately)
+5. **Verify before writing:** Double-check that user was asked about every calendar and reminder list
+6. Write JSON to `~/.config/apple-pim/config.json` using the Write tool
+7. Display a summary (changes take effect immediately — CLIs read config on every invocation)
+
+## Important: Use pim_config_init, NOT calendar_list
+
+- `pim_config_init` returns ALL calendars and reminder lists from macOS (unfiltered) — use this for discovery
+- `calendar_list` returns only calendars allowed by the CURRENT config — do NOT use this for configuration
+- Using `calendar_list` would miss calendars the user previously blocked, making them impossible to re-enable
 
 ## Important: Preventing Missed Items
 
