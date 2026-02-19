@@ -17,6 +17,11 @@ cd "$SCRIPT_DIR/swift"
 swift build -c release
 
 echo ""
+echo "Installing shared dependencies..."
+cd "$SCRIPT_DIR"
+npm install
+
+echo ""
 echo "Installing MCP server dependencies..."
 cd "$SCRIPT_DIR/mcp-server"
 npm install
