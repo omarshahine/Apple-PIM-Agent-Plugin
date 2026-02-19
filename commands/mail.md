@@ -2,16 +2,7 @@
 description: Manage macOS Mail.app - list mailboxes, read messages, search, update flags, move, delete with batch operations
 argument-hint: "[accounts|mailboxes|messages|get|search|update|move|delete] [options]"
 allowed-tools:
-  - mcp__apple-pim__mail_accounts
-  - mcp__apple-pim__mail_mailboxes
-  - mcp__apple-pim__mail_messages
-  - mcp__apple-pim__mail_get
-  - mcp__apple-pim__mail_search
-  - mcp__apple-pim__mail_update
-  - mcp__apple-pim__mail_move
-  - mcp__apple-pim__mail_delete
-  - mcp__apple-pim__mail_batch_update
-  - mcp__apple-pim__mail_batch_delete
+  - mcp__apple-pim__mail
 ---
 
 # Mail Management
@@ -20,53 +11,53 @@ Manage macOS Mail.app messages via JXA (JavaScript for Automation). Mail.app mus
 
 ## Available Operations
 
-When the user runs this command, determine which operation they need and use the appropriate MCP tool:
+When the user runs this command, determine which operation they need and use the `mail` tool with the appropriate action:
 
 ### List Accounts
-Use `mail_accounts` to show all configured mail accounts.
+Use `mail` with action `accounts` to show all configured mail accounts.
 
 ### List Mailboxes
-Use `mail_mailboxes` to list mailboxes with unread and total message counts:
+Use `mail` with action `mailboxes` to list mailboxes with unread and total message counts:
 - Optional: `account` (filter by account name)
 
 ### List Messages
-Use `mail_messages` to list messages in a mailbox:
+Use `mail` with action `messages` to list messages in a mailbox:
 - Default mailbox: INBOX
 - Parameters: `mailbox`, `account`, `limit` (default: 25), `filter` (unread, flagged, all)
 
 ### Get Message
-Use `mail_get` to get a single message with full body content:
+Use `mail` with action `get` to get a single message with full body content:
 - Required: `id` (RFC 2822 message ID)
 - Optional: `mailbox`, `account` (hints for faster lookup)
 - Optional: `format` (`plain` default, or `markdown` for HTML-to-markdown conversion)
 
 ### Search Messages
-Use `mail_search` to find messages by subject, sender, or content:
+Use `mail` with action `search` to find messages by subject, sender, or content:
 - Required: `query` (search term)
 - Optional: `field` (subject, sender, content, all), `mailbox`, `account`, `limit`
 
 ### Update Message
-Use `mail_update` to change message flags:
+Use `mail` with action `update` to change message flags:
 - Required: `id` (message ID)
 - Optional: `read` (true/false), `flagged` (true/false), `junk` (true/false)
 
 ### Batch Update
-Use `mail_batch_update` to update flags on multiple messages at once:
+Use `mail` with action `batch_update` to update flags on multiple messages at once:
 - Required: `ids` (array of message IDs)
 - Optional: `read`, `flagged`, `junk`, `mailbox`, `account`
 - Efficient for triaging: "mark all these as read"
 
 ### Move Message
-Use `mail_move` to move a message to a different mailbox:
+Use `mail` with action `move` to move a message to a different mailbox:
 - Required: `id` (message ID), `toMailbox` (destination)
 - Optional: `toAccount` (destination account)
 
 ### Delete Message
-Use `mail_delete` to delete a single message (moves to Trash):
+Use `mail` with action `delete` to delete a single message (moves to Trash):
 - Required: `id` (message ID)
 
 ### Batch Delete
-Use `mail_batch_delete` to delete multiple messages at once:
+Use `mail` with action `batch_delete` to delete multiple messages at once:
 - Required: `ids` (array of message IDs)
 - Optional: `mailbox`, `account` (hints for faster lookup)
 
@@ -137,20 +128,20 @@ Use `mail_batch_delete` to delete multiple messages at once:
 ## Parsing User Intent
 
 When a user provides natural language, map to the appropriate operation:
-- "Check my mail" -> `mail_messages` with default INBOX
-- "Show unread messages" -> `mail_messages` with filter: unread
-- "How many unread emails do I have?" -> `mail_mailboxes` to show unread counts
-- "Show flagged messages" -> `mail_messages` with filter: flagged
-- "Find emails from John" -> `mail_search` with field: sender
-- "Search for invoices" -> `mail_search` with query "invoice"
-- "Read that email" -> `mail_get` with the message ID
-- "Mark it as read" -> `mail_update` with read: true
-- "Mark all these as read" -> `mail_batch_update` with read: true
-- "Flag this for later" -> `mail_update` with flagged: true
-- "Archive this" -> `mail_move` to Archive mailbox
-- "Delete that email" -> `mail_delete`
-- "Clean up my inbox" -> List messages, then `mail_batch_delete` or `mail_move` as appropriate
-- "Mark these as junk" -> `mail_batch_update` with junk: true
+- "Check my mail" -> `mail` with action `messages` and default INBOX
+- "Show unread messages" -> `mail` with action `messages` and filter: unread
+- "How many unread emails do I have?" -> `mail` with action `mailboxes` to show unread counts
+- "Show flagged messages" -> `mail` with action `messages` and filter: flagged
+- "Find emails from John" -> `mail` with action `search` and field: sender
+- "Search for invoices" -> `mail` with action `search` and query "invoice"
+- "Read that email" -> `mail` with action `get` with the message ID
+- "Mark it as read" -> `mail` with action `update` with read: true
+- "Mark all these as read" -> `mail` with action `batch_update` with read: true
+- "Flag this for later" -> `mail` with action `update` with flagged: true
+- "Archive this" -> `mail` with action `move` to Archive mailbox
+- "Delete that email" -> `mail` with action `delete`
+- "Clean up my inbox" -> List messages, then `mail` with action `batch_delete` or `move` as appropriate
+- "Mark these as junk" -> `mail` with action `batch_update` with junk: true
 
 ## Important Notes
 

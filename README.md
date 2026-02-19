@@ -476,15 +476,15 @@ The `pim-assistant` agent triggers proactively for natural language requests:
 
 ## MCP Tools
 
-The plugin exposes 38 MCP tools:
+The plugin exposes 5 domain-level MCP tools, each with an `action` parameter:
 
-| Category | Tools | Count |
-|----------|-------|-------|
-| **Calendar** | `calendar_list`, `calendar_events`, `calendar_get`, `calendar_search`, `calendar_create`, `calendar_update`, `calendar_delete`, `calendar_batch_create` | 8 |
-| **Reminders** | `reminder_lists`, `reminder_items`, `reminder_get`, `reminder_search`, `reminder_create`, `reminder_complete`, `reminder_update`, `reminder_delete`, `reminder_batch_create`, `reminder_batch_complete`, `reminder_batch_delete` | 11 |
-| **Contacts** | `contact_groups`, `contact_list`, `contact_search`, `contact_get`, `contact_create`, `contact_update`, `contact_delete` (birthday support in create/update/get) | 7 |
-| **Mail** | `mail_accounts`, `mail_mailboxes`, `mail_messages`, `mail_get`, `mail_search`, `mail_update`, `mail_move`, `mail_delete`, `mail_batch_update`, `mail_batch_delete` | 10 |
-| **PIM** | `pim_status`, `pim_authorize` | 2 |
+| Tool | Actions | Domain |
+|------|---------|--------|
+| `calendar` | `list`, `events`, `get`, `search`, `create`, `update`, `delete`, `batch_create` | Calendar events via EventKit |
+| `reminder` | `lists`, `items`, `get`, `search`, `create`, `complete`, `update`, `delete`, `batch_create`, `batch_complete`, `batch_delete` | Reminders via EventKit |
+| `contact` | `groups`, `list`, `search`, `get`, `create`, `update`, `delete` | Contacts framework (birthday support in create/update/get) |
+| `mail` | `accounts`, `mailboxes`, `messages`, `get`, `search`, `update`, `move`, `delete`, `batch_update`, `batch_delete` | Mail.app via JXA |
+| `apple-pim` | `status`, `authorize`, `config_show`, `config_init` | Authorization & configuration |
 
 ### Recurrence Rules
 
@@ -511,7 +511,7 @@ Create recurring events and reminders with the `recurrence` parameter:
 
 ### Batch Operations
 
-Create multiple events or reminders efficiently with `calendar_batch_create` and `reminder_batch_create`:
+Create multiple events or reminders efficiently with `calendar` action `batch_create` and `reminder` action `batch_create`:
 
 ```json
 {

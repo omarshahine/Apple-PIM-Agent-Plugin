@@ -145,19 +145,19 @@ function markToolResult(result, toolName) {
 
   const marked = { ...result };
 
-  // Calendar results
-  if (toolName.startsWith("calendar_")) {
+  // Calendar results (tool name: "calendar")
+  if (toolName === "calendar") {
     if (marked.events && Array.isArray(marked.events)) {
       marked.events = marked.events.map((e) => markItem(e, "event"));
     }
-    // Single event (calendar_get, calendar_create, calendar_update)
+    // Single event (get, create, update)
     if (marked.title !== undefined) {
       return markItem(marked, "event");
     }
   }
 
-  // Reminder results
-  if (toolName.startsWith("reminder_")) {
+  // Reminder results (tool name: "reminder")
+  if (toolName === "reminder") {
     if (marked.reminders && Array.isArray(marked.reminders)) {
       marked.reminders = marked.reminders.map((r) => markItem(r, "reminder"));
     }
@@ -167,8 +167,8 @@ function markToolResult(result, toolName) {
     }
   }
 
-  // Contact results
-  if (toolName.startsWith("contact_")) {
+  // Contact results (tool name: "contact")
+  if (toolName === "contact") {
     if (marked.contacts && Array.isArray(marked.contacts)) {
       marked.contacts = marked.contacts.map((c) => markItem(c, "contact"));
     }
@@ -181,12 +181,12 @@ function markToolResult(result, toolName) {
     }
   }
 
-  // Mail results
-  if (toolName.startsWith("mail_")) {
+  // Mail results (tool name: "mail")
+  if (toolName === "mail") {
     if (marked.messages && Array.isArray(marked.messages)) {
       marked.messages = marked.messages.map((m) => markItem(m, "mail"));
     }
-    // Single message (mail_get)
+    // Single message (get)
     if (marked.subject !== undefined || marked.body !== undefined) {
       return markItem(marked, "mail");
     }

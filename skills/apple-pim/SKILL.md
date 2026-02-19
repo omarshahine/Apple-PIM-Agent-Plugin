@@ -7,7 +7,7 @@ compatibility: |
   macOS only. Requires TCC permissions for Calendars, Reminders, and Contacts via Privacy & Security settings. Mail features require Mail.app running with Automation permission granted.
 metadata:
   author: Omar Shahine
-  version: 2.3.0
+  version: 3.0.0
   mcp-server: apple-pim
 ---
 
@@ -44,7 +44,7 @@ Each PIM domain requires separate macOS authorization:
 
 | State | Meaning | Action |
 |-------|---------|--------|
-| `notDetermined` | Never requested | Run `pim_authorize` to trigger prompt |
+| `notDetermined` | Never requested | Use `apple-pim` with action `authorize` to trigger prompt |
 | `authorized` | Full access granted | Ready to use |
 | `denied` | User refused access | Must enable in System Settings manually |
 | `restricted` | System policy (MDM, parental) | Cannot override |
@@ -117,8 +117,8 @@ Profiles allow different configurations for different contexts (e.g., work vs pe
 
 ### Discovery Tools
 
-- **`pim_config_show`**: Returns the current resolved config after profile merging. Shows domains, filters, defaults, and paths.
-- **`pim_config_init`**: Lists all available calendars and reminder lists from macOS with their sources and system defaults. Does NOT write any files.
+- **`apple-pim` with action `config_show`**: Returns the current resolved config after profile merging. Shows domains, filters, defaults, and paths.
+- **`apple-pim` with action `config_init`**: Lists all available calendars and reminder lists from macOS with their sources and system defaults. Does NOT write any files.
 
 Both accept an optional `profile` parameter.
 
@@ -131,7 +131,7 @@ When creating events or reminders, the default calendar/list is resolved in this
 
 ### Note
 
-There is no MCP tool for writing config files. Users must manually create or edit `~/.config/apple-pim/config.json`. Use `pim_config_init` to discover available calendars/lists, then guide the user on creating the config.
+There is no MCP tool for writing config files. Users must manually create or edit `~/.config/apple-pim/config.json`. Use `apple-pim` with action `config_init` to discover available calendars/lists, then guide the user on creating the config.
 
 ## Best Practices
 
@@ -140,7 +140,7 @@ There is no MCP tool for writing config files. Users must manually create or edi
 2. **Preserve recurrence rules** when updating recurring events
 3. **Handle `.thisEvent` vs `.futureEvents`** span for recurring event edits (see EKSpan below)
 4. **Check `allowsContentModifications`** before attempting writes
-5. **Use `calendar_batch_create`** when creating multiple events for efficiency
+5. **Use `calendar` with action `batch_create`** when creating multiple events for efficiency
 
 ### EKSpan for Recurring Events
 
@@ -170,7 +170,7 @@ When reading events/reminders, the `recurrence` array includes:
 3. **Set completionDate** when marking complete
 4. **Respect priority levels** (1=high is flagged in UI)
 5. **Use dueDateComponents** not absolute dates for better handling
-6. **Use batch operations** (`reminder_batch_complete`, `reminder_batch_delete`) when acting on multiple items
+6. **Use batch operations** (`reminder` with action `batch_complete`, `batch_delete`) when acting on multiple items
 
 ### Contact Management
 1. **Use unified contacts** for consistent view across accounts
@@ -180,14 +180,14 @@ When reading events/reminders, the `recurrence` array includes:
 
 ### Mail Management
 1. **Mail.app must be running** for all operations
-2. **Use batch operations** (`mail_batch_update`, `mail_batch_delete`) for inbox triage
+2. **Use batch operations** (`mail` with action `batch_update`, `batch_delete`) for inbox triage
 3. **Use filters** (unread, flagged) for efficient message listing
 4. **Message IDs are RFC 2822** - stable across mailbox moves
 5. **Use mailbox/account hints** when available for faster lookups
 
 ### Error Handling
-1. **Check authorization first** with `pim_status` when encountering errors
-2. **Use `pim_authorize`** to request access for `notDetermined` domains
+1. **Check authorization first** with `apple-pim` action `status` when encountering errors
+2. **Use `apple-pim` action `authorize`** to request access for `notDetermined` domains
 3. **Guide users to System Settings** for `denied` domains
 4. **Validate dates** before creating events/reminders
 5. **Check for conflicts** when scheduling
@@ -214,17 +214,17 @@ Support flexible input:
 ## Troubleshooting
 
 ### Permission Issues
-- Use `pim_status` to check all domains at once
-- Use `pim_authorize` to trigger permission prompts
+- Use `apple-pim` with action `status` to check all domains at once
+- Use `apple-pim` with action `authorize` to trigger permission prompts
 - Check System Settings > Privacy & Security
 - Terminal/app must be granted access
 - Restart app after granting permission
 
 ### Configuration Issues
-- **Unexpected filtering**: Use `pim_config_show` to verify the active config. Check if an unexpected profile is being applied via `APPLE_PIM_PROFILE` env var.
-- **Missing calendars/lists**: Use `pim_config_init` to see all available calendars/lists from macOS, then compare with `pim_config_show` to see what's being filtered.
+- **Unexpected filtering**: Use `apple-pim` with action `config_show` to verify the active config. Check if an unexpected profile is being applied via `APPLE_PIM_PROFILE` env var.
+- **Missing calendars/lists**: Use `apple-pim` with action `config_init` to see all available calendars/lists from macOS, then compare with action `config_show` to see what's being filtered.
 - **Profile not applying**: Check profile selection priority: `--profile` flag > `APPLE_PIM_PROFILE` env var > base config. Profile files must be at `~/.config/apple-pim/profiles/{name}.json`.
-- **Malformed config**: If `config.json` has invalid JSON, CLIs fall back to default behavior (all domains enabled, no filtering). Use `pim_config_show` to verify — it reports the config path and whether it was loaded successfully.
+- **Malformed config**: If `config.json` has invalid JSON, CLIs fall back to default behavior (all domains enabled, no filtering). Use `apple-pim` with action `config_show` to verify — it reports the config path and whether it was loaded successfully.
 
 ### Missing Data
 - Ensure keys are requested when fetching contacts
