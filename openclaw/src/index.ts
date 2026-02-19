@@ -69,7 +69,6 @@ const HANDLERS: Record<string, (args: ToolArgs, runCLI: (cli: string, args: stri
  * 2. Env var APPLE_PIM_BIN_DIR
  * 3. PATH lookup (which calendar-cli)
  * 4. ~/.local/bin/ (setup.sh --install target)
- * 5. ~/GitHub/Apple-PIM-Agent-Plugin/swift/.build/release/ (dev fallback)
  */
 function resolveBinDir(config?: PluginConfig): string {
   // 1. Plugin config
@@ -144,7 +143,13 @@ export default function activate(context: OpenClawContext): void {
       inputSchema: tool.inputSchema as Record<string, unknown>,
 
       async execute(args: Record<string, unknown>) {
-        const toolArgs = args as unknown as ToolArgs;
+        // Runtime validation — ensure required 'action' field is present and valid
+        if (typeof args.action !== "string" || !args.action) {
+          return {
+            content: JSON.stringify({ success: false, error: "Missing required 'action' parameter" }, null, 2),
+          };
+        }
+        const toolArgs = args as ToolArgs;
 
         // Per-call environment isolation — never mutates process.env
         const envOverrides = resolveEnvOverrides(toolArgs, config);

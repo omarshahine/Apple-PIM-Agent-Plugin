@@ -77283,9 +77283,7 @@ function findSwiftBinDir(extraLocations = []) {
   const locations = [
     ...extraLocations,
     // ~/.local/bin (setup.sh --install target)
-    join(homedir(), ".local", "bin"),
-    // Source repo (fallback for development)
-    join(homedir(), "GitHub", "Apple-PIM-Agent-Plugin", "swift", ".build", "release")
+    join(homedir(), ".local", "bin")
   ];
   for (const loc of locations) {
     if (existsSync(join(loc, "calendar-cli"))) {
@@ -77299,7 +77297,8 @@ function relativeDateString(daysOffset) {
   date4.setDate(date4.getDate() + daysOffset);
   return date4.toISOString().split("T")[0];
 }
-function createCLIRunner(binDir, envOverrides = {}) {
+var DEFAULT_TIMEOUT_MS = 3e4;
+function createCLIRunner(binDir, envOverrides = {}, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   async function runCLI2(cli, args) {
     return new Promise((resolve, reject) => {
       const cliPath = join(binDir, cli);
@@ -77308,6 +77307,12 @@ function createCLIRunner(binDir, envOverrides = {}) {
       });
       let stdout = "";
       let stderr = "";
+      let killed = false;
+      const timer = setTimeout(() => {
+        killed = true;
+        proc.kill("SIGTERM");
+        reject(new Error(`CLI timed out after ${timeoutMs}ms: ${cli} ${args.join(" ")}`));
+      }, timeoutMs);
       proc.stdout.on("data", (data) => {
         stdout += data.toString();
       });
@@ -77315,6 +77320,9 @@ function createCLIRunner(binDir, envOverrides = {}) {
         stderr += data.toString();
       });
       proc.on("close", (code) => {
+        clearTimeout(timer);
+        if (killed)
+          return;
         if (code === 0) {
           try {
             resolve(JSON.parse(stdout));
@@ -77326,6 +77334,9 @@ function createCLIRunner(binDir, envOverrides = {}) {
         }
       });
       proc.on("error", (err) => {
+        clearTimeout(timer);
+        if (killed)
+          return;
         reject(new Error(`Failed to run CLI: ${err.message}`));
       });
     });
@@ -77390,8 +77401,8 @@ var tools = [
         url: { type: "string", description: "URL" },
         recurrence: recurrenceSchema,
         futureEvents: { type: "boolean", description: "Apply to future occurrences (update/delete recurring)" },
-        configDir: { type: "string", description: "Override PIM config directory (for multi-agent isolation)" },
-        profile: { type: "string", description: "Override PIM profile name" },
+        configDir: { type: "string", description: "Override PIM config directory (OpenClaw only \u2014 ignored by MCP server)" },
+        profile: { type: "string", description: "Override PIM profile name (OpenClaw only \u2014 MCP server uses APPLE_PIM_PROFILE env)" },
         events: {
           type: "array",
           description: "Events array (batch_create)",
@@ -77478,8 +77489,8 @@ var tools = [
         },
         recurrence: recurrenceSchema,
         undo: { type: "boolean", description: "Mark as incomplete (complete/batch_complete)" },
-        configDir: { type: "string", description: "Override PIM config directory (for multi-agent isolation)" },
-        profile: { type: "string", description: "Override PIM profile name" },
+        configDir: { type: "string", description: "Override PIM config directory (OpenClaw only \u2014 ignored by MCP server)" },
+        profile: { type: "string", description: "Override PIM profile name (OpenClaw only \u2014 MCP server uses APPLE_PIM_PROFILE env)" },
         reminders: {
           type: "array",
           description: "Reminders array (batch_create)",
@@ -77646,8 +77657,8 @@ var tools = [
           }
         },
         notes: { type: "string" },
-        configDir: { type: "string", description: "Override PIM config directory (for multi-agent isolation)" },
-        profile: { type: "string", description: "Override PIM profile name" }
+        configDir: { type: "string", description: "Override PIM config directory (OpenClaw only \u2014 ignored by MCP server)" },
+        profile: { type: "string", description: "Override PIM profile name (OpenClaw only \u2014 MCP server uses APPLE_PIM_PROFILE env)" }
       },
       required: ["action"]
     }
@@ -77700,8 +77711,8 @@ var tools = [
         junk: { type: "boolean", description: "Set junk status (update/batch_update)" },
         toMailbox: { type: "string", description: "Destination mailbox (move)" },
         toAccount: { type: "string", description: "Destination account (move)" },
-        configDir: { type: "string", description: "Override PIM config directory (for multi-agent isolation)" },
-        profile: { type: "string", description: "Override PIM profile name" }
+        configDir: { type: "string", description: "Override PIM config directory (OpenClaw only \u2014 ignored by MCP server)" },
+        profile: { type: "string", description: "Override PIM profile name (OpenClaw only \u2014 MCP server uses APPLE_PIM_PROFILE env)" }
       },
       required: ["action"]
     }
@@ -77724,9 +77735,9 @@ var tools = [
         },
         profile: {
           type: "string",
-          description: "PIM profile name (config_show/config_init)"
+          description: "PIM profile name (config_show/config_init). In OpenClaw, also used for per-call isolation."
         },
-        configDir: { type: "string", description: "Override PIM config directory (for multi-agent isolation)" }
+        configDir: { type: "string", description: "Override PIM config directory (OpenClaw only \u2014 ignored by MCP server)" }
       },
       required: ["action"]
     }
