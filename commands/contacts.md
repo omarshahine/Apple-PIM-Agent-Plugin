@@ -2,13 +2,7 @@
 description: Manage macOS contacts - list, search, get details, create, update, delete
 argument-hint: "[groups|list|search|get|create|update|delete] [options]"
 allowed-tools:
-  - mcp__apple-pim__contact_groups
-  - mcp__apple-pim__contact_list
-  - mcp__apple-pim__contact_search
-  - mcp__apple-pim__contact_get
-  - mcp__apple-pim__contact_create
-  - mcp__apple-pim__contact_update
-  - mcp__apple-pim__contact_delete
+  - mcp__apple-pim__contact
 ---
 
 # Contact Management
@@ -17,40 +11,40 @@ Manage contacts using the Apple Contacts framework.
 
 ## Available Operations
 
-When the user runs this command, determine which operation they need and use the appropriate MCP tool:
+When the user runs this command, determine which operation they need and use the `contact` tool with the appropriate action:
 
 ### List Groups
-Use `contact_groups` to show all contact groups.
+Use `contact` with action `groups` to show all contact groups.
 
 ### List Contacts
-Use `contact_list` to list contacts:
+Use `contact` with action `list` to list contacts:
 - Optional: `group` (filter by group), `limit`
 - Returns brief contact info (name, primary email, phone)
 
 ### Search Contacts
-Use `contact_search` to find contacts by name, email, or phone:
+Use `contact` with action `search` to find contacts by name, email, or phone:
 - Required: `query` (search term)
 - Optional: `limit`
 - Searches across name, email addresses, and phone numbers
 
 ### Get Contact Details
-Use `contact_get` to get full details for a contact:
+Use `contact` with action `get` to get full details for a contact:
 - Required: `id` (contact ID from list/search)
 - Returns all fields: emails, phones, addresses, birthday, notes, job title, organization, photo
 
 ### Create Contact
-Use `contact_create` to create a new contact:
+Use `contact` with action `create` to create a new contact:
 - Optional: `name` (full name) OR `firstName`/`lastName`
 - Optional: `email`, `phone`, `organization`, `jobTitle`, `notes`, `birthday`
 
 ### Update Contact
-Use `contact_update` to modify an existing contact:
+Use `contact` with action `update` to modify an existing contact:
 - Required: `id` (contact ID)
 - Optional: `firstName`, `lastName`, `email`, `phone`, `organization`, `jobTitle`, `notes`, `birthday`
 - Only specified fields are changed; unspecified fields are preserved
 
 ### Delete Contact
-Use `contact_delete` to remove a contact:
+Use `contact` with action `delete` to remove a contact:
 - Required: `id` (contact ID)
 
 ## Birthday Format
@@ -104,16 +98,16 @@ Use `contact_delete` to remove a contact:
 ## Parsing User Intent
 
 When a user provides natural language, map to the appropriate operation:
-- "Find John's email" -> `contact_search` with query "John", then display email
-- "What's Sarah's phone number?" -> `contact_search` with query "Sarah"
-- "Show me John Smith's contact info" -> `contact_search`, then `contact_get` for full details
-- "Add a contact for the new client" -> `contact_create` (ask for details if needed)
-- "Update my dentist's phone number" -> `contact_search` for "dentist", then `contact_update`
-- "Who works at Acme?" -> `contact_search` with query "Acme"
-- "What groups do I have?" -> `contact_groups`
-- "Show everyone in my Work group" -> `contact_list` with group "Work"
-- "When is John's birthday?" -> `contact_search`, then `contact_get` for birthday field
-- "Delete the duplicate contact" -> `contact_search` to find it, then `contact_delete`
+- "Find John's email" -> `contact` with action `search` and query "John", then display email
+- "What's Sarah's phone number?" -> `contact` with action `search` and query "Sarah"
+- "Show me John Smith's contact info" -> `contact` with action `search`, then action `get` for full details
+- "Add a contact for the new client" -> `contact` with action `create` (ask for details if needed)
+- "Update my dentist's phone number" -> `contact` with action `search` for "dentist", then action `update`
+- "Who works at Acme?" -> `contact` with action `search` and query "Acme"
+- "What groups do I have?" -> `contact` with action `groups`
+- "Show everyone in my Work group" -> `contact` with action `list` with group "Work"
+- "When is John's birthday?" -> `contact` with action `search`, then action `get` for birthday field
+- "Delete the duplicate contact" -> `contact` with action `search` to find it, then action `delete`
 
 ## Notes
 

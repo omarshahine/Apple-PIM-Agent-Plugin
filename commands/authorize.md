@@ -2,8 +2,7 @@
 description: Check and request macOS permissions for calendars, reminders, contacts, and Mail.app automation
 argument-hint: "[status|request] [--domain calendars|reminders|contacts|mail]"
 allowed-tools:
-  - mcp__apple-pim__pim_status
-  - mcp__apple-pim__pim_authorize
+  - mcp__apple-pim__apple-pim
 ---
 
 # Authorize Apple PIM Access
@@ -13,7 +12,7 @@ Check and request macOS privacy permissions for the Apple PIM plugin.
 ## Available Operations
 
 ### Check Authorization Status
-Use `pim_status` to check current permission status for all domains:
+Use `apple-pim` with action `status` to check current permission status for all domains:
 - Returns authorization state for each domain: calendars, reminders, contacts, mail
 - Does **not** trigger any system prompts
 - Useful for diagnosing "access denied" errors
@@ -22,12 +21,12 @@ Status values:
 - `authorized` - Full access granted
 - `denied` - User denied access (must enable in System Settings)
 - `restricted` - System-level restriction (MDM, parental controls)
-- `notDetermined` - Never requested (run `pim_authorize` to prompt)
+- `notDetermined` - Never requested (use action `authorize` to prompt)
 - `writeOnly` - Limited write-only access (upgrade in System Settings)
 - `unavailable` - Domain disabled in plugin config or Mail.app not running
 
 ### Request Authorization
-Use `pim_authorize` to trigger macOS permission prompts:
+Use `apple-pim` with action `authorize` to trigger macOS permission prompts:
 - Optional: `domain` to request access for a specific domain only
 - If no domain specified, requests access for all enabled domains
 - Only triggers prompts for domains with `notDetermined` status
@@ -52,10 +51,10 @@ Use `pim_authorize` to trigger macOS permission prompts:
 
 ## Parsing User Intent
 
-- "Can the plugin access my calendars?" -> `pim_status`
-- "I'm getting permission errors" -> `pim_status` then guide user
-- "Grant access to reminders" -> `pim_authorize` with domain "reminders"
-- "Set up permissions" -> `pim_authorize` for all domains
+- "Can the plugin access my calendars?" -> `apple-pim` with action `status`
+- "I'm getting permission errors" -> `apple-pim` with action `status` then guide user
+- "Grant access to reminders" -> `apple-pim` with action `authorize` and domain "reminders"
+- "Set up permissions" -> `apple-pim` with action `authorize` for all domains
 
 ## Troubleshooting
 
