@@ -37,6 +37,9 @@
     "url": "https://github.com/omarshahine/Apple-PIM-Agent-Plugin.git",
     "directory": "openclaw"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "os": ["darwin"],
   "engines": {
     "node": ">=18"
