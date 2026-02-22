@@ -15,3 +15,4 @@ package-lock.json
 
 # Local configuration
 *.local.md
+notes.md
