@@ -34,14 +34,29 @@ interface ToolArgs {
   [key: string]: unknown;
 }
 
-// OpenClaw tool registration interface
+// OpenClaw tool result content block (pi-agent-core AgentToolResult)
+interface TextContent {
+  type: "text";
+  text: string;
+}
+
+// OpenClaw tool registration interface (pi-agent-core AgentTool convention)
+//
+// OpenClaw's internal tool system uses `parameters` (not `inputSchema`) and a
+// 4-argument `execute` signature that returns `{ content: TextContent[] }`.
+// This differs from the MCP convention used by the MCP server in ../mcp-server/.
 interface OpenClawContext {
   config?: PluginConfig;
   registerTool(definition: {
     name: string;
     description: string;
-    inputSchema: Record<string, unknown>;
-    execute: (args: Record<string, unknown>) => Promise<{ content: string }>;
+    parameters: Record<string, unknown>;
+    execute: (
+      toolCallId: string,
+      params: Record<string, unknown>,
+      signal?: AbortSignal,
+      onUpdate?: (partialResult: unknown) => void
+    ) => Promise<{ content: TextContent[]; details?: unknown }>;
   }): void;
 }
 
@@ -140,16 +155,21 @@ export default function activate(context: OpenClawContext): void {
     context.registerTool({
       name: openclawName,
       description: tool.description,
-      inputSchema: tool.inputSchema as Record<string, unknown>,
+      parameters: tool.inputSchema as Record<string, unknown>,
 
-      async execute(args: Record<string, unknown>) {
+      async execute(
+        _toolCallId: string,
+        params: Record<string, unknown>,
+        _signal?: AbortSignal,
+        _onUpdate?: (partialResult: unknown) => void
+      ) {
         // Runtime validation — ensure required 'action' field is present and valid
-        if (typeof args.action !== "string" || !args.action) {
+        if (typeof params.action !== "string" || !params.action) {
           return {
-            content: JSON.stringify({ success: false, error: "Missing required 'action' parameter" }, null, 2),
+            content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Missing required 'action' parameter" }, null, 2) }],
           };
         }
-        const toolArgs = args as ToolArgs;
+        const toolArgs = params as ToolArgs;
 
         // Per-call environment isolation — never mutates process.env
         const envOverrides = resolveEnvOverrides(toolArgs, config);
@@ -163,12 +183,12 @@ export default function activate(context: OpenClawContext): void {
           const preamble = getDatamarkingPreamble(tool.name);
 
           return {
-            content: `${preamble}\n\n${JSON.stringify(markedResult, null, 2)}`,
+            content: [{ type: "text" as const, text: `${preamble}\n\n${JSON.stringify(markedResult, null, 2)}` }],
           };
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : String(error);
           return {
-            content: JSON.stringify({ success: false, error: message }, null, 2),
+            content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: message }, null, 2) }],
           };
         }
       },
