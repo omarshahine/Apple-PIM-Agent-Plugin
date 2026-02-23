@@ -85,6 +85,18 @@ Each Swift CLI is a standalone binary that reads from macOS frameworks, validate
 - No API keys or secrets in code - use environment variables
 - No phone numbers or PII in examples - use generic placeholders
 
+## Versioning
+
+All three version sources are kept in sync:
+
+| Source | File |
+|--------|------|
+| MCP server | `mcp-server/package.json` |
+| OpenClaw plugin | `openclaw/package.json` |
+| GitHub release | tag (e.g., `v3.0.1`) |
+
+When bumping a version, update **both** `package.json` files to the same value, rebuild `mcp-server/dist/server.js`, and tag the GitHub release with the matching version.
+
 ## NPM Publishing (OpenClaw Plugin)
 
 The OpenClaw plugin is published as `apple-pim-cli` on NPM.
@@ -97,7 +109,7 @@ npm publish
 
 - `prepack` script copies `lib/` from symlink into a real directory; `postpack` restores the symlink
 - `publishConfig.access: "public"` ensures public access by default
-- Bump version in `openclaw/package.json` before publishing
+- Bump version in both `openclaw/package.json` and `mcp-server/package.json` before publishing
 - OpenClaw normalizes scoped names to unscoped ids for `plugins.entries.*` config keys
 - Community plugin listing: PR to `openclaw/openclaw` repo, `docs/plugins/community.md`
 
