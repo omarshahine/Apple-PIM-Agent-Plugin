@@ -4,12 +4,13 @@ When running multiple agents (via OpenClaw, Claude Code teams, or separate works
 
 ## Overview
 
-Two isolation strategies, usable independently or together:
+Three isolation strategies, usable independently or together:
 
 | Strategy | What It Does | Best For |
 |----------|-------------|----------|
 | **Profiles** | Same config root, different access per agent | Agents on the same machine sharing a config directory |
 | **Config Directories** | Completely separate config roots per agent | Hard isolation between agents with no config sharing |
+| **Workspace Convention** | Auto-discovers `{workspaceDir}/apple-pim/config.json` | OpenClaw multi-agent setups with per-agent workspaces |
 
 ## Strategy 1: Profiles
 
@@ -168,6 +169,42 @@ exec /path/to/swift/.build/release/calendar-cli "$@"
             └── family.json
 ```
 
+## Strategy 3: Workspace Convention (OpenClaw)
+
+When using the OpenClaw plugin (v3.1.0+), per-agent config is auto-discovered from the workspace directory. No explicit `configDir` in plugin config, no wrapper scripts — just place `config.json` at the convention path and the factory handles it.
+
+### How It Works
+
+The plugin registers **tool factories** instead of static tools. When OpenClaw resolves tools for an agent, it calls the factory with a `ctx` object containing `workspaceDir`. The factory checks for `{workspaceDir}/apple-pim/config.json` and uses it if found.
+
+### Setup
+
+Place a `config.json` in each agent's workspace:
+
+```
+~/.openclaw/agents/
+├── main-agent/
+│   └── workspace/
+│       └── apple-pim/
+│           └── config.json        # Full access
+├── restricted-agent/
+│   └── workspace/
+│       └── apple-pim/
+│           └── config.json        # Restricted access
+└── family-agent/
+    └── workspace/
+        └── apple-pim/
+            └── config.json        # Family-only access
+```
+
+Each agent automatically picks up its own config — no deny lists, no wrapper scripts, no exec allowlists.
+
+### When to Use
+
+- **Ideal for**: OpenClaw multi-agent setups where each agent already has a workspace directory
+- **Advantage over Strategy 2**: Zero configuration in `openclaw.json` — the workspace convention handles everything
+- **Fallback**: If no workspace config is found, falls through to plugin config, env var, then default
+
 ## Isolation Chain
 
 Each tool call resolves `configDir` and `profile` from this priority chain:
@@ -175,9 +212,10 @@ Each tool call resolves `configDir` and `profile` from this priority chain:
 | Priority | Source | Example |
 |----------|--------|---------|
 | 1 | **Tool parameter** | `apple_pim_calendar({ configDir: "~/agents/a/..." })` |
-| 2 | **Plugin config** | `plugins.entries.apple-pim-cli.config.configDir` |
-| 3 | **Process env** | `APPLE_PIM_CONFIG_DIR` / `APPLE_PIM_PROFILE` |
-| 4 | **Default** | `~/.config/apple-pim/` |
+| 2 | **Workspace convention** | `{workspaceDir}/apple-pim/config.json` (OpenClaw factory, auto-discovered) |
+| 3 | **Plugin config** | `plugins.entries.apple-pim-cli.config.configDir` |
+| 4 | **Process env** | `APPLE_PIM_CONFIG_DIR` / `APPLE_PIM_PROFILE` |
+| 5 | **Default** | `~/.config/apple-pim/` |
 
 The OpenClaw plugin resolves these per-call and passes them as `child_process.spawn()` env vars — `process.env` is never mutated. Two concurrent calls with different `configDir` values are fully isolated.
 

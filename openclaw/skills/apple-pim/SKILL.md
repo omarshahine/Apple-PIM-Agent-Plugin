@@ -7,7 +7,7 @@ compatibility: |
   macOS only. Requires TCC permissions for Calendars, Reminders, and Contacts via Privacy & Security settings. Mail features require Mail.app running with Automation permission granted.
 metadata:
   author: Omar Shahine
-  version: 3.0.0
+  version: 3.1.0
   openclaw:
     os: [darwin]
     requires:
@@ -109,7 +109,9 @@ apple_pim_calendar({ action: "list", configDir: "~/agents/travel/apple-pim" })
 apple_pim_calendar({ action: "list", profile: "work" })
 ```
 
-**Priority chain**: Tool parameter > plugin config > env var > default (`~/.config/apple-pim/`)
+In OpenClaw multi-agent setups (v3.1.0+), config is auto-discovered from `{workspaceDir}/apple-pim/config.json` — no explicit `configDir` or wrapper scripts needed.
+
+**Priority chain**: Tool parameter > workspace convention > plugin config > env var > default (`~/.config/apple-pim/`)
 
 ## Best Practices
 
