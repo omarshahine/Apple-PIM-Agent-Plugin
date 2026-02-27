@@ -119,6 +119,8 @@ npm publish
 - OpenClaw loads TypeScript directly — no build step needed after editing `openclaw/` or `lib/`.
 - Mail features depend on Mail.app being open and Automation permissions being granted.
 - `lib/` has shared deps (`mailparser`, `turndown`) installed at the repo root `package.json`. Run `npm install` at root after cloning.
+- **Plugin cache must include `.claude-plugin/`**: When installed via a marketplace, the `.claude-plugin/plugin.json` (which defines `mcpServers`) must be present in the cache. If missing, the MCP server won't start and tools won't register. Verify: `ls ~/.claude/plugins/cache/*/apple-pim/*/.claude-plugin/plugin.json`
+- **Subagent hallucination risk**: If the MCP server is not running, subagents told they have `mcp__apple-pim__*` tools will silently hallucinate results instead of erroring. The `pim-assistant` agent has a mandatory preflight check. Callers should prefer direct MCP tool calls or the Swift CLI over subagents.
 ## Claude Code GitHub Actions
 
 This repo uses Claude Code GitHub Actions for PR automation:
