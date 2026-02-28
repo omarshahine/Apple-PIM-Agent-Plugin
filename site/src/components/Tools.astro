@@ -1,0 +1,73 @@
+---
+const categories = [
+  {
+    name: 'Calendar',
+    count: 8,
+    tools: [
+      'list', 'events', 'get', 'search', 'create', 'update', 'delete', 'batch_create',
+    ],
+  },
+  {
+    name: 'Reminder',
+    count: 11,
+    tools: [
+      'lists', 'items', 'get', 'search', 'create', 'complete', 'update', 'delete',
+      'batch_create', 'batch_complete', 'batch_delete',
+    ],
+  },
+  {
+    name: 'Contact',
+    count: 7,
+    tools: ['groups', 'list', 'search', 'get', 'create', 'update', 'delete'],
+  },
+  {
+    name: 'Mail',
+    count: 10,
+    tools: [
+      'accounts', 'mailboxes', 'messages', 'get', 'search', 'update', 'move', 'delete',
+      'batch_update', 'batch_delete',
+    ],
+  },
+  {
+    name: 'System',
+    count: 4,
+    tools: ['status', 'authorize', 'config_show', 'config_init'],
+  },
+];
+
+const totalActions = categories.reduce((sum, cat) => sum + cat.count, 0);
+---
+
+<section id="tools" class="py-24 px-4 sm:px-6 lg:px-8">
+  <div class="max-w-4xl mx-auto">
+    <!-- Section heading -->
+    <h2 class="text-3xl sm:text-4xl font-bold text-center mb-4 text-foreground">{totalActions} Actions, 5 Domains</h2>
+    <p class="text-muted text-center mb-16">Full coverage of your Mac's built-in PIM apps</p>
+
+    <!-- Category pill bar -->
+    <div class="flex flex-wrap justify-center gap-2 mb-12">
+      {categories.map((cat) => (
+        <span class="bg-card border border-border rounded-full px-4 py-1.5 text-sm">
+          <span class="text-foreground">{cat.name}</span>{' '}
+          <span class="text-accent font-mono">{cat.count}</span>
+        </span>
+      ))}
+    </div>
+
+    <!-- Tool grid -->
+    <div class="space-y-6">
+      {categories.map((cat) => (
+        <div class="bg-card border border-border rounded-xl p-6" data-animate>
+          <h3 class="font-semibold text-foreground text-lg mb-3">{cat.name}</h3>
+          <div class="flex flex-wrap gap-2">
+            {cat.tools.map((tool) => (
+              <span class="bg-background border border-border rounded-md px-3 py-1 text-sm font-mono text-muted">
+                {tool}
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

@@ -1,0 +1,89 @@
+---
+const steps = [
+  {
+    number: 1,
+    title: 'Claude Code',
+    label: 'Recommended',
+    lines: [
+      { type: 'comment', text: '# Install the plugin' },
+      { type: 'command', text: 'claude plugin marketplace add \\' },
+      { type: 'url', text: '  omarshahine/Apple-PIM-Agent-Plugin' },
+      { type: 'command', text: 'claude plugin install apple-pim@apple-pim' },
+      { type: 'blank', text: '' },
+      { type: 'comment', text: '# Build Swift CLIs' },
+      { type: 'command', text: '~/.claude/plugins/cache/apple-pim/apple-pim/*/setup.sh' },
+      { type: 'blank', text: '' },
+      { type: 'comment', text: '# Restart Claude Code to load the MCP server' },
+    ],
+  },
+  {
+    number: 2,
+    title: 'OpenClaw',
+    label: 'npm Package',
+    lines: [
+      { type: 'comment', text: '# Prerequisites: Swift CLIs must be on PATH' },
+      { type: 'command', text: './setup.sh --install' },
+      { type: 'command', text: 'openclaw plugins install apple-pim-cli' },
+      { type: 'blank', text: '' },
+      { type: 'comment', text: '# Works immediately — no build step needed' },
+    ],
+  },
+  {
+    number: 3,
+    title: 'Direct CLI',
+    label: 'Manual Setup',
+    lines: [
+      { type: 'comment', text: '# Clone and build' },
+      { type: 'command', text: 'git clone' },
+      { type: 'url', text: ' https://github.com/omarshahine/Apple-PIM-Agent-Plugin.git' },
+      { type: 'command', text: 'cd Apple-PIM-Agent-Plugin' },
+      { type: 'command', text: './setup.sh --install' },
+      { type: 'blank', text: '' },
+      { type: 'comment', text: '# Try it out' },
+      { type: 'command', text: 'calendar-cli list' },
+      { type: 'command', text: 'reminder-cli items --filter today' },
+      { type: 'command', text: 'contacts-cli search "John"' },
+    ],
+  },
+];
+---
+
+<section id="quickstart" class="py-24 px-4 sm:px-6 lg:px-8">
+  <div class="max-w-3xl mx-auto">
+    <!-- Section heading -->
+    <h2 class="text-3xl sm:text-4xl font-bold text-center mb-4 text-foreground">Quick Start</h2>
+    <p class="text-muted text-center mb-12">Three ways to get started — pick your preferred setup</p>
+
+    <!-- Setup cards -->
+    <div class="space-y-6">
+      {steps.map((step) => (
+        <div class="bg-card border border-border rounded-xl p-6" data-animate>
+          <!-- Header -->
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-8 h-8 rounded-full bg-accent/10 text-accent flex items-center justify-center text-sm font-bold">
+              {step.number}
+            </div>
+            <span class="font-semibold text-foreground text-lg">{step.title}</span>
+            <span class="text-xs text-muted bg-card border border-border rounded-full px-2 py-0.5">
+              {step.label}
+            </span>
+          </div>
+
+          <!-- Code block -->
+          <div class="bg-[#0d0d0d] border border-border rounded-lg p-4 font-mono text-sm overflow-x-auto">
+            <pre><code>{step.lines.map((line) => {
+              if (line.type === 'blank') return '\n';
+              if (line.type === 'comment') return <span class="text-muted">{line.text}</span>;
+              if (line.type === 'url') return <span class="text-accent">{line.text}</span>;
+              return <span class="text-foreground">{line.text}</span>;
+            }).reduce((acc: (string | HTMLElement)[], el, i) => {
+              if (i > 0) acc.push('\n');
+              acc.push(el);
+              return acc;
+            }, [])}</code></pre>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

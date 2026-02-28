@@ -1,0 +1,58 @@
+---
+import FeatureCard from './FeatureCard.astro';
+---
+
+<section id="features" class="py-24 px-4 sm:px-6 lg:px-8">
+  <div class="max-w-6xl mx-auto">
+    <!-- Section heading -->
+    <h2 class="text-3xl sm:text-4xl font-bold text-center mb-4 text-foreground">Everything You Need</h2>
+    <p class="text-muted text-center mb-16 max-w-2xl mx-auto">
+      Native macOS PIM integration with 5 MCP tools covering Calendar, Reminders, Contacts, Mail, and system management.
+    </p>
+
+    <!-- Bento grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <FeatureCard
+        icon="&#x1F4C5;"
+        title="Calendar Management"
+        description="List calendars, create/read/update/delete events, search by date or title, batch create, and full recurrence rule support."
+        span="wide"
+      />
+      <FeatureCard
+        icon="&#x2705;"
+        title="Reminder Management"
+        description="List reminder lists, create/complete/update/delete reminders, smart filters (overdue, today, week), and batch operations."
+      />
+      <FeatureCard
+        icon="&#x1F464;"
+        title="Contact Management"
+        description="List groups, create/read/update/delete contacts, search by name/email/phone, birthday and relationship support."
+      />
+      <FeatureCard
+        icon="&#x1F4E7;"
+        title="Mail Integration"
+        description="List accounts and mailboxes, read/search/move/delete messages, update flags — all through Mail.app and JXA."
+      />
+      <FeatureCard
+        icon="&#x1F512;"
+        title="Per-Domain Control"
+        description="Enable or disable entire domains independently, allowlist/blocklist calendars and reminder lists. Privacy-first design."
+        span="wide"
+      />
+    </div>
+
+    <!-- Second row -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+      <FeatureCard
+        icon="&#x1F916;"
+        title="Multi-Agent Isolation"
+        description="Per-call config and profile overrides, workspace isolation. Give each agent different PIM access for safe delegation."
+      />
+      <FeatureCard
+        icon="&#x2699;&#xFE0F;"
+        title="Native Swift CLIs"
+        description="Direct system framework access via EventKit, Contacts framework, and JXA. No Electron, no web APIs, just native macOS."
+      />
+    </div>
+  </div>
+</section>

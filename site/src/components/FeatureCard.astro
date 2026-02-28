@@ -1,0 +1,28 @@
+---
+interface Props {
+  icon: string;
+  title: string;
+  description: string;
+  span?: 'default' | 'wide';
+}
+
+const { icon, title, description, span = 'default' } = Astro.props;
+---
+
+<div
+  class:list={[
+    'bg-card border border-border rounded-xl p-6 relative overflow-hidden group hover:border-accent/50 transition-all duration-300',
+    { 'md:col-span-2': span === 'wide' },
+  ]}
+  data-animate
+>
+  <!-- Glow effect on hover -->
+  <div class="absolute inset-0 bg-gradient-to-br from-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+  <!-- Content -->
+  <div class="relative z-10">
+    <div class="text-3xl mb-4">{icon}</div>
+    <h3 class="text-lg font-semibold text-foreground mb-2">{title}</h3>
+    <p class="text-muted text-sm leading-relaxed">{description}</p>
+  </div>
+</div>
