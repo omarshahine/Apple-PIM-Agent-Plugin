@@ -20,6 +20,9 @@ struct MailCLI: AsyncParsableCommand {
             DeleteMessage.self,
             BatchUpdateMessages.self,
             BatchDeleteMessages.self,
+            SendMessage.self,
+            ReplyMessage.self,
+            AuthCheck.self,
             ConfigCommand.self,
         ]
     )
@@ -122,6 +125,68 @@ func escapeForJXA(_ s: String) -> String {
         .replacingOccurrences(of: "\n", with: "\\n")
         .replacingOccurrences(of: "\r", with: "\\r")
         .replacingOccurrences(of: "\t", with: "\\t")
+}
+
+/// Escape a string for safe interpolation into AppleScript string literals (double-quoted).
+func escapeForAppleScript(_ s: String) -> String {
+    return s
+        .replacingOccurrences(of: "\\", with: "\\\\")
+        .replacingOccurrences(of: "\"", with: "\\\"")
+}
+
+/// Run an AppleScript string via osascript (not JXA). Returns stdout as a string.
+func runAppleScript(_ script: String) throws -> String {
+    let proc = Process()
+    proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+    proc.arguments = ["-e", script]
+
+    let stdoutPipe = Pipe()
+    let stderrPipe = Pipe()
+    proc.standardOutput = stdoutPipe
+    proc.standardError = stderrPipe
+
+    try proc.run()
+
+    var stdoutData = Data()
+    var stderrData = Data()
+    let readGroup = DispatchGroup()
+
+    readGroup.enter()
+    DispatchQueue.global().async {
+        stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        readGroup.leave()
+    }
+    readGroup.enter()
+    DispatchQueue.global().async {
+        stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        readGroup.leave()
+    }
+
+    let deadline = DispatchTime.now() + .seconds(30)
+    let waitGroup = DispatchGroup()
+    waitGroup.enter()
+    DispatchQueue.global().async {
+        proc.waitUntilExit()
+        waitGroup.leave()
+    }
+    let result = waitGroup.wait(timeout: deadline)
+    if result == .timedOut {
+        proc.terminate()
+        throw CLIError.timeout("Mail.app did not respond within 30 seconds")
+    }
+
+    readGroup.wait()
+
+    let stderrStr = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+    guard proc.terminationStatus == 0 else {
+        if stderrStr.contains("not allowed to send keystrokes") || stderrStr.contains("not allowed assistive access") {
+            throw CLIError.accessDenied("Grant access in System Settings > Privacy & Security > Automation")
+        }
+        throw CLIError.jxaError(stderrStr.isEmpty ? "AppleScript failed with exit code \(proc.terminationStatus)" : stderrStr)
+    }
+
+    return String(data: stdoutData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 }
 
 func ensureMailRunning() throws {
@@ -1155,6 +1220,524 @@ struct BatchDeleteMessages: AsyncParsableCommand {
             "errors": errors,
             "errorCount": errors.count
         ])
+    }
+}
+
+// MARK: - Send / Reply / Auth Check
+
+struct SendMessage: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "send",
+        abstract: "Send an email through Mail.app"
+    )
+
+    @OptionGroup var pimOptions: PIMOptions
+
+    @Option(name: .long, help: "Recipient email address (repeatable)")
+    var to: [String]
+
+    @Option(name: .long, help: "Email subject")
+    var subject: String
+
+    @Option(name: .long, help: "Plain text body")
+    var body: String
+
+    @Option(name: .long, help: "CC email address (repeatable)")
+    var cc: [String] = []
+
+    @Option(name: .long, help: "BCC email address (repeatable)")
+    var bcc: [String] = []
+
+    @Option(name: .long, help: "Sender email address (selects account)")
+    var from: String?
+
+    func run() async throws {
+        try ensureMailRunning()
+        let config = pimOptions.loadConfig()
+        try checkMailEnabled(config: config)
+
+        guard !to.isEmpty else {
+            throw CLIError.invalidInput("At least one --to recipient is required")
+        }
+
+        // Write body to temp file to avoid AppleScript escaping issues
+        let bodyFile = FileManager.default.temporaryDirectory.appendingPathComponent("mail-send-\(UUID().uuidString).txt")
+        try body.write(to: bodyFile, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: bodyFile) }
+
+        // Build recipient lines
+        var recipientLines = ""
+        for addr in to {
+            recipientLines += "\n        make new to recipient at end of to recipients with properties {address:\"\(escapeForAppleScript(addr))\"}"
+        }
+        for addr in cc {
+            recipientLines += "\n        make new cc recipient at end of cc recipients with properties {address:\"\(escapeForAppleScript(addr))\"}"
+        }
+        for addr in bcc {
+            recipientLines += "\n        make new bcc recipient at end of bcc recipients with properties {address:\"\(escapeForAppleScript(addr))\"}"
+        }
+
+        let escapedSubject = escapeForAppleScript(subject)
+        let senderProp = from.map { ", sender:\"\(escapeForAppleScript($0))\"" } ?? ""
+
+        let script = """
+        set bodyText to read POSIX file "\(bodyFile.path)" as «class utf8»
+        tell application "Mail"
+            set newMessage to make new outgoing message with properties {subject:"\(escapedSubject)", visible:false\(senderProp)}
+            tell newMessage\(recipientLines)
+            end tell
+            set content of newMessage to bodyText
+            send newMessage
+        end tell
+        """
+
+        _ = try runAppleScript(script)
+
+        outputJSON([
+            "success": true,
+            "message": "Email sent successfully",
+            "to": to,
+            "subject": subject
+        ])
+    }
+}
+
+struct ReplyMessage: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "reply",
+        abstract: "Reply to a message in Mail.app"
+    )
+
+    @OptionGroup var pimOptions: PIMOptions
+
+    @Option(name: .long, help: "RFC 2822 message ID of the message to reply to")
+    var id: String
+
+    @Option(name: .long, help: "Reply body text")
+    var body: String
+
+    @Option(name: .long, help: "Mailbox name hint (speeds up lookup)")
+    var mailbox: String?
+
+    @Option(name: .long, help: "Account name hint (speeds up lookup)")
+    var account: String?
+
+    func run() async throws {
+        try ensureMailRunning()
+        let config = pimOptions.loadConfig()
+        try checkMailEnabled(config: config)
+
+        // Step 1: Use JXA to find the message by RFC 2822 messageId and get its numeric Apple Mail ID
+        let findHelper = findMessageJXA(targetId: id, mailbox: mailbox, account: account)
+        let lookupScript = """
+        \(findHelper)
+
+        const msg = findMessage();
+        if (!msg) {
+            JSON.stringify({error: "Message not found: \(escapeForJXA(id))"});
+        } else {
+            JSON.stringify({
+                appleMailId: msg.id(),
+                account: msg.mailbox().account().name(),
+                mailbox: msg.mailbox().name(),
+                subject: msg.subject()
+            });
+        }
+        """
+
+        let lookupResult = try runJXA(lookupScript)
+
+        guard let dict = lookupResult as? [String: Any] else {
+            throw CLIError.jxaError("Unexpected result from message lookup")
+        }
+
+        if let error = dict["error"] as? String {
+            throw CLIError.notFound(error)
+        }
+
+        guard let appleMailId = dict["appleMailId"] as? Int,
+              let accountName = dict["account"] as? String,
+              let mailboxName = dict["mailbox"] as? String else {
+            throw CLIError.jxaError("Could not extract message details for reply")
+        }
+
+        // Step 2: Write body to temp file
+        let bodyFile = FileManager.default.temporaryDirectory.appendingPathComponent("mail-reply-\(UUID().uuidString).txt")
+        try body.write(to: bodyFile, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: bodyFile) }
+
+        // Step 3: Use AppleScript to reply using the numeric ID
+        let escapedAccount = escapeForAppleScript(accountName)
+        let escapedMailbox = escapeForAppleScript(mailboxName)
+
+        let replyScript = """
+        set replyBody to read POSIX file "\(bodyFile.path)" as «class utf8»
+        tell application "Mail"
+            set origMsg to first message of mailbox "\(escapedMailbox)" of account "\(escapedAccount)" whose id is \(appleMailId)
+            set replyMsg to reply origMsg with opening window
+            set content of replyMsg to replyBody & return & return & content of replyMsg
+            send replyMsg
+        end tell
+        """
+
+        _ = try runAppleScript(replyScript)
+
+        outputJSON([
+            "success": true,
+            "message": "Reply sent successfully",
+            "inReplyTo": id,
+            "originalSubject": dict["subject"] ?? ""
+        ])
+    }
+}
+
+// MARK: - Auth Check
+
+/// Trusted sender entry from trusted-senders.json
+private struct TrustedSender: Decodable {
+    let name: String
+    let emails: [String]
+    let expectedDkimDomains: [String]?
+    let requireDkim: Bool?
+    let requireSpf: Bool?
+}
+
+private struct TrustedSendersFile: Decodable {
+    let version: Int?
+    let trustedSenders: [TrustedSender]
+}
+
+/// Parsed DKIM result from Authentication-Results header
+private struct DKIMResult {
+    let result: String  // "pass", "fail", "none", etc.
+    let signingDomain: String
+    let selector: String?
+}
+
+/// Parsed SPF result
+private struct SPFResult {
+    let result: String
+    let mailFrom: String?
+}
+
+/// Parsed Authentication-Results header
+private struct AuthResult {
+    let authservId: String
+    let dkim: [DKIMResult]
+    let spf: SPFResult?
+}
+
+struct AuthCheck: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "auth-check",
+        abstract: "Verify email sender authentication (DKIM + SPF)"
+    )
+
+    @OptionGroup var pimOptions: PIMOptions
+
+    @Option(name: .long, help: "RFC 2822 message ID")
+    var id: String
+
+    @Option(name: .long, help: "Path to trusted-senders.json (default: ~/.config/apple-pim/trusted-senders.json)")
+    var trustedSenders: String?
+
+    @Option(name: .long, help: "Mailbox name hint (speeds up lookup)")
+    var mailbox: String?
+
+    @Option(name: .long, help: "Account name hint (speeds up lookup)")
+    var account: String?
+
+    func run() async throws {
+        try ensureMailRunning()
+        let config = pimOptions.loadConfig()
+        try checkMailEnabled(config: config)
+
+        // Load trusted senders
+        let trustedPath = trustedSenders ?? NSString("~/.config/apple-pim/trusted-senders.json").expandingTildeInPath
+        let trustedFile: TrustedSendersFile
+        do {
+            let data = try Data(contentsOf: URL(fileURLWithPath: trustedPath))
+            trustedFile = try JSONDecoder().decode(TrustedSendersFile.self, from: data)
+        } catch {
+            outputJSON([
+                "verdict": "unknown",
+                "sender": "",
+                "matchedContact": "",
+                "checks": [String: Any](),
+                "warnings": ["Failed to load trusted-senders.json: \(error.localizedDescription)"]
+            ])
+            return
+        }
+
+        // Fetch message with allHeaders via JXA
+        let findHelper = findMessageJXA(targetId: id, mailbox: mailbox, account: account)
+        let script = """
+        \(findHelper)
+
+        const msg = findMessage();
+        if (!msg) {
+            JSON.stringify({error: "Message not found: \(escapeForJXA(id))"});
+        } else {
+            const result = {
+                sender: msg.sender(),
+                subject: msg.subject()
+            };
+            try {
+                result.allHeaders = msg.allHeaders();
+            } catch(e) {}
+            JSON.stringify(result);
+        }
+        """
+
+        let raw = try runJXA(script)
+
+        guard let msgDict = raw as? [String: Any] else {
+            throw CLIError.jxaError("Unexpected result from message lookup")
+        }
+
+        if let error = msgDict["error"] as? String {
+            throw CLIError.notFound(error)
+        }
+
+        // Extract sender email
+        let senderRaw = msgDict["sender"] as? String ?? ""
+        let senderEmail = extractEmailAddress(from: senderRaw)
+
+        guard !senderEmail.isEmpty else {
+            outputJSON([
+                "verdict": "unknown",
+                "sender": "",
+                "matchedContact": "",
+                "checks": [String: Any](),
+                "warnings": ["Could not extract sender email from message"]
+            ])
+            return
+        }
+
+        // Look up trusted sender
+        let senderConfig = trustedFile.trustedSenders.first { sender in
+            sender.emails.contains { $0.lowercased() == senderEmail }
+        }
+
+        guard let senderConfig = senderConfig else {
+            outputJSON([
+                "verdict": "untrusted",
+                "sender": senderEmail,
+                "matchedContact": "",
+                "checks": [String: Any](),
+                "warnings": ["Sender \(senderEmail) not in trusted-senders.json"]
+            ])
+            return
+        }
+
+        // Get allHeaders
+        let headerText = normalizeHeaders(msgDict["allHeaders"])
+
+        guard !headerText.isEmpty else {
+            outputJSON([
+                "verdict": "unknown",
+                "sender": senderEmail,
+                "matchedContact": senderConfig.name,
+                "checks": [String: Any](),
+                "warnings": ["allHeaders field is empty — JXA may not have returned headers"]
+            ])
+            return
+        }
+
+        // Parse Authentication-Results
+        let authResults = parseAuthenticationResults(headerText)
+
+        guard !authResults.isEmpty else {
+            outputJSON([
+                "verdict": "unknown",
+                "sender": senderEmail,
+                "matchedContact": senderConfig.name,
+                "checks": [String: Any](),
+                "warnings": ["No Authentication-Results headers found"]
+            ])
+            return
+        }
+
+        // Evaluate
+        let expectedDkim = senderConfig.expectedDkimDomains ?? []
+        let requireDkim = senderConfig.requireDkim ?? true
+        let requireSpf = senderConfig.requireSpf ?? true
+        var warnings = [String]()
+
+        // Aggregate DKIM results from all AR headers
+        let allDkim = authResults.flatMap { $0.dkim }
+        // Aggregate SPF — pick first non-nil
+        let aggregatedSpf = authResults.compactMap { $0.spf }.first
+
+        let anyDkimPass = allDkim.contains { $0.result == "pass" }
+        let matchingDkim = allDkim.filter { $0.result == "pass" && checkDkimDomain($0.signingDomain, expected: expectedDkim) }
+        let allSigningDomains = allDkim.map { $0.signingDomain }
+
+        // Build DKIM check report
+        var dkimCheck: [String: Any]
+        if let best = matchingDkim.first {
+            dkimCheck = ["result": "pass", "signingDomain": best.signingDomain, "expected": expectedDkim, "match": true, "allSigningDomains": allSigningDomains]
+        } else if anyDkimPass {
+            let firstPass = allDkim.first { $0.result == "pass" }!
+            dkimCheck = ["result": "pass", "signingDomain": firstPass.signingDomain, "expected": expectedDkim, "match": false, "allSigningDomains": allSigningDomains]
+            warnings.append("DKIM passed but no signing domain in \(allSigningDomains) matches expected \(expectedDkim)")
+        } else if let first = allDkim.first {
+            dkimCheck = ["result": first.result, "signingDomain": first.signingDomain, "expected": expectedDkim, "match": false, "allSigningDomains": allSigningDomains]
+        } else {
+            dkimCheck = ["result": "none", "signingDomain": "", "expected": expectedDkim, "match": false, "allSigningDomains": [String]()]
+        }
+
+        // Build SPF check report
+        var spfCheck: [String: Any] = ["result": "none", "match": false]
+        if let spf = aggregatedSpf {
+            spfCheck["result"] = spf.result
+            spfCheck["match"] = spf.result == "pass"
+        }
+
+        // Determine verdict
+        let dkimPass = (dkimCheck["result"] as? String) == "pass"
+        let dkimDomainOk = (dkimCheck["match"] as? Bool) ?? false
+        let spfPass = (spfCheck["result"] as? String) == "pass"
+
+        let verdict: String
+        if dkimPass && dkimDomainOk && spfPass {
+            verdict = "verified"
+        } else if dkimPass && dkimDomainOk && !requireSpf {
+            verdict = "verified"
+            if !spfPass { warnings.append("SPF result is '\(spfCheck["result"] ?? "none")' but not required for this sender") }
+        } else if spfPass && !requireDkim {
+            verdict = "verified"
+            if !dkimPass { warnings.append("DKIM result is '\(dkimCheck["result"] ?? "none")' but not required for this sender") }
+        } else {
+            verdict = "suspicious"
+            if requireDkim && !dkimPass {
+                warnings.append("DKIM required but result is '\(dkimCheck["result"] ?? "none")'")
+            }
+            if requireDkim && dkimPass && !dkimDomainOk {
+                warnings.append("DKIM passed but signing domain mismatch — possible spoofing")
+            }
+            if requireSpf && !spfPass {
+                warnings.append("SPF required but result is '\(spfCheck["result"] ?? "none")'")
+            }
+        }
+
+        outputJSON([
+            "verdict": verdict,
+            "sender": senderEmail,
+            "matchedContact": senderConfig.name,
+            "checks": [
+                "dkim": dkimCheck,
+                "spf": spfCheck
+            ],
+            "warnings": warnings
+        ])
+    }
+
+    // MARK: - Private Helpers
+
+    /// Extract email address from a "Name <email>" or bare email string.
+    private func extractEmailAddress(from raw: String) -> String {
+        // Try "Name <email>" format
+        if let range = raw.range(of: #"<([^>]+)>"#, options: .regularExpression) {
+            let match = raw[range]
+            return String(match.dropFirst().dropLast()).lowercased().trimmingCharacters(in: .whitespaces)
+        }
+        // Bare email
+        if raw.contains("@") {
+            return raw.lowercased().trimmingCharacters(in: .whitespaces)
+        }
+        return ""
+    }
+
+    /// Normalize allHeaders from JXA (could be dict or string) into a single string.
+    private func normalizeHeaders(_ raw: Any?) -> String {
+        if let str = raw as? String, !str.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return str
+        }
+        if let dict = raw as? [String: Any] {
+            var lines = [String]()
+            for (key, value) in dict {
+                if let arr = value as? [String] {
+                    for v in arr {
+                        lines.append("\(key): \(v)")
+                    }
+                } else {
+                    lines.append("\(key): \(value)")
+                }
+            }
+            return lines.joined(separator: "\n")
+        }
+        return ""
+    }
+
+    /// Parse Authentication-Results headers from header text.
+    private func parseAuthenticationResults(_ headerText: String) -> [AuthResult] {
+        var results = [AuthResult]()
+
+        // Unfold continuation lines
+        let unfolded = headerText
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\n[ \t]+", with: " ", options: .regularExpression)
+
+        for line in unfolded.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.lowercased().hasPrefix("authentication-results:") else { continue }
+
+            let value = String(trimmed.dropFirst("authentication-results:".count)).trimmingCharacters(in: .whitespaces)
+            let parts = value.components(separatedBy: ";").map { $0.trimmingCharacters(in: .whitespaces) }
+
+            let authservId = parts.first ?? ""
+            var dkimResults = [DKIMResult]()
+            var spfResult: SPFResult? = nil
+
+            for part in parts.dropFirst() {
+                let trimPart = part.trimmingCharacters(in: .whitespaces)
+                guard !trimPart.isEmpty else { continue }
+
+                // Parse dkim=
+                if let dkimMatch = trimPart.range(of: #"dkim\s*=\s*(\w+)"#, options: [.regularExpression, .caseInsensitive]) {
+                    let resultStr = extractRegexGroup(trimPart, pattern: #"dkim\s*=\s*(\w+)"#)?.lowercased() ?? "none"
+                    let domain = extractRegexGroup(trimPart, pattern: #"header\.d\s*=\s*([\w.\-]+)"#)?.lowercased() ?? ""
+                    let selector = extractRegexGroup(trimPart, pattern: #"header\.s\s*=\s*([\w.\-]+)"#)
+                    dkimResults.append(DKIMResult(result: resultStr, signingDomain: domain, selector: selector))
+                    _ = dkimMatch // suppress unused warning
+                }
+
+                // Parse spf=
+                if let spfMatch = trimPart.range(of: #"spf\s*=\s*(\w+)"#, options: [.regularExpression, .caseInsensitive]) {
+                    let resultStr = extractRegexGroup(trimPart, pattern: #"spf\s*=\s*(\w+)"#)?.lowercased() ?? "none"
+                    let mailFrom = extractRegexGroup(trimPart, pattern: #"smtp\.mailfrom\s*=\s*([\w@.\-]+)"#)?.lowercased()
+                    spfResult = SPFResult(result: resultStr, mailFrom: mailFrom)
+                    _ = spfMatch
+                }
+            }
+
+            results.append(AuthResult(authservId: authservId, dkim: dkimResults, spf: spfResult))
+        }
+
+        return results
+    }
+
+    /// Extract first capture group from a regex pattern.
+    private func extractRegexGroup(_ text: String, pattern: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              match.numberOfRanges > 1,
+              let range = Range(match.range(at: 1), in: text) else {
+            return nil
+        }
+        return String(text[range])
+    }
+
+    /// Check if a signing domain matches any expected domain (exact or subdomain).
+    private func checkDkimDomain(_ signing: String, expected: [String]) -> Bool {
+        for domain in expected {
+            let d = domain.lowercased()
+            if signing == d || signing.hasSuffix("." + d) {
+                return true
+            }
+        }
+        return false
     }
 }
 
