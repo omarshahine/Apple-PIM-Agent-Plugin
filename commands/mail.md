@@ -1,13 +1,13 @@
 ---
-description: Manage macOS Mail.app - list mailboxes, read messages, search, update flags, move, delete with batch operations
-argument-hint: "[accounts|mailboxes|messages|get|search|update|move|delete] [options]"
+description: Manage macOS Mail.app - list, read, search, send, reply, update flags, move, delete, and verify sender authentication
+argument-hint: "[accounts|mailboxes|messages|get|search|send|reply|update|move|delete|auth_check] [options]"
 allowed-tools:
   - mcp__apple-pim__mail
 ---
 
 # Mail Management
 
-Manage macOS Mail.app messages via JXA (JavaScript for Automation). Mail.app must be running.
+Manage macOS Mail.app messages via JXA (JavaScript for Automation) and AppleScript. Mail.app must be running.
 
 ## Available Operations
 
@@ -35,6 +35,26 @@ Use `mail` with action `get` to get a single message with full body content:
 Use `mail` with action `search` to find messages by subject, sender, or content:
 - Required: `query` (search term)
 - Optional: `field` (subject, sender, content, all), `mailbox`, `account`, `limit`
+
+### Send Message
+Use `mail` with action `send` to send an email through Mail.app:
+- Required: `to` (array of recipient addresses), `subject` (email subject), `body` (plain text body)
+- Optional: `cc`, `bcc`, `from` (sender address for account selection)
+- Uses AppleScript to compose and send via Mail.app's outgoing message
+
+### Reply to Message
+Use `mail` with action `reply` to reply to a message with proper threading:
+- Required: `id` (RFC 2822 message ID), `body` (reply text)
+- Optional: `mailbox`, `account` (hints for faster lookup)
+- Uses Mail.app's `reply` verb which sets In-Reply-To, References headers, and quotes the original
+
+### Auth Check (Sender Verification)
+Use `mail` with action `auth_check` to verify sender authentication:
+- Required: `id` (RFC 2822 message ID)
+- Optional: `trustedSenders` (path to trusted-senders.json, default: ~/.config/apple-pim/trusted-senders.json)
+- Optional: `mailbox`, `account` (hints for faster lookup)
+- Parses Authentication-Results headers (DKIM + SPF), cross-references against trusted sender config
+- Returns verdict: `verified`, `suspicious`, `untrusted`, or `unknown`
 
 ### Update Message
 Use `mail` with action `update` to change message flags:
@@ -95,6 +115,24 @@ Use `mail` with action `batch_delete` to delete multiple messages at once:
 /apple-pim:mail search "project update" --mailbox INBOX
 ```
 
+**Send an email:**
+```
+/apple-pim:mail send --to "user@example.com" --subject "Hello" --body "Message text"
+/apple-pim:mail send --to "user@example.com" --cc "other@example.com" --subject "Update" --body "FYI"
+/apple-pim:mail send --to "user@example.com" --from "alias@example.com" --subject "From alias" --body "Sent from specific account"
+```
+
+**Reply to a message:**
+```
+/apple-pim:mail reply --id <message-id> --body "Thanks for the update!"
+```
+
+**Check sender authentication:**
+```
+/apple-pim:mail auth_check --id <message-id>
+/apple-pim:mail auth_check --id <message-id> --trusted-senders ~/.config/apple-pim/trusted-senders.json
+```
+
 **Mark as read:**
 ```
 /apple-pim:mail update --id <message-id> --read true
@@ -142,11 +180,16 @@ When a user provides natural language, map to the appropriate operation:
 - "Delete that email" -> `mail` with action `delete`
 - "Clean up my inbox" -> List messages, then `mail` with action `batch_delete` or `move` as appropriate
 - "Mark these as junk" -> `mail` with action `batch_update` with junk: true
+- "Send an email to..." -> `mail` with action `send` with to, subject, body
+- "Reply to that email" -> `mail` with action `reply` with id and body
+- "Is this email legit?" -> `mail` with action `auth_check` with the message ID
+- "Verify that sender" -> `mail` with action `auth_check` with the message ID
 
 ## Important Notes
 
 - **Mail.app must be running** for all operations. If not running, the CLI returns a clear error.
 - **Message IDs** are RFC 2822 message IDs (stable across mailbox moves).
 - **Batch operations** process messages sequentially but in a single tool call for convenience.
-- **For cloud email operations** (sending, composing, folder management), use the Fastmail MCP instead.
+- **Send/Reply** use AppleScript via Mail.app, sending from whatever account is configured in Mail.app.
+- **Auth Check** requires a `trusted-senders.json` config file mapping senders to expected DKIM domains.
 - This tool accesses Mail.app's local state -- "On My Mac" mailboxes, locally cached messages, and local search.

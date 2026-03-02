@@ -77665,7 +77665,7 @@ var tools = [
   },
   {
     name: "mail",
-    description: "Manage Mail.app messages. Requires Mail.app to be running. Actions: accounts, mailboxes, messages (list), get (full message by ID), search, update (flags), move, delete, batch_update, batch_delete.",
+    description: "Manage Mail.app messages. Requires Mail.app to be running. Actions: accounts, mailboxes, messages (list), get (full message by ID), search, update (flags), move, delete, batch_update, batch_delete, send, reply, auth_check.",
     inputSchema: {
       type: "object",
       properties: {
@@ -77681,11 +77681,14 @@ var tools = [
             "move",
             "delete",
             "batch_update",
-            "batch_delete"
+            "batch_delete",
+            "send",
+            "reply",
+            "auth_check"
           ],
           description: "Operation to perform"
         },
-        id: { type: "string", description: "RFC 2822 message ID (get/update/move/delete)" },
+        id: { type: "string", description: "RFC 2822 message ID (get/update/move/delete/reply/auth_check)" },
         ids: { type: "array", items: { type: "string" }, description: "Message IDs (batch_update/batch_delete)" },
         account: { type: "string", description: "Account name" },
         mailbox: { type: "string", description: "Mailbox name" },
@@ -77711,6 +77714,13 @@ var tools = [
         junk: { type: "boolean", description: "Set junk status (update/batch_update)" },
         toMailbox: { type: "string", description: "Destination mailbox (move)" },
         toAccount: { type: "string", description: "Destination account (move)" },
+        to: { type: "array", items: { type: "string" }, description: "Recipient email addresses (send)" },
+        subject: { type: "string", description: "Email subject (send)" },
+        body: { type: "string", description: "Message body text (send/reply)" },
+        cc: { type: "array", items: { type: "string" }, description: "CC addresses (send)" },
+        bcc: { type: "array", items: { type: "string" }, description: "BCC addresses (send)" },
+        from: { type: "string", description: "Sender email address for account selection (send)" },
+        trustedSenders: { type: "string", description: "Path to trusted-senders.json (auth_check)" },
         configDir: { type: "string", description: "Override PIM config directory (OpenClaw only \u2014 ignored by MCP server)" },
         profile: { type: "string", description: "Override PIM profile name (OpenClaw only \u2014 MCP server uses APPLE_PIM_PROFILE env)" }
       },
@@ -78257,6 +78267,57 @@ async function handleMail(args, runCLI2) {
       if (args.account)
         batchArgs.push("--account", args.account);
       return await runCLI2("mail-cli", batchArgs);
+    }
+    case "send": {
+      if (!args.to)
+        throw new Error("At least one recipient (to) is required for send");
+      if (!args.subject)
+        throw new Error("Subject is required for send");
+      if (!args.body)
+        throw new Error("Body is required for send");
+      const sendArgs = ["send"];
+      const toList = Array.isArray(args.to) ? args.to : [args.to];
+      for (const addr of toList)
+        sendArgs.push("--to", addr);
+      sendArgs.push("--subject", args.subject);
+      sendArgs.push("--body", args.body);
+      if (args.cc) {
+        const ccList = Array.isArray(args.cc) ? args.cc : [args.cc];
+        for (const addr of ccList)
+          sendArgs.push("--cc", addr);
+      }
+      if (args.bcc) {
+        const bccList = Array.isArray(args.bcc) ? args.bcc : [args.bcc];
+        for (const addr of bccList)
+          sendArgs.push("--bcc", addr);
+      }
+      if (args.from)
+        sendArgs.push("--from", args.from);
+      return await runCLI2("mail-cli", sendArgs);
+    }
+    case "reply": {
+      if (!args.id)
+        throw new Error("Message ID is required for reply");
+      if (!args.body)
+        throw new Error("Body is required for reply");
+      const replyArgs = ["reply", "--id", args.id, "--body", args.body];
+      if (args.mailbox)
+        replyArgs.push("--mailbox", args.mailbox);
+      if (args.account)
+        replyArgs.push("--account", args.account);
+      return await runCLI2("mail-cli", replyArgs);
+    }
+    case "auth_check": {
+      if (!args.id)
+        throw new Error("Message ID is required for auth_check");
+      const authArgs = ["auth-check", "--id", args.id];
+      if (args.trustedSenders)
+        authArgs.push("--trusted-senders", args.trustedSenders);
+      if (args.mailbox)
+        authArgs.push("--mailbox", args.mailbox);
+      if (args.account)
+        authArgs.push("--account", args.account);
+      return await runCLI2("mail-cli", authArgs);
     }
     default:
       throw new Error(`Unknown mail action: ${args.action}`);
