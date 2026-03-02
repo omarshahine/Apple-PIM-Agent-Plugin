@@ -38,8 +38,8 @@ Use `mail` with action `search` to find messages by subject, sender, or content:
 
 ### Send Message
 Use `mail` with action `send` to send an email through Mail.app:
-- Required: `to` (array of recipient addresses), `body` (plain text body)
-- Optional: `subject`, `cc`, `bcc`, `from` (sender address for account selection)
+- Required: `to` (array of recipient addresses), `subject` (email subject), `body` (plain text body)
+- Optional: `cc`, `bcc`, `from` (sender address for account selection)
 - Uses AppleScript to compose and send via Mail.app's outgoing message
 
 ### Reply to Message

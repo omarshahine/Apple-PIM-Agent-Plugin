@@ -132,6 +132,9 @@ func escapeForAppleScript(_ s: String) -> String {
     return s
         .replacingOccurrences(of: "\\", with: "\\\\")
         .replacingOccurrences(of: "\"", with: "\\\"")
+        .replacingOccurrences(of: "\n", with: "\\n")
+        .replacingOccurrences(of: "\r", with: "\\r")
+        .replacingOccurrences(of: "\t", with: "\\t")
 }
 
 /// Run an AppleScript string via osascript (not JXA). Returns stdout as a string.
