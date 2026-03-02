@@ -12,7 +12,7 @@ Native macOS integration for Calendar, Reminders, Contacts, and Mail using Event
 - **Calendar Management**: List calendars, create/read/update/delete events, search by date/title
 - **Reminder Management**: List reminder lists, create/complete/update/delete reminders, search
 - **Contact Management**: List groups, create/read/update/delete contacts, search by name/email/phone, birthday support (with or without year)
-- **Mail Integration**: List accounts/mailboxes, read/search/move/delete messages, update flags (via Apple Mail.app + JXA)
+- **Mail Integration**: List accounts/mailboxes, read/search/send/reply/move/delete messages, update flags, verify sender authentication (via Apple Mail.app + JXA/AppleScript)
 - **Recurrence Rules**: Create recurring events and reminders (daily, weekly, monthly, yearly)
 - **Batch Operations**: Create multiple events or reminders in a single efficient transaction
 - **Per-Domain Control**: Enable or disable entire domains (calendars, reminders, contacts, mail) independently
@@ -99,7 +99,7 @@ openclaw plugins install -l ./openclaw
 You can optionally restrict which domains and items the plugin can access. This is useful for:
 - Privacy — hide calendars you don't need the agent to see
 - Reducing noise — only show relevant reminder lists
-- Avoiding conflicts — disable mail here if you use Fastmail MCP for email
+- Avoiding conflicts — disable mail here if you use a separate email MCP
 - Multi-agent setups — give each agent a profile with different access
 
 ### Interactive Setup (Claude Code)
@@ -205,6 +205,69 @@ Profiles let you give different agents different access to your PIM data. Each p
 
 Set `enabled: false` on any domain to disable it. When disabled, CLI commands for that domain return an access denied error.
 
+### Sender Authentication (mail auth-check)
+
+The `auth_check` action verifies email sender identity by parsing DKIM and SPF results from `Authentication-Results` headers and cross-referencing against a trusted senders list.
+
+**Config file**: `~/.config/apple-pim/trusted-senders.json`
+
+```json
+{
+  "version": 1,
+  "trustedSenders": [
+    {
+      "name": "Alice",
+      "emails": ["alice@example.com"],
+      "expectedDkimDomains": ["example.com", "messagingengine.com"],
+      "requireDkim": true,
+      "requireSpf": true
+    },
+    {
+      "name": "Bob (relaxed SPF)",
+      "emails": ["bob@company.com"],
+      "expectedDkimDomains": ["company.com"],
+      "requireDkim": true,
+      "requireSpf": false
+    }
+  ]
+}
+```
+
+**Fields per sender:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | string | required | Display name for the verdict |
+| `emails` | string[] | required | Email addresses to match (case-insensitive) |
+| `expectedDkimDomains` | string[] | `[]` | DKIM signing domains to accept (matches exact or subdomain) |
+| `requireDkim` | boolean | `true` | Require DKIM pass + domain match for "verified" verdict |
+| `requireSpf` | boolean | `true` | Require SPF pass for "verified" verdict |
+
+**Verdicts:**
+
+| Verdict | Meaning |
+|---------|---------|
+| `verified` | DKIM and SPF checks pass per sender config |
+| `suspicious` | Sender is trusted but authentication failed or domain mismatch |
+| `untrusted` | Sender email not found in trusted-senders.json |
+| `unknown` | Cannot determine (missing headers, parse failure, no config file) |
+
+**Usage:**
+
+```bash
+# CLI
+mail-cli auth-check --id "<message-id@example.com>"
+mail-cli auth-check --id "<message-id>" --trusted-senders ~/custom/senders.json
+
+# MCP tool
+mcp__apple-pim__mail({ action: "auth_check", id: "<message-id>" })
+
+# OpenClaw tool
+apple_pim_mail({ action: "auth_check", id: "<message-id>" })
+```
+
+The `--trusted-senders` flag overrides the default config path. If the file doesn't exist, the verdict is `unknown` with a warning.
+
 ### Notes
 
 - Config is read fresh on each CLI invocation — changes take effect immediately
@@ -266,6 +329,9 @@ reminder-cli lists
 reminder-cli items --list "Personal" --filter overdue
 contacts-cli search "John"
 mail-cli messages --mailbox INBOX --limit 10
+mail-cli send --to "user@example.com" --subject "Hello" --body "Message"
+mail-cli reply --id "<message-id>" --body "Thanks!"
+mail-cli auth-check --id "<message-id>"
 ```
 
 ## Tools Reference
@@ -277,7 +343,7 @@ mail-cli messages --mailbox INBOX --limit 10
 | `calendar` / `apple_pim_calendar` | `list`, `events`, `get`, `search`, `create`, `update`, `delete`, `batch_create` | Calendar events via EventKit |
 | `reminder` / `apple_pim_reminder` | `lists`, `items`, `get`, `search`, `create`, `complete`, `update`, `delete`, `batch_create`, `batch_complete`, `batch_delete` | Reminders via EventKit |
 | `contact` / `apple_pim_contact` | `groups`, `list`, `search`, `get`, `create`, `update`, `delete` | Contacts framework |
-| `mail` / `apple_pim_mail` | `accounts`, `mailboxes`, `messages`, `get`, `search`, `update`, `move`, `delete`, `batch_update`, `batch_delete` | Mail.app via JXA |
+| `mail` / `apple_pim_mail` | `accounts`, `mailboxes`, `messages`, `get`, `search`, `send`, `reply`, `update`, `move`, `delete`, `batch_update`, `batch_delete`, `auth_check` | Mail.app via JXA/AppleScript |
 | `apple-pim` / `apple_pim_system` | `status`, `authorize`, `config_show`, `config_init` | Authorization & configuration |
 
 ### Recurrence Rules
