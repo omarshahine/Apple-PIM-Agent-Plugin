@@ -91,6 +91,42 @@ describe("buildDryRunResponse", () => {
     expect(response.warning).toContain("destructive");
   });
 
+  it("omits warning key for non-destructive mutations", () => {
+    const response = buildDryRunResponse("calendar", {
+      action: "create",
+      title: "Test",
+      start: "2026-03-05",
+    });
+    expect(response).not.toHaveProperty("warning");
+  });
+
+  it("flags move-to-Trash as destructive", () => {
+    const response = buildDryRunResponse("mail", {
+      action: "move",
+      id: "msg_1",
+      toMailbox: "Trash",
+    });
+    expect(response.warning).toContain("destructive");
+  });
+
+  it("flags move to Deleted Messages as destructive", () => {
+    const response = buildDryRunResponse("mail", {
+      action: "move",
+      id: "msg_1",
+      toMailbox: "Deleted Messages",
+    });
+    expect(response.warning).toContain("destructive");
+  });
+
+  it("does not flag move to regular mailbox as destructive", () => {
+    const response = buildDryRunResponse("mail", {
+      action: "move",
+      id: "msg_1",
+      toMailbox: "Archive",
+    });
+    expect(response).not.toHaveProperty("warning");
+  });
+
   it("strips internal params from parameters object", () => {
     const response = buildDryRunResponse("calendar", {
       action: "create",

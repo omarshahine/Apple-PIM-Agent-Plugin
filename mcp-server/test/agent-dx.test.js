@@ -45,7 +45,7 @@ describe("withAgentDX", () => {
       expect(result.description).toContain("Test");
     });
 
-    it("passes through to handler for reads even with dryRun flag", async () => {
+    it("passes through to handler for reads with dryRun flag and signals skip", async () => {
       const handler = vi.fn().mockResolvedValue({ calendars: [] });
       const wrapped = withAgentDX("calendar", handler);
 
@@ -56,6 +56,8 @@ describe("withAgentDX", () => {
 
       expect(handler).toHaveBeenCalled();
       expect(result.calendars).toEqual([]);
+      expect(result._dryRunSkipped).toBe(true);
+      expect(result._note).toContain("no effect");
     });
   });
 
