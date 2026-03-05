@@ -77370,18 +77370,30 @@ var recurrenceSchema = {
   },
   required: ["frequency"]
 };
+var agentDXProperties = {
+  fields: {
+    type: "array",
+    items: { type: "string" },
+    description: `Limit returned fields to these keys (e.g., ["id", "title", "start"]). Reduces token usage. The 'id' field is always included.`
+  },
+  dryRun: {
+    type: "boolean",
+    description: "If true, validate inputs and return a preview of what the operation would do without executing it. Only applies to mutation actions (create, update, delete, send, etc.)."
+  }
+};
 var tools = [
   {
     name: "calendar",
-    description: "Manage macOS calendar events. Actions: list (calendars), events (query by date range), get (by ID), search (by text), create, update, delete, batch_create.",
+    description: "Manage macOS calendar events. Actions: list (calendars), events (query by date range), get (by ID), search (by text), create, update, delete, batch_create, schema (show input schema).",
     inputSchema: {
       type: "object",
       properties: {
         action: {
           type: "string",
-          enum: ["list", "events", "get", "search", "create", "update", "delete", "batch_create"],
+          enum: ["list", "events", "get", "search", "create", "update", "delete", "batch_create", "schema"],
           description: "Operation to perform"
         },
+        ...agentDXProperties,
         id: { type: "string", description: "Event ID (get/update/delete)" },
         calendar: { type: "string", description: "Calendar name or ID" },
         query: { type: "string", description: "Search query (search)" },
@@ -77430,7 +77442,7 @@ var tools = [
   },
   {
     name: "reminder",
-    description: "Manage macOS reminders. Actions: lists (all lists), items (list reminders with optional filter), get (by ID), search (by text), create, complete, update, delete, batch_create, batch_complete, batch_delete.",
+    description: "Manage macOS reminders. Actions: lists (all lists), items (list reminders with optional filter), get (by ID), search (by text), create, complete, update, delete, batch_create, batch_complete, batch_delete, schema (show input schema).",
     inputSchema: {
       type: "object",
       properties: {
@@ -77447,10 +77459,12 @@ var tools = [
             "delete",
             "batch_create",
             "batch_complete",
-            "batch_delete"
+            "batch_delete",
+            "schema"
           ],
           description: "Operation to perform"
         },
+        ...agentDXProperties,
         id: { type: "string", description: "Reminder ID (get/complete/update/delete)" },
         ids: { type: "array", items: { type: "string" }, description: "Reminder IDs (batch_complete/batch_delete)" },
         list: { type: "string", description: "Reminder list name or ID" },
@@ -77526,15 +77540,16 @@ var tools = [
   },
   {
     name: "contact",
-    description: "Manage macOS contacts. Actions: groups (list groups), list (list contacts), search (by name/email/phone), get (by ID with photo), create, update, delete.",
+    description: "Manage macOS contacts. Actions: groups (list groups), list (list contacts), search (by name/email/phone), get (by ID with photo), create, update, delete, schema (show input schema).",
     inputSchema: {
       type: "object",
       properties: {
         action: {
           type: "string",
-          enum: ["groups", "list", "search", "get", "create", "update", "delete"],
+          enum: ["groups", "list", "search", "get", "create", "update", "delete", "schema"],
           description: "Operation to perform"
         },
+        ...agentDXProperties,
         id: { type: "string", description: "Contact ID (get/update/delete)" },
         group: { type: "string", description: "Group name or ID (list)" },
         query: { type: "string", description: "Search query (search)" },
@@ -77665,7 +77680,7 @@ var tools = [
   },
   {
     name: "mail",
-    description: "Manage Mail.app messages. Requires Mail.app to be running. Actions: accounts, mailboxes, messages (list), get (full message by ID), search, update (flags), move, delete, batch_update, batch_delete, send, reply, auth_check.",
+    description: "Manage Mail.app messages. Requires Mail.app to be running. Actions: accounts, mailboxes, messages (list), get (full message by ID), search, update (flags), move, delete, batch_update, batch_delete, send, reply, auth_check, schema (show input schema).",
     inputSchema: {
       type: "object",
       properties: {
@@ -77684,10 +77699,12 @@ var tools = [
             "batch_delete",
             "send",
             "reply",
-            "auth_check"
+            "auth_check",
+            "schema"
           ],
           description: "Operation to perform"
         },
+        ...agentDXProperties,
         id: { type: "string", description: "RFC 2822 message ID (get/update/move/delete/reply/auth_check)" },
         ids: { type: "array", items: { type: "string" }, description: "Message IDs (batch_update/batch_delete)" },
         account: { type: "string", description: "Account name" },
@@ -77729,13 +77746,13 @@ var tools = [
   },
   {
     name: "apple-pim",
-    description: "PIM system management. Actions: status (check authorization), authorize (request permissions), config_show (view config), config_init (discover calendars/lists).",
+    description: "PIM system management. Actions: status (check authorization), authorize (request permissions), config_show (view config), config_init (discover calendars/lists), schema (show input schema).",
     inputSchema: {
       type: "object",
       properties: {
         action: {
           type: "string",
-          enum: ["status", "authorize", "config_show", "config_init"],
+          enum: ["status", "authorize", "config_show", "config_init", "schema"],
           description: "Operation to perform"
         },
         domain: {
@@ -77753,6 +77770,218 @@ var tools = [
     }
   }
 ];
+
+// ../lib/fields.js
+var WRAPPER_KEYS = /* @__PURE__ */ new Set([
+  "events",
+  "reminders",
+  "contacts",
+  "messages",
+  "calendars",
+  "lists",
+  "groups",
+  "accounts",
+  "mailboxes",
+  "results",
+  "status",
+  "success",
+  "error",
+  "output"
+]);
+function pickFields(obj, fields) {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj))
+    return obj;
+  const fieldSet = new Set(fields);
+  fieldSet.add("id");
+  const picked = {};
+  for (const key of Object.keys(obj)) {
+    if (fieldSet.has(key)) {
+      picked[key] = obj[key];
+    }
+  }
+  return picked;
+}
+function applyFieldSelection(result, fields) {
+  if (!fields || !Array.isArray(fields) || fields.length === 0) {
+    return result;
+  }
+  if (!result || typeof result !== "object") {
+    return result;
+  }
+  const filtered = {};
+  for (const [key, value] of Object.entries(result)) {
+    if (WRAPPER_KEYS.has(key) && Array.isArray(value)) {
+      filtered[key] = value.map((item) => pickFields(item, fields));
+    } else if (WRAPPER_KEYS.has(key)) {
+      filtered[key] = value;
+    } else {
+      if (fields.includes(key) || key === "id") {
+        filtered[key] = value;
+      }
+    }
+  }
+  return filtered;
+}
+
+// ../lib/dry-run.js
+var MUTATION_ACTIONS = {
+  calendar: /* @__PURE__ */ new Set(["create", "update", "delete", "batch_create"]),
+  reminder: /* @__PURE__ */ new Set([
+    "create",
+    "complete",
+    "update",
+    "delete",
+    "batch_create",
+    "batch_complete",
+    "batch_delete"
+  ]),
+  contact: /* @__PURE__ */ new Set(["create", "update", "delete"]),
+  mail: /* @__PURE__ */ new Set([
+    "update",
+    "move",
+    "delete",
+    "batch_update",
+    "batch_delete",
+    "send",
+    "reply"
+  ])
+};
+function isMutation(toolName, action) {
+  const actions = MUTATION_ACTIONS[toolName];
+  return actions ? actions.has(action) : false;
+}
+function buildDryRunResponse(toolName, args) {
+  const { action, dryRun, fields, configDir, profile, ...params } = args;
+  const description = describeMutation(toolName, action, params);
+  return {
+    dryRun: true,
+    tool: toolName,
+    action,
+    description,
+    parameters: params,
+    ...isDestructive(action, params) ? { warning: "This is a destructive operation. Data will be permanently deleted." } : {}
+  };
+}
+function isDestructive(action, params = {}) {
+  if (action === "delete" || action === "batch_delete")
+    return true;
+  if (action === "move") {
+    const dest = (params.toMailbox || "").toLowerCase();
+    return dest === "trash" || dest.includes("deleted");
+  }
+  return false;
+}
+function describeMutation(tool, action, params) {
+  switch (action) {
+    case "create":
+      return describeCreate(tool, params);
+    case "update":
+      return describeUpdate(tool, params);
+    case "delete":
+      return describeDelete(tool, params);
+    case "batch_create":
+      return describeBatchCreate(tool, params);
+    case "batch_complete":
+      return `Would mark ${params.ids?.length || 0} reminder(s) as ${params.undo ? "incomplete" : "complete"}`;
+    case "batch_update":
+      return `Would update ${params.ids?.length || 0} message(s) (${describeMailFlags(params)})`;
+    case "batch_delete":
+      return `Would delete ${params.ids?.length || 0} ${tool === "mail" ? "message(s)" : "reminder(s)"}`;
+    case "complete":
+      return `Would mark reminder ${params.id || "?"} as ${params.undo ? "incomplete" : "complete"}`;
+    case "move":
+      return `Would move message ${params.id || "?"} to mailbox "${params.toMailbox || "?"}"`;
+    case "send":
+      return `Would send email to ${formatRecipients(params.to)} with subject "${params.subject || ""}"`;
+    case "reply":
+      return `Would reply to message ${params.id || "?"}`;
+    default:
+      return `Would perform ${action} on ${tool}`;
+  }
+}
+function describeCreate(tool, params) {
+  switch (tool) {
+    case "calendar":
+      return `Would create event "${params.title || "?"}" starting ${params.start || "?"} on calendar "${params.calendar || "default"}"`;
+    case "reminder":
+      return `Would create reminder "${params.title || "?"}" in list "${params.list || "default"}"${params.due ? ` due ${params.due}` : ""}`;
+    case "contact":
+      return `Would create contact "${params.name || params.firstName || "?"}"`;
+    default:
+      return `Would create ${tool} item`;
+  }
+}
+function describeUpdate(tool, params) {
+  switch (tool) {
+    case "calendar":
+      return `Would update event ${params.id || "?"}${params.title ? ` (title \u2192 "${params.title}")` : ""}`;
+    case "reminder":
+      return `Would update reminder ${params.id || "?"}${params.title ? ` (title \u2192 "${params.title}")` : ""}`;
+    case "contact":
+      return `Would update contact ${params.id || "?"}`;
+    case "mail":
+      return `Would update message ${params.id || "?"} (${describeMailFlags(params)})`;
+    default:
+      return `Would update ${tool} item ${params.id || "?"}`;
+  }
+}
+function describeDelete(tool, params) {
+  const target = tool === "mail" ? "message" : tool === "calendar" ? "event" : tool;
+  return `Would delete ${target} ${params.id || "?"}${params.futureEvents ? " and all future occurrences" : ""}`;
+}
+function describeBatchCreate(tool, params) {
+  if (tool === "calendar") {
+    return `Would create ${params.events?.length || 0} event(s)`;
+  }
+  if (tool === "reminder") {
+    return `Would create ${params.reminders?.length || 0} reminder(s)`;
+  }
+  return `Would batch create ${tool} items`;
+}
+function describeMailFlags(params) {
+  const flags = [];
+  if (params.read !== void 0)
+    flags.push(`read=${params.read}`);
+  if (params.flagged !== void 0)
+    flags.push(`flagged=${params.flagged}`);
+  if (params.junk !== void 0)
+    flags.push(`junk=${params.junk}`);
+  return flags.length > 0 ? flags.join(", ") : "no flag changes";
+}
+function formatRecipients(to) {
+  if (!to)
+    return "?";
+  const list = Array.isArray(to) ? to : [to];
+  return list.join(", ");
+}
+
+// ../lib/agent-dx.js
+var toolSchemaMap = Object.fromEntries(tools.map((t) => [t.name, t]));
+function withAgentDX(toolName, handler) {
+  return async function agentDXHandler(args, runCLI2) {
+    if (args.action === "schema") {
+      const schema = toolSchemaMap[toolName];
+      if (!schema) {
+        throw new Error(`No schema found for tool: ${toolName}`);
+      }
+      return {
+        tool: toolName,
+        inputSchema: schema.inputSchema,
+        description: schema.description
+      };
+    }
+    if (args.dryRun) {
+      if (isMutation(toolName, args.action)) {
+        return buildDryRunResponse(toolName, args);
+      }
+      const result2 = await handler(args, runCLI2);
+      const filtered = applyFieldSelection(result2, args.fields);
+      return { ...filtered, _dryRunSkipped: true, _note: "dryRun has no effect on read actions" };
+    }
+    const result = await handler(args, runCLI2);
+    return applyFieldSelection(result, args.fields);
+  };
+}
 
 // ../lib/tool-args.js
 function buildCalendarDeleteArgs(args) {
@@ -78424,21 +78653,18 @@ var mcpLocations = [
 ];
 var SWIFT_BIN_DIR = findSwiftBinDir(mcpLocations);
 var { runCLI } = createCLIRunner(SWIFT_BIN_DIR);
+var handlers = {
+  calendar: withAgentDX("calendar", handleCalendar),
+  reminder: withAgentDX("reminder", handleReminder),
+  contact: withAgentDX("contact", handleContact),
+  mail: withAgentDX("mail", handleMail),
+  "apple-pim": withAgentDX("apple-pim", handleApplePim)
+};
 async function handleTool(name, args) {
-  switch (name) {
-    case "calendar":
-      return await handleCalendar(args, runCLI);
-    case "reminder":
-      return await handleReminder(args, runCLI);
-    case "contact":
-      return await handleContact(args, runCLI);
-    case "mail":
-      return await handleMail(args, runCLI);
-    case "apple-pim":
-      return await handleApplePim(args, runCLI);
-    default:
-      throw new Error(`Unknown tool: ${name}`);
-  }
+  const handler = handlers[name];
+  if (!handler)
+    throw new Error(`Unknown tool: ${name}`);
+  return await handler(args, runCLI);
 }
 var server = new Server(
   {
