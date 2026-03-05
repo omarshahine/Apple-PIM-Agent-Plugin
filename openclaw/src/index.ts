@@ -10,6 +10,7 @@
 import { createCLIRunner, findSwiftBinDir } from "../lib/cli-runner.js";
 import { tools } from "../lib/schemas.js";
 import { markToolResult, getDatamarkingPreamble } from "../lib/sanitize.js";
+import { withAgentDX } from "../lib/agent-dx.js";
 import { handleCalendar } from "../lib/handlers/calendar.js";
 import { handleReminder } from "../lib/handlers/reminder.js";
 import { handleContact } from "../lib/handlers/contact.js";
@@ -91,13 +92,13 @@ const TOOL_NAME_MAP: Record<string, string> = {
   "apple-pim": "apple_pim_system",
 };
 
-// Map MCP tool names to handler functions
+// Map MCP tool names to handler functions (wrapped with agent DX features)
 const HANDLERS: Record<string, (args: ToolArgs, runCLI: (cli: string, args: string[]) => Promise<object>) => Promise<object>> = {
-  "calendar": handleCalendar,
-  "reminder": handleReminder,
-  "contact": handleContact,
-  "mail": handleMail,
-  "apple-pim": handleApplePim,
+  "calendar": withAgentDX("calendar", handleCalendar) as typeof handleCalendar,
+  "reminder": withAgentDX("reminder", handleReminder) as typeof handleReminder,
+  "contact": withAgentDX("contact", handleContact) as typeof handleContact,
+  "mail": withAgentDX("mail", handleMail) as typeof handleMail,
+  "apple-pim": withAgentDX("apple-pim", handleApplePim) as typeof handleApplePim,
 };
 
 /**

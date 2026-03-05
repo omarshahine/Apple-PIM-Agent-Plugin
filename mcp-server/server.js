@@ -14,6 +14,7 @@ import {
 } from "../lib/sanitize.js";
 import { createCLIRunner, findSwiftBinDir } from "../lib/cli-runner.js";
 import { tools } from "../lib/schemas.js";
+import { withAgentDX } from "../lib/agent-dx.js";
 import { handleCalendar } from "../lib/handlers/calendar.js";
 import { handleReminder } from "../lib/handlers/reminder.js";
 import { handleContact } from "../lib/handlers/contact.js";
@@ -31,22 +32,20 @@ const mcpLocations = [
 const SWIFT_BIN_DIR = findSwiftBinDir(mcpLocations);
 const { runCLI } = createCLIRunner(SWIFT_BIN_DIR);
 
+// Wrap handlers with agent DX features (fields, dryRun, schema)
+const handlers = {
+  calendar: withAgentDX("calendar", handleCalendar),
+  reminder: withAgentDX("reminder", handleReminder),
+  contact: withAgentDX("contact", handleContact),
+  mail: withAgentDX("mail", handleMail),
+  "apple-pim": withAgentDX("apple-pim", handleApplePim),
+};
+
 // Main tool dispatcher
 async function handleTool(name, args) {
-  switch (name) {
-    case "calendar":
-      return await handleCalendar(args, runCLI);
-    case "reminder":
-      return await handleReminder(args, runCLI);
-    case "contact":
-      return await handleContact(args, runCLI);
-    case "mail":
-      return await handleMail(args, runCLI);
-    case "apple-pim":
-      return await handleApplePim(args, runCLI);
-    default:
-      throw new Error(`Unknown tool: ${name}`);
-  }
+  const handler = handlers[name];
+  if (!handler) throw new Error(`Unknown tool: ${name}`);
+  return await handler(args, runCLI);
 }
 
 // Create and run server
