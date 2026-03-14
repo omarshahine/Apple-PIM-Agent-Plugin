@@ -5,7 +5,14 @@ let version = '';
 try {
   version = execFileSync('git', ['describe', '--tags', '--abbrev=0'], { encoding: 'utf-8' }).trim();
 } catch {
-  // No tags available
+  // Shallow clone (e.g. Cloudflare Pages) — fall back to GitHub API
+  try {
+    const res = await fetch('https://api.github.com/repos/omarshahine/Apple-PIM-Agent-Plugin/releases/latest');
+    if (res.ok) {
+      const data = await res.json();
+      version = data.tag_name || '';
+    }
+  } catch { /* no version badge */ }
 }
 
 const navLinks = [
