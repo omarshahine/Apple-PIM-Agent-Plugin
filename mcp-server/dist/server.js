@@ -77484,22 +77484,17 @@ var tools = [
         priority: { type: "number", description: "Priority: 0=none, 1=high, 5=medium, 9=low" },
         url: { type: "string", description: "URL (create/update, empty string to remove)" },
         alarm: { type: "array", items: { type: "number" }, description: "Alarm minutes before due" },
+        // No `required` here — empty object {} means "remove location" (batch_create has required since it doesn't support removal)
         location: {
-          description: "Location-based alarm (arrive/depart). Pass empty object to remove.",
-          oneOf: [
-            { type: "object", properties: {}, additionalProperties: false },
-            {
-              type: "object",
-              properties: {
-                name: { type: "string", description: "Location name" },
-                latitude: { type: "number" },
-                longitude: { type: "number" },
-                radius: { type: "number", description: "Geofence radius in meters (default: 100)" },
-                proximity: { type: "string", enum: ["arrive", "depart"] }
-              },
-              required: ["latitude", "longitude", "proximity"]
-            }
-          ]
+          type: "object",
+          description: "Location-based alarm (arrive/depart). Pass empty object to remove. Full location requires latitude, longitude, and proximity.",
+          properties: {
+            name: { type: "string", description: "Location name" },
+            latitude: { type: "number" },
+            longitude: { type: "number" },
+            radius: { type: "number", description: "Geofence radius in meters (default: 100)" },
+            proximity: { type: "string", enum: ["arrive", "depart"] }
+          }
         },
         recurrence: recurrenceSchema,
         undo: { type: "boolean", description: "Mark as incomplete (complete/batch_complete)" },
