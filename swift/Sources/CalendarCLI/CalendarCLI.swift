@@ -319,18 +319,26 @@ func buildVerification(event: EKEvent, requestedStart: String, requestedEnd: Str
         calendarMatch = true
     }
 
-    return [
+    var dict: [String: Any] = [
         "requestedStart": requestedStart,
         "storedStart": storedStart,
         "startMatch": startMatch,
-        "requestedEnd": requestedEnd as Any,
         "storedEnd": storedEnd,
         "endMatch": endMatch,
-        "requestedCalendar": requestedCalendar as Any,
-        "storedCalendar": event.calendar?.title ?? "",
-        "calendarMatch": calendarMatch,
         "allFieldsMatch": startMatch && endMatch && calendarMatch
     ]
+
+    // Only include optional fields when they were explicitly requested
+    if let reqEnd = requestedEnd {
+        dict["requestedEnd"] = reqEnd
+    }
+    if let reqCal = requestedCalendar {
+        dict["requestedCalendar"] = reqCal
+        dict["storedCalendar"] = event.calendar?.title ?? ""
+        dict["calendarMatch"] = calendarMatch
+    }
+
+    return dict
 }
 
 // MARK: - Config Helpers
