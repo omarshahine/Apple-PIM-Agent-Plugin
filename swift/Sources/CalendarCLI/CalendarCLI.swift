@@ -97,23 +97,7 @@ func outputJSON(_ value: Any) {
 }
 
 func parseDate(_ string: String) -> Date? {
-    let formatters: [DateFormatter] = {
-        let formats = [
-            "yyyy-MM-dd'T'HH:mm:ss",
-            "yyyy-MM-dd HH:mm",
-            "yyyy-MM-dd",
-            "MM/dd/yyyy HH:mm",
-            "MM/dd/yyyy",
-        ]
-        return formats.map { format in
-            let formatter = DateFormatter()
-            formatter.dateFormat = format
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            return formatter
-        }
-    }()
-
-    // Handle relative dates
+    // Handle relative dates first
     let lowercased = string.lowercased()
     let calendar = Calendar.current
     let now = Date()
@@ -136,7 +120,31 @@ func parseDate(_ string: String) -> Date? {
         }
     }
 
-    for formatter in formatters {
+    // Try ISO 8601 first (handles offsets like -07:00, Z, and fractional seconds)
+    let isoFormatter = ISO8601DateFormatter()
+    isoFormatter.formatOptions = [.withInternetDateTime]
+    if let date = isoFormatter.date(from: string) {
+        return date
+    }
+    // Also try with fractional seconds
+    isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = isoFormatter.date(from: string) {
+        return date
+    }
+
+    // DateFormatter patterns for non-ISO formats
+    let formats = [
+        "yyyy-MM-dd'T'HH:mm:ss",
+        "yyyy-MM-dd HH:mm",
+        "yyyy-MM-dd h:mm a",
+        "yyyy-MM-dd",
+        "MM/dd/yyyy HH:mm",
+        "MM/dd/yyyy",
+    ]
+    for format in formats {
+        let formatter = DateFormatter()
+        formatter.dateFormat = format
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         if let date = formatter.date(from: string) {
             return date
         }
@@ -276,6 +284,53 @@ func participantRoleString(_ role: EKParticipantRole) -> String {
     case .nonParticipant: return "nonParticipant"
     @unknown default: return "unknown"
     }
+}
+
+// MARK: - Write Verification
+
+/// Build a verification dict comparing requested inputs against stored event values.
+/// Gives calling agents an immediate signal if date parsing produced wrong times.
+func buildVerification(event: EKEvent, requestedStart: String, requestedEnd: String?, requestedCalendar: String?) -> [String: Any] {
+    let isoFmt = ISO8601DateFormatter()
+    let storedStart = isoFmt.string(from: event.startDate)
+    let storedEnd = isoFmt.string(from: event.endDate)
+
+    // Re-parse the requested strings to compare as Date values (tolerating 1s for rounding)
+    let startMatch: Bool
+    if let requestedDate = parseDate(requestedStart) {
+        startMatch = abs(event.startDate.timeIntervalSince(requestedDate)) < 1.0
+    } else {
+        startMatch = false
+    }
+
+    let endMatch: Bool
+    if let reqEnd = requestedEnd, let requestedDate = parseDate(reqEnd) {
+        endMatch = abs(event.endDate.timeIntervalSince(requestedDate)) < 1.0
+    } else {
+        // No explicit end requested (duration or default used), skip end verification
+        endMatch = true
+    }
+
+    let calendarMatch: Bool
+    if let reqCal = requestedCalendar {
+        let storedCal = event.calendar?.title ?? ""
+        calendarMatch = storedCal.lowercased() == reqCal.lowercased()
+    } else {
+        calendarMatch = true
+    }
+
+    return [
+        "requestedStart": requestedStart,
+        "storedStart": storedStart,
+        "startMatch": startMatch,
+        "requestedEnd": requestedEnd as Any,
+        "storedEnd": storedEnd,
+        "endMatch": endMatch,
+        "requestedCalendar": requestedCalendar as Any,
+        "storedCalendar": event.calendar?.title ?? "",
+        "calendarMatch": calendarMatch,
+        "allFieldsMatch": startMatch && endMatch && calendarMatch
+    ]
 }
 
 // MARK: - Config Helpers
@@ -697,7 +752,13 @@ struct CreateEvent: AsyncParsableCommand {
         outputJSON([
             "success": true,
             "message": "Event created successfully",
-            "event": eventToDict(event)
+            "event": eventToDict(event),
+            "verification": buildVerification(
+                event: event,
+                requestedStart: start,
+                requestedEnd: end,
+                requestedCalendar: calendar
+            )
         ])
     }
 }
@@ -791,11 +852,23 @@ struct UpdateEvent: AsyncParsableCommand {
         let span: EKSpan = futureEvents ? .futureEvents : .thisEvent
         try eventStore.save(event, span: span)
 
-        outputJSON([
+        var result: [String: Any] = [
             "success": true,
             "message": "Event updated successfully",
             "event": eventToDict(event)
-        ])
+        ]
+
+        // Include verification when start or end was updated
+        if start != nil || end != nil {
+            result["verification"] = buildVerification(
+                event: event,
+                requestedStart: start ?? ISO8601DateFormatter().string(from: event.startDate),
+                requestedEnd: end,
+                requestedCalendar: nil
+            )
+        }
+
+        outputJSON(result)
     }
 }
 

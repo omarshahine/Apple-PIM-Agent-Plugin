@@ -101,22 +101,7 @@ func outputJSON(_ value: Any) {
 }
 
 func parseDate(_ string: String) -> Date? {
-    let formatters: [DateFormatter] = {
-        let formats = [
-            "yyyy-MM-dd'T'HH:mm:ss",
-            "yyyy-MM-dd HH:mm",
-            "yyyy-MM-dd",
-            "MM/dd/yyyy HH:mm",
-            "MM/dd/yyyy",
-        ]
-        return formats.map { format in
-            let formatter = DateFormatter()
-            formatter.dateFormat = format
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            return formatter
-        }
-    }()
-
+    // Handle relative dates first
     let lowercased = string.lowercased()
     let calendar = Calendar.current
     let now = Date()
@@ -139,12 +124,37 @@ func parseDate(_ string: String) -> Date? {
         }
     }
 
-    for formatter in formatters {
+    // Try ISO 8601 first (handles offsets like -07:00, Z, and fractional seconds)
+    let isoFormatter = ISO8601DateFormatter()
+    isoFormatter.formatOptions = [.withInternetDateTime]
+    if let date = isoFormatter.date(from: string) {
+        return date
+    }
+    // Also try with fractional seconds
+    isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = isoFormatter.date(from: string) {
+        return date
+    }
+
+    // DateFormatter patterns for non-ISO formats
+    let formats = [
+        "yyyy-MM-dd'T'HH:mm:ss",
+        "yyyy-MM-dd HH:mm",
+        "yyyy-MM-dd h:mm a",
+        "yyyy-MM-dd",
+        "MM/dd/yyyy HH:mm",
+        "MM/dd/yyyy",
+    ]
+    for format in formats {
+        let formatter = DateFormatter()
+        formatter.dateFormat = format
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         if let date = formatter.date(from: string) {
             return date
         }
     }
 
+    // Try natural language
     let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue)
     if let match = detector?.firstMatch(in: string, range: NSRange(string.startIndex..., in: string)),
        let date = match.date {
