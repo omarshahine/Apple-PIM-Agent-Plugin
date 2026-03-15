@@ -418,6 +418,11 @@ apple-pim/
 │   ├── openclaw.plugin.json  # Plugin manifest + config schema
 │   ├── lib -> ../lib         # Symlink to shared code
 │   └── skills/apple-pim/     # OpenClaw skill knowledge
+├── evals/                    # Agent eval framework (125 tests)
+│   ├── helpers/              # Mock CLI, scenario runner, grading
+│   ├── fixtures/             # Canned CLI JSON responses
+│   ├── scenarios/            # YAML eval case definitions
+│   └── tests/                # Vitest test files (4 categories)
 ├── commands/                 # Claude Code slash commands
 ├── agents/                   # pim-assistant agent
 ├── skills/                   # Claude Code skill knowledge
@@ -470,10 +475,13 @@ calendar-cli list
 ### Date Parsing Issues
 
 The CLI accepts various date formats:
-- ISO: `2024-01-15T14:30:00`
+- ISO 8601: `2024-01-15T14:30:00`
+- ISO 8601 with timezone offset: `2024-01-15T14:30:00-07:00`, `2024-01-15T14:30:00+05:30`
 - Date/time: `2024-01-15 14:30`
 - Date only: `2024-01-15`
 - Natural language: `today`, `tomorrow`, `next week`, `in 2 hours`
+
+Timezone offsets are preserved end-to-end through the CLI layer, so `2024-01-15T19:00:00-07:00` creates the event at the correct local time.
 
 ## Development
 
@@ -503,6 +511,29 @@ calendar-cli events --from today --to tomorrow
 # View effective config
 calendar-cli config show --profile travel
 ```
+
+### Agent Evals
+
+The eval framework tests how well the tool layer serves AI agents. All tests run against mock CLI fixtures with zero TCC permissions and no real macOS data.
+
+```bash
+# Run all 125 eval tests
+npm run eval
+
+# Watch mode during development
+npm run eval:watch
+```
+
+**4 eval categories:**
+
+| Category | Tests | What it verifies |
+|----------|-------|------------------|
+| Tool Call Correctness | 47 | CLI argument construction for every input variant |
+| Response Interpretation | 22 | Verification visibility, datamarking, injection detection |
+| Multi-turn Sequences | 8 | Correct tool call ordering for multi-step workflows |
+| Safety Properties | 48 | Destructive warnings, ID validation, schema coverage |
+
+To add new eval cases, edit YAML files in `evals/scenarios/` and add fixture JSON in `evals/fixtures/`. No test code changes needed.
 
 ### Rebuilding After Changes
 

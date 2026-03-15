@@ -18,6 +18,9 @@ cd mcp-server
 npm install
 npm test
 npm run build
+
+# Agent evals (from repo root)
+npm run eval
 ```
 
 ## Architecture
@@ -50,7 +53,12 @@ Each Swift CLI is a standalone binary that reads from macOS frameworks, validate
 | `mcp-server/dist/server.js` | Bundled server artifact (rebuild after source changes) |
 | `openclaw/` | OpenClaw plugin package (NPM: apple-pim-cli) |
 | `openclaw/src/index.ts` | OpenClaw tool registration with per-call isolation |
-| `.github/workflows/tests.yml` | CI checks for Node and Swift test jobs |
+| `evals/` | Agent eval suite (YAML scenarios, JSON fixtures, vitest tests) |
+| `evals/helpers/` | Mock CLI runner, scenario loader, grading functions |
+| `evals/fixtures/` | Canned CLI JSON responses for deterministic testing |
+| `evals/scenarios/` | YAML eval case definitions (4 categories) |
+| `evals/tests/` | Vitest test files (tool-call, response, multi-turn, safety) |
+| `.github/workflows/tests.yml` | CI checks for Node, Swift, and agent eval jobs |
 
 ## Configuration (PIMConfig)
 
@@ -69,14 +77,18 @@ Each Swift CLI is a standalone binary that reads from macOS frameworks, validate
 - PIMConfig tests (`swift/Tests/PIMConfigTests/`) cover filtering logic, config round-trips, profile merging, and security validation.
 - Prefer unit tests for logic seams (`swift/Tests/*`, `mcp-server/test/*`) over tests that require macOS permissions.
 - Full EventKit/Contacts/Mail integration paths can require local TCC permissions and Mail.app running.
+- **Agent evals** (`evals/`) test the tool layer from the agent's perspective: argument correctness, response interpretation, multi-turn workflows, and safety properties. All evals run against mock CLI fixtures (zero TCC, no real data). Run with `npm run eval` from repo root.
+- To add new eval cases, edit the YAML files in `evals/scenarios/` and add fixture JSON in `evals/fixtures/` as needed. No test code changes required for new cases in existing categories.
 
 ## CI And PR Workflow
 
 - Required checks on `main`:
   - `MCP Server (Node)`
   - `Swift CLI`
+  - `Agent Evals`
 - Auto-merge is enabled at the repo level; use it on PRs so merges wait for required checks.
 - This repo ignores lockfiles; CI uses `npm install` (not `npm ci`) in `mcp-server`.
+- Agent evals run on `ubuntu-latest` (no macOS needed since they use mock fixtures).
 
 ## Code Hygiene
 
