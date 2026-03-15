@@ -1,0 +1,124 @@
+name: "Tool Call Correctness"
+category: tool-call-correctness
+description: "Verify handlers produce correct CLI arguments for every input variant"
+
+cases:
+  - id: cal-create-iso-offset
+    tool: calendar
+    description: "ISO 8601 with timezone offset passes through unchanged"
+    input: { action: create, title: "Dinner", start: "2026-03-15T19:00:00-07:00", calendar: "Personal" }
+    expect:
+      cli_args_contain: ["--start", "2026-03-15T19:00:00-07:00"]
+      dry_run_contains: ["Dinner", "Personal"]
+
+  - id: cal-create-duration
+    tool: calendar
+    description: "Duration param used instead of end"
+    input: { action: create, title: "Quick Chat", start: "2026-03-15T10:00:00", duration: 30 }
+    expect:
+      cli_args_contain: ["--duration", "30"]
+      cli_args_absent: ["--end"]
+
+  - id: cal-create-all-day
+    tool: calendar
+    description: "All-day flag is passed"
+    input: { action: create, title: "Holiday", start: "2026-12-25", allDay: true }
+    expect:
+      cli_args_contain: ["--all-day"]
+
+  - id: cal-create-recurrence
+    tool: calendar
+    description: "Recurrence serialized as JSON"
+    input:
+      action: create
+      title: "Weekly Sync"
+      start: "2026-03-16T09:00:00"
+      recurrence: { frequency: "weekly", daysOfTheWeek: ["monday"] }
+    expect:
+      cli_args_contain: ["--recurrence"]
+
+  - id: cal-create-multiple-alarms
+    tool: calendar
+    description: "Multiple alarms produce multiple --alarm flags"
+    input: { action: create, title: "Important", start: "2026-03-15T14:00:00", alarm: [5, 15] }
+    expect:
+      cli_args_pairs:
+        - ["--alarm", "5"]
+        - ["--alarm", "15"]
+
+  - id: cal-events-last-days
+    tool: calendar
+    description: "lastDays computes --from as relative date"
+    input: { action: events, lastDays: 7 }
+    expect:
+      cli_args_contain: ["--from"]
+
+  - id: rem-create-location-json
+    tool: reminder
+    description: "Location object serialized as JSON"
+    input:
+      action: create
+      title: "Pick up package"
+      location: { latitude: 47.6, longitude: -122.3, proximity: "arrive" }
+    expect:
+      cli_args_contain: ["--location"]
+
+  - id: cal-create-missing-title
+    tool: calendar
+    description: "Missing title on create throws error"
+    input: { action: create, start: "2026-03-15T10:00:00" }
+    expect:
+      throws: true
+
+  - id: cal-get-missing-id
+    tool: calendar
+    description: "Missing ID on get throws error"
+    input: { action: get }
+    expect:
+      throws: "Event ID is required"
+
+  - id: rem-delete-missing-id
+    tool: reminder
+    description: "Missing ID on delete throws error"
+    input: { action: delete }
+    expect:
+      throws: "Reminder ID is required"
+
+  - id: mail-get-missing-id
+    tool: mail
+    description: "Missing ID on mail get throws error"
+    input: { action: get }
+    expect:
+      throws: "Message ID is required"
+
+  - id: contact-delete-missing-id
+    tool: contact
+    description: "Missing ID on contact delete throws error"
+    input: { action: delete }
+    expect:
+      throws: "Contact ID is required"
+
+  - id: cal-delete-future-events
+    tool: calendar
+    description: "futureEvents flag passed on delete"
+    input: { action: delete, id: "evt_1", futureEvents: true }
+    expect:
+      cli_args_contain: ["--future-events"]
+
+  - id: cal-batch-create-events-array
+    tool: calendar
+    description: "batch_create passes JSON events array"
+    input:
+      action: batch_create
+      events:
+        - { title: "Mon", start: "2026-03-16T09:00:00" }
+        - { title: "Tue", start: "2026-03-17T09:00:00" }
+    expect:
+      cli_args_contain: ["batch-create", "--json"]
+
+  - id: rem-batch-create-empty
+    tool: reminder
+    description: "Empty reminders array throws error"
+    input: { action: batch_create, reminders: [] }
+    expect:
+      throws: "cannot be empty"

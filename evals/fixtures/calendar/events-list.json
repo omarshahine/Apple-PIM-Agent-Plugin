@@ -1,0 +1,28 @@
+{
+  "events": [
+    {
+      "id": "E001",
+      "title": "Morning Standup",
+      "start": "2026-03-15T09:00:00-07:00",
+      "end": "2026-03-15T09:30:00-07:00",
+      "calendar": "Work",
+      "allDay": false
+    },
+    {
+      "id": "E002",
+      "title": "Lunch with Bob",
+      "start": "2026-03-15T12:00:00-07:00",
+      "end": "2026-03-15T13:00:00-07:00",
+      "calendar": "Personal",
+      "allDay": false
+    },
+    {
+      "id": "E003",
+      "title": "Sprint Review",
+      "start": "2026-03-15T15:00:00-07:00",
+      "end": "2026-03-15T16:00:00-07:00",
+      "calendar": "Work",
+      "allDay": false
+    }
+  ]
+}

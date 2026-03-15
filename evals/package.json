@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Agent eval suite for Apple PIM CLI tools",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4",
+    "js-yaml": "^4.1.0"
+  }
+}

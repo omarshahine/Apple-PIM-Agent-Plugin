@@ -1,0 +1,20 @@
+{
+  "id": "E1234-5678-ABCD",
+  "title": "Dinner with Alex",
+  "start": "2026-03-15T19:00:00-07:00",
+  "end": "2026-03-15T20:00:00-07:00",
+  "calendar": "Personal",
+  "location": "The Restaurant",
+  "notes": null,
+  "allDay": false,
+  "recurrence": null,
+  "alarms": [],
+  "verification": {
+    "allFieldsMatch": true,
+    "fields": {
+      "title": { "requested": "Dinner with Alex", "actual": "Dinner with Alex", "match": true },
+      "start": { "requested": "2026-03-15T19:00:00-07:00", "actual": "2026-03-15T19:00:00-07:00", "match": true },
+      "calendar": { "requested": "Personal", "actual": "Personal", "match": true }
+    }
+  }
+}

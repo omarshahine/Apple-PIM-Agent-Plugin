@@ -1,0 +1,20 @@
+{
+  "contacts": [
+    {
+      "id": "C001",
+      "firstName": "Alex",
+      "lastName": "Johnson",
+      "organization": "Acme Corp",
+      "emails": [{ "label": "work", "value": "alex@example.com" }],
+      "phones": [{ "label": "mobile", "value": "+1-555-0100" }]
+    },
+    {
+      "id": "C002",
+      "firstName": "Alex",
+      "lastName": "Smith",
+      "organization": null,
+      "emails": [{ "label": "home", "value": "asmith@example.com" }],
+      "phones": []
+    }
+  ]
+}

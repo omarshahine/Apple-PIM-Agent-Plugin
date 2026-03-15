@@ -1,0 +1,113 @@
+name: "Multi-turn Sequences"
+category: multi-turn
+description: "Verify correct tool call sequences for multi-step workflows"
+
+scenarios:
+  - id: schedule-dinner
+    description: "Schedule dinner tomorrow at 7 PM"
+    setup:
+      responses:
+        - "calendar/create-success"
+    turns:
+      - tool: calendar
+        input:
+          action: create
+          title: "Dinner with Alex"
+          start: "2026-03-15T19:00:00-07:00"
+          calendar: "Personal"
+    grading:
+      - assert: call_count
+        value: 1
+      - assert: call_cli
+        index: 0
+        cli: "calendar-cli"
+      - assert: call_args_contain
+        index: 0
+        values: ["create", "--title", "Dinner with Alex"]
+
+  - id: search-then-update
+    description: "Move 3 PM meeting to 4 PM"
+    setup:
+      responses:
+        - "calendar/events-list"
+        - { id: "E003", title: "Sprint Review", start: "2026-03-15T16:00:00-07:00" }
+    turns:
+      - tool: calendar
+        input:
+          action: search
+          query: "Sprint Review"
+      - tool: calendar
+        input:
+          action: update
+          id: "E003"
+          start: "2026-03-15T16:00:00-07:00"
+    grading:
+      - assert: call_count
+        value: 2
+      - assert: call_args_contain
+        index: 0
+        values: ["search", "Sprint Review"]
+      - assert: call_args_contain
+        index: 1
+        values: ["update", "--id", "E003", "--start", "2026-03-15T16:00:00-07:00"]
+
+  - id: batch-create-standups
+    description: "Batch create weekly standups"
+    setup:
+      responses:
+        - created:
+            - { id: "E100", title: "Mon Standup" }
+            - { id: "E101", title: "Tue Standup" }
+            - { id: "E102", title: "Wed Standup" }
+            - { id: "E103", title: "Thu Standup" }
+            - { id: "E104", title: "Fri Standup" }
+          summary: { total: 5, succeeded: 5, failed: 0 }
+    turns:
+      - tool: calendar
+        input:
+          action: batch_create
+          events:
+            - { title: "Mon Standup", start: "2026-03-16T09:00:00", recurrence: { frequency: "weekly" } }
+            - { title: "Tue Standup", start: "2026-03-17T09:00:00", recurrence: { frequency: "weekly" } }
+            - { title: "Wed Standup", start: "2026-03-18T09:00:00", recurrence: { frequency: "weekly" } }
+            - { title: "Thu Standup", start: "2026-03-19T09:00:00", recurrence: { frequency: "weekly" } }
+            - { title: "Fri Standup", start: "2026-03-20T09:00:00", recurrence: { frequency: "weekly" } }
+    grading:
+      - assert: call_count
+        value: 1
+      - assert: call_cli
+        index: 0
+        cli: "calendar-cli"
+      - assert: call_args_contain
+        index: 0
+        values: ["batch-create", "--json"]
+
+  - id: create-contact-then-email
+    description: "Create contact then send them an email"
+    setup:
+      responses:
+        - "contact/search-results"
+        - { success: true, id: "msg-new@example.com" }
+    turns:
+      - tool: contact
+        input:
+          action: search
+          query: "Alex Johnson"
+      - tool: mail
+        input:
+          action: send
+          to: ["alex@example.com"]
+          subject: "Meeting follow-up"
+          body: "Thanks for the great meeting today!"
+    grading:
+      - assert: call_count
+        value: 2
+      - assert: call_cli
+        index: 0
+        cli: "contacts-cli"
+      - assert: call_cli
+        index: 1
+        cli: "mail-cli"
+      - assert: call_args_contain
+        index: 1
+        values: ["send", "--to", "alex@example.com", "--subject", "Meeting follow-up"]

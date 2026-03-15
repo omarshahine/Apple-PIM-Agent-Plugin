@@ -1,0 +1,22 @@
+{
+  "messages": [
+    {
+      "id": "msg-001@example.com",
+      "subject": "Q1 Budget Review",
+      "sender": "boss@example.com",
+      "date": "2026-03-15T08:30:00-07:00",
+      "read": false,
+      "flagged": false,
+      "mailbox": "INBOX"
+    },
+    {
+      "id": "msg-002@example.com",
+      "subject": "Lunch plans?",
+      "sender": "friend@example.com",
+      "date": "2026-03-15T10:00:00-07:00",
+      "read": true,
+      "flagged": false,
+      "mailbox": "INBOX"
+    }
+  ]
+}

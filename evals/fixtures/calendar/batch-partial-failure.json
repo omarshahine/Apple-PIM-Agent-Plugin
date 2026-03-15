@@ -1,0 +1,21 @@
+{
+  "created": [
+    {
+      "id": "E100",
+      "title": "Monday Standup",
+      "start": "2026-03-16T09:00:00-07:00"
+    }
+  ],
+  "errors": [
+    {
+      "index": 1,
+      "title": "Tuesday Standup",
+      "error": "Calendar 'NonExistent' not found"
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "succeeded": 1,
+    "failed": 1
+  }
+}

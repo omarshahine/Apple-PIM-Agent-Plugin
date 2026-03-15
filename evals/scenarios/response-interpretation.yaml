@@ -1,0 +1,60 @@
+name: "Response Interpretation"
+category: response-interpretation
+description: "Verify responses are structured for unambiguous agent consumption"
+
+cases:
+  - id: verification-mismatch-visible
+    tool: calendar
+    description: "Verification mismatch flag is visible in create response"
+    fixture: "calendar/create-verification-mismatch"
+    assert:
+      has_key: "verification"
+      nested:
+        path: "verification.allFieldsMatch"
+        value: false
+
+  - id: field-selection-preserves-verification
+    tool: calendar
+    description: "Field selection keeps verification block on create"
+    fixture: "calendar/create-success"
+    fields: ["id", "title"]
+    assert:
+      has_keys: ["id", "title"]
+      preserved_keys: ["verification"]
+
+  - id: batch-partial-failure-structure
+    tool: calendar
+    description: "Batch partial failure has both created and errors arrays"
+    fixture: "calendar/batch-partial-failure"
+    assert:
+      has_keys: ["created", "errors", "summary"]
+
+  - id: injection-detection-in-mail
+    description: "Mail body with injection patterns gets flagged"
+    fixture: "mail/get-with-injection"
+    assert:
+      sanitize_suspicious: true
+      sanitize_field: "body"
+
+  - id: normal-content-clean
+    description: "Normal calendar event content is not flagged"
+    inline_data:
+      title: "Quarterly Planning Meeting"
+      notes: "Review Q2 goals and budget allocation"
+    assert:
+      sanitize_suspicious: false
+
+  - id: error-propagation
+    description: "CLI errors propagate to caller"
+    mock_error: "Calendar 'NonExistent' not found"
+    assert:
+      throws_containing: "NonExistent"
+
+  - id: datamarking-wraps-untrusted
+    description: "Calendar event notes get datamarked"
+    inline_data:
+      title: "Team Sync"
+      notes: "Discuss project timeline"
+    assert:
+      datamarked_field: "notes"
+      domain: "calendar"

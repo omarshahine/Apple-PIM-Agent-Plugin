@@ -1,0 +1,20 @@
+{
+  "reminders": [
+    {
+      "id": "R001",
+      "title": "Pay electric bill",
+      "list": "Bills",
+      "due": "2026-03-10T09:00:00-07:00",
+      "completed": false,
+      "priority": 1
+    },
+    {
+      "id": "R002",
+      "title": "Submit expense report",
+      "list": "Work",
+      "due": "2026-03-12T17:00:00-07:00",
+      "completed": false,
+      "priority": 5
+    }
+  ]
+}

@@ -2,6 +2,10 @@
   "private": true,
   "type": "module",
   "description": "Shared dependencies for lib/ (used by mcp-server and openclaw)",
+  "scripts": {
+    "eval": "npm run --prefix evals test",
+    "eval:watch": "npm run --prefix evals test:watch"
+  },
   "dependencies": {
     "mailparser": "^3.9.3",
     "turndown": "^7.2.2"
