@@ -278,6 +278,62 @@ func participantRoleString(_ role: EKParticipantRole) -> String {
     }
 }
 
+// MARK: - Attendee Write Support (Private API)
+
+func addAttendeesToEvent(_ event: EKEvent, json: String) throws {
+    guard let data = json.data(using: .utf8) else {
+        throw CLIError.invalidInput("Invalid attendees JSON encoding")
+    }
+    let attendeeInputs = try JSONDecoder().decode([AttendeeJSON].self, from: data)
+    try setAttendeesOnEvent(event, attendees: attendeeInputs)
+}
+
+func addAttendeesToEvent(_ event: EKEvent, attendees attendeeInputs: [AttendeeJSON]) throws {
+    try setAttendeesOnEvent(event, attendees: attendeeInputs)
+}
+
+private func setAttendeesOnEvent(_ event: EKEvent, attendees attendeeInputs: [AttendeeJSON]) throws {
+    guard let ekAttendeeClass = NSClassFromString("EKAttendee") as? NSObject.Type else {
+        throw CLIError.invalidInput(
+            "EKAttendee class not available on this macOS version. " +
+            "Attendee write support requires the private EKAttendee class."
+        )
+    }
+
+    var attendeeObjects: [NSObject] = []
+
+    for input in attendeeInputs {
+        let attendee = ekAttendeeClass.init()
+
+        // Set email via emailAddress property (KVC)
+        attendee.setValue(input.email, forKey: "emailAddress")
+
+        // Set display name if provided
+        if let name = input.name {
+            attendee.setValue(name, forKey: "commonName")
+        }
+
+        // Set participant role (default: required)
+        let role: Int
+        switch input.role?.lowercased() {
+        case "optional":
+            role = EKParticipantRole.optional.rawValue
+        case "chair":
+            role = EKParticipantRole.chair.rawValue
+        case "nonparticipant":
+            role = EKParticipantRole.nonParticipant.rawValue
+        default:
+            role = EKParticipantRole.required.rawValue
+        }
+        attendee.setValue(role, forKey: "participantRole")
+
+        attendeeObjects.append(attendee)
+    }
+
+    // Set attendees on the event via KVC
+    event.setValue(attendeeObjects, forKey: "attendees")
+}
+
 // MARK: - Config Helpers
 
 /// Get only the calendars allowed by the current PIM config.
@@ -644,6 +700,9 @@ struct CreateEvent: AsyncParsableCommand {
     @Option(name: .long, help: "Recurrence rule as JSON (e.g., '{\"frequency\":\"weekly\",\"interval\":1}')")
     var recurrence: String?
 
+    @Option(name: .long, help: "Attendees as JSON array (e.g., '[{\"email\":\"a@b.com\",\"name\":\"Name\"}]')")
+    var attendees: String?
+
     func run() async throws {
         try await requestCalendarAccess()
 
@@ -692,6 +751,11 @@ struct CreateEvent: AsyncParsableCommand {
             event.addRecurrenceRule(rule)
         }
 
+        // Add attendees if specified
+        if let attendeesJSON = attendees {
+            try addAttendeesToEvent(event, json: attendeesJSON)
+        }
+
         try eventStore.save(event, span: .thisEvent)
 
         outputJSON([
@@ -733,6 +797,9 @@ struct UpdateEvent: AsyncParsableCommand {
 
     @Option(name: .long, help: "Recurrence rule as JSON (e.g., '{\"frequency\":\"weekly\",\"interval\":1}')")
     var recurrence: String?
+
+    @Option(name: .long, help: "Attendees as JSON array (e.g., '[{\"email\":\"a@b.com\",\"name\":\"Name\"}]')")
+    var attendees: String?
 
     @Flag(name: .long, help: "Apply changes to all future events in a recurring series")
     var futureEvents: Bool = false
@@ -787,6 +854,11 @@ struct UpdateEvent: AsyncParsableCommand {
             }
         }
 
+        // Update attendees if specified
+        if let attendeesJSON = attendees {
+            try addAttendeesToEvent(event, json: attendeesJSON)
+        }
+
         // Only use futureEvents span when explicitly requested by user
         let span: EKSpan = futureEvents ? .futureEvents : .thisEvent
         try eventStore.save(event, span: span)
@@ -838,6 +910,12 @@ struct DeleteEvent: AsyncParsableCommand {
 
 // MARK: - Batch Operations
 
+struct AttendeeJSON: Codable {
+    let email: String
+    let name: String?
+    let role: String?
+}
+
 struct BatchEventInput: Codable {
     let title: String
     let start: String
@@ -850,6 +928,7 @@ struct BatchEventInput: Codable {
     let allDay: Bool?
     let alarm: [Int]?
     let recurrence: RecurrenceJSON?
+    let attendees: [AttendeeJSON]?
 }
 
 func decodeBatchEvents(_ json: String) throws -> [BatchEventInput] {
@@ -942,6 +1021,11 @@ struct BatchCreateEvent: AsyncParsableCommand {
                        let rule = parseRecurrenceRule(recurrenceStr) {
                         event.addRecurrenceRule(rule)
                     }
+                }
+
+                // Add attendees if specified
+                if let attendeeInputs = eventInput.attendees {
+                    try addAttendeesToEvent(event, attendees: attendeeInputs)
                 }
 
                 // Save with commit: false to batch changes
