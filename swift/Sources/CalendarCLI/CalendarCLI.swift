@@ -308,9 +308,14 @@ private func setAttendeesOnEvent(_ event: EKEvent, attendees attendeeInputs: [At
         // Set email via emailAddress property (KVC)
         attendee.setValue(input.email, forKey: "emailAddress")
 
-        // Set display name if provided
+        // Set display name if provided (EKParticipant exposes firstName/lastName as
+        // settable properties; the read-only "name" property returns them combined)
         if let name = input.name {
-            attendee.setValue(name, forKey: "commonName")
+            let parts = name.split(separator: " ", maxSplits: 1)
+            attendee.setValue(String(parts[0]), forKey: "firstName")
+            if parts.count > 1 {
+                attendee.setValue(String(parts[1]), forKey: "lastName")
+            }
         }
 
         // Set participant role (default: required)
