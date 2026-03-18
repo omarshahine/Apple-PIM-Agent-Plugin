@@ -325,6 +325,9 @@ private func setAttendeesOnEvent(_ event: EKEvent, attendees attendeeInputs: [At
     for input in attendeeInputs {
         let attendee = ekAttendeeClass.init()
 
+        // UUID is required — EventKit's _addNewAttendeesToRecentsIfNeeded
+        // uses it as a dictionary key and crashes with nil if missing
+        safeSetValue(attendee, UUID().uuidString, forKey: "UUID")
         safeSetValue(attendee, input.email, forKey: "emailAddress")
 
         // Set display name if provided (EKParticipant exposes firstName/lastName as
