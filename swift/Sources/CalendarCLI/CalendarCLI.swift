@@ -292,6 +292,17 @@ func addAttendeesToEvent(_ event: EKEvent, attendees attendeeInputs: [AttendeeJS
     try setAttendeesOnEvent(event, attendees: attendeeInputs)
 }
 
+/// Safely set a value via KVC, checking that the setter exists first.
+/// Returns true if the setter was found and called, false otherwise.
+/// This avoids uncatchable NSException crashes from setValue:forUndefinedKey:.
+@discardableResult
+private func safeSetValue(_ object: NSObject, _ value: Any?, forKey key: String) -> Bool {
+    let setter = NSSelectorFromString("set\(key.prefix(1).uppercased())\(key.dropFirst()):")
+    guard object.responds(to: setter) else { return false }
+    object.setValue(value, forKey: key)
+    return true
+}
+
 private func setAttendeesOnEvent(_ event: EKEvent, attendees attendeeInputs: [AttendeeJSON]) throws {
     guard let ekAttendeeClass = NSClassFromString("EKAttendee") as? NSObject.Type else {
         throw CLIError.invalidInput(
@@ -300,21 +311,29 @@ private func setAttendeesOnEvent(_ event: EKEvent, attendees attendeeInputs: [At
         )
     }
 
+    // Verify required KVC keys are available on this macOS version
+    let probe = ekAttendeeClass.init()
+    guard probe.responds(to: NSSelectorFromString("setEmailAddress:")) else {
+        throw CLIError.invalidInput(
+            "EKAttendee on this macOS version does not support setEmailAddress:. " +
+            "Attendee write support is not available."
+        )
+    }
+
     var attendeeObjects: [NSObject] = []
 
     for input in attendeeInputs {
         let attendee = ekAttendeeClass.init()
 
-        // Set email via emailAddress property (KVC)
-        attendee.setValue(input.email, forKey: "emailAddress")
+        safeSetValue(attendee, input.email, forKey: "emailAddress")
 
         // Set display name if provided (EKParticipant exposes firstName/lastName as
         // settable properties; the read-only "name" property returns them combined)
         if let name = input.name {
             let parts = name.split(separator: " ", maxSplits: 1)
-            attendee.setValue(String(parts[0]), forKey: "firstName")
+            safeSetValue(attendee, String(parts[0]), forKey: "firstName")
             if parts.count > 1 {
-                attendee.setValue(String(parts[1]), forKey: "lastName")
+                safeSetValue(attendee, String(parts[1]), forKey: "lastName")
             }
         }
 
@@ -330,12 +349,12 @@ private func setAttendeesOnEvent(_ event: EKEvent, attendees attendeeInputs: [At
         default:
             role = EKParticipantRole.required.rawValue
         }
-        attendee.setValue(role, forKey: "participantRole")
+        safeSetValue(attendee, role, forKey: "participantRole")
 
         attendeeObjects.append(attendee)
     }
 
-    // Set attendees on the event via KVC
+    // Set attendees on the event via KVC (replaces any existing attendees)
     event.setValue(attendeeObjects, forKey: "attendees")
 }
 
@@ -803,7 +822,7 @@ struct UpdateEvent: AsyncParsableCommand {
     @Option(name: .long, help: "Recurrence rule as JSON (e.g., '{\"frequency\":\"weekly\",\"interval\":1}')")
     var recurrence: String?
 
-    @Option(name: .long, help: "Attendees as JSON array (e.g., '[{\"email\":\"a@b.com\",\"name\":\"Name\"}]')")
+    @Option(name: .long, help: "Attendees as JSON array (replaces all existing attendees)")
     var attendees: String?
 
     @Flag(name: .long, help: "Apply changes to all future events in a recurring series")
