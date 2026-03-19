@@ -288,6 +288,88 @@ describe("Category 1: Tool Call Correctness", () => {
     });
   });
 
+  describe("send/reply attachment argument construction", () => {
+    it("send passes --attachment for single file path", async () => {
+      const mockCLI = createMockCLI({ "mail-cli:send": { success: true } });
+      await handleMail({
+        action: "send", to: ["a@b.com"], subject: "test", body: "hi",
+        attachment: "/dev/null",
+      }, mockCLI);
+
+      const callArgs = mockCLI.mock.calls[0][1];
+      expect(argsPairPresent(callArgs, "--attachment", "/dev/null")).toBe(true);
+    });
+
+    it("send passes multiple --attachment flags for array", async () => {
+      const mockCLI = createMockCLI({ "mail-cli:send": { success: true } });
+      await handleMail({
+        action: "send", to: ["a@b.com"], subject: "test", body: "hi",
+        attachment: ["/dev/null", "/dev/zero"],
+      }, mockCLI);
+
+      const callArgs = mockCLI.mock.calls[0][1];
+      const attValues = callArgs
+        .map((arg, i) => arg === "--attachment" ? callArgs[i + 1] : null)
+        .filter(Boolean);
+      expect(attValues).toContain("/dev/null");
+      expect(attValues).toContain("/dev/zero");
+      expect(attValues).toHaveLength(2);
+    });
+
+    it("send omits --attachment when not provided", async () => {
+      const mockCLI = createMockCLI({ "mail-cli:send": { success: true } });
+      await handleMail({
+        action: "send", to: ["a@b.com"], subject: "test", body: "hi",
+      }, mockCLI);
+
+      const callArgs = mockCLI.mock.calls[0][1];
+      expect(callArgs).not.toContain("--attachment");
+    });
+
+    it("send throws for nonexistent attachment path", async () => {
+      const mockCLI = createMockCLI({ "mail-cli:send": { success: true } });
+      await expect(handleMail({
+        action: "send", to: ["a@b.com"], subject: "test", body: "hi",
+        attachment: "/tmp/does-not-exist-abc123.txt",
+      }, mockCLI)).rejects.toThrow("Attachment file not found: /tmp/does-not-exist-abc123.txt");
+    });
+
+    it("reply passes --attachment when provided", async () => {
+      const mockCLI = createMockCLI({ "mail-cli:reply": { success: true } });
+      await handleMail({
+        action: "reply", id: "msg_1", body: "thanks",
+        attachment: "/dev/null",
+      }, mockCLI);
+
+      const callArgs = mockCLI.mock.calls[0][1];
+      expect(argsPairPresent(callArgs, "--attachment", "/dev/null")).toBe(true);
+    });
+
+    it("reply passes multiple --attachment flags for array", async () => {
+      const mockCLI = createMockCLI({ "mail-cli:reply": { success: true } });
+      await handleMail({
+        action: "reply", id: "msg_1", body: "thanks",
+        attachment: ["/dev/null", "/dev/zero"],
+      }, mockCLI);
+
+      const callArgs = mockCLI.mock.calls[0][1];
+      const attValues = callArgs
+        .map((arg, i) => arg === "--attachment" ? callArgs[i + 1] : null)
+        .filter(Boolean);
+      expect(attValues).toContain("/dev/null");
+      expect(attValues).toContain("/dev/zero");
+      expect(attValues).toHaveLength(2);
+    });
+
+    it("reply throws for nonexistent attachment path", async () => {
+      const mockCLI = createMockCLI({ "mail-cli:reply": { success: true } });
+      await expect(handleMail({
+        action: "reply", id: "msg_1", body: "thanks",
+        attachment: "/tmp/does-not-exist-abc123.txt",
+      }, mockCLI)).rejects.toThrow("Attachment file not found: /tmp/does-not-exist-abc123.txt");
+    });
+  });
+
   describe("batch operation validation", () => {
     it("calendar batch_create throws with empty events", async () => {
       const mockCLI = createMockCLI({});

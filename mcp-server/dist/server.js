@@ -4745,6 +4745,7 @@ var require_pattern = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var code_1 = require_code2();
+    var util_1 = require_util();
     var codegen_1 = require_codegen();
     var error2 = {
       message: ({ schemaCode }) => (0, codegen_1.str)`must match pattern "${schemaCode}"`,
@@ -4757,10 +4758,18 @@ var require_pattern = __commonJS({
       $data: true,
       error: error2,
       code(cxt) {
-        const { data, $data, schema, schemaCode, it } = cxt;
+        const { gen, data, $data, schema, schemaCode, it } = cxt;
         const u = it.opts.unicodeRegExp ? "u" : "";
-        const regExp = $data ? (0, codegen_1._)`(new RegExp(${schemaCode}, ${u}))` : (0, code_1.usePattern)(cxt, schema);
-        cxt.fail$data((0, codegen_1._)`!${regExp}.test(${data})`);
+        if ($data) {
+          const { regExp } = it.opts.code;
+          const regExpCode = regExp.code === "new RegExp" ? (0, codegen_1._)`new RegExp` : (0, util_1.useFunc)(gen, regExp);
+          const valid = gen.let("valid");
+          gen.try(() => gen.assign(valid, (0, codegen_1._)`${regExpCode}(${schemaCode}, ${u}).test(${data})`), () => gen.assign(valid, false));
+          cxt.fail$data((0, codegen_1._)`!${valid}`);
+        } else {
+          const regExp = (0, code_1.usePattern)(cxt, schema);
+          cxt.fail$data((0, codegen_1._)`!${regExp}.test(${data})`);
+        }
       }
     };
     exports.default = def;
@@ -31739,6 +31748,14 @@ var require_addressparser = __commonJS({
           parsedAddresses = parsedAddresses.concat(address2);
         }
       });
+      for (let i = parsedAddresses.length - 2; i >= 0; i--) {
+        let current = parsedAddresses[i];
+        let next = parsedAddresses[i + 1];
+        if (current.address === "" && current.name && !current.group && next.address && next.name && !next.group) {
+          next.name = current.name + ", " + next.name;
+          parsedAddresses.splice(i, 1);
+        }
+      }
       if (options.flatten) {
         let addresses2 = [];
         let walkAddressList = (list) => {
@@ -44921,7 +44938,7 @@ var require_mail_parser = __commonJS({
                 value = this.libmime.decodeWords(value);
               } catch (E) {
               }
-              value = value.split(/\s+/).map(this.ensureMessageIDFormat);
+              value = value.split(/\s+/).map(this.ensureMessageIDFormat).filter((val) => val);
               break;
             case "message-id":
             case "in-reply-to":
@@ -45078,21 +45095,39 @@ var require_mail_parser = __commonJS({
           let address = addresses[i];
           address.name = (address.name || "").toString().trim();
           if (!address.address && /^(=\?([^?]+)\?[Bb]\?[^?]*\?=)(\s*=\?([^?]+)\?[Bb]\?[^?]*\?=)*$/.test(address.name) && !processedAddress.has(address)) {
-            let parsed = addressparser(this.libmime.decodeWords(address.name));
-            if (parsed.length) {
-              parsed.forEach((entry) => {
-                processedAddress.add(entry);
-                addresses.push(entry);
-              });
+            let decoded = this.libmime.decodeWords(address.name);
+            if (/<[^<>]+@[^<>]+>/.test(decoded)) {
+              let parsed = addressparser(decoded);
+              if (parsed.length) {
+                parsed.forEach((entry) => {
+                  processedAddress.add(entry);
+                  addresses.push(entry);
+                });
+              }
+              addresses.splice(i, 1);
+              i--;
+              continue;
+            } else {
+              address.name = decoded;
+              continue;
             }
-            addresses.splice(i, 1);
-            i--;
-            continue;
           }
           if (address.name) {
             try {
               address.name = this.libmime.decodeWords(address.name);
             } catch (E) {
+            }
+          }
+          if (address.address && /[=]\?[^?]+\?[BbQq]\?[^?]*\?[=]/.test(address.address)) {
+            try {
+              let decodedAddr = this.libmime.decodeWords(address.address);
+              if (/^[^\s@]+@[^\s@]+$/.test(decodedAddr) && !/[=]\?/.test(decodedAddr)) {
+                address.address = decodedAddr;
+              } else {
+                address.address = "";
+              }
+            } catch (E) {
+              address.address = "";
             }
           }
           if (/@xn--/.test(address.address)) {
@@ -68779,7 +68814,7 @@ var Doc = class {
 var version = {
   major: 4,
   minor: 3,
-  patch: 5
+  patch: 6
 };
 
 // node_modules/zod/v4/core/schemas.js
@@ -70070,7 +70105,7 @@ var $ZodRecord = /* @__PURE__ */ $constructor("$ZodRecord", (inst, def) => {
         if (keyResult instanceof Promise) {
           throw new Error("Async schemas not supported in object keys currently");
         }
-        const checkNumericKey = typeof key === "string" && number.test(key) && keyResult.issues.length && keyResult.issues.some((iss) => iss.code === "invalid_type" && iss.expected === "number");
+        const checkNumericKey = typeof key === "string" && number.test(key) && keyResult.issues.length;
         if (checkNumericKey) {
           const retryResult = def.keyType._zod.run({ value: Number(key), issues: [] }, ctx);
           if (retryResult instanceof Promise) {
@@ -71915,7 +71950,7 @@ function finalize(ctx, schema) {
           }
         }
       }
-      if (refSchema.$ref) {
+      if (refSchema.$ref && refSeen.def) {
         for (const key in schema2) {
           if (key === "$ref" || key === "allOf")
             continue;
@@ -75714,6 +75749,9 @@ var Protocol = class {
    * The Protocol object assumes ownership of the Transport, replacing any callbacks that have already been set, and expects that it is the only user of the Transport instance going forward.
    */
   async connect(transport2) {
+    if (this._transport) {
+      throw new Error("Already connected to a transport. Call close() before connecting to a new transport, or use a separate Protocol instance per connection.");
+    }
     this._transport = transport2;
     const _onclose = this.transport?.onclose;
     this._transport.onclose = () => {
@@ -75746,6 +75784,10 @@ var Protocol = class {
     this._progressHandlers.clear();
     this._taskProgressTokens.clear();
     this._pendingDebouncedNotifications.clear();
+    for (const controller of this._requestHandlerAbortControllers.values()) {
+      controller.abort();
+    }
+    this._requestHandlerAbortControllers.clear();
     const error2 = McpError.fromError(ErrorCode.ConnectionClosed, "Connection closed");
     this._transport = void 0;
     this.onclose?.();
@@ -75796,6 +75838,8 @@ var Protocol = class {
       sessionId: capturedTransport?.sessionId,
       _meta: request.params?._meta,
       sendNotification: async (notification) => {
+        if (abortController.signal.aborted)
+          return;
         const notificationOptions = { relatedRequestId: request.id };
         if (relatedTaskId) {
           notificationOptions.relatedTask = { taskId: relatedTaskId };
@@ -75803,6 +75847,9 @@ var Protocol = class {
         await this.notification(notification, notificationOptions);
       },
       sendRequest: async (r, resultSchema, options) => {
+        if (abortController.signal.aborted) {
+          throw new McpError(ErrorCode.ConnectionClosed, "Request was cancelled");
+        }
         const requestOptions = { ...options, relatedRequestId: request.id };
         if (relatedTaskId && !requestOptions.relatedTask) {
           requestOptions.relatedTask = { taskId: relatedTaskId };
@@ -76562,6 +76609,147 @@ var ExperimentalServerTasks = class {
    */
   requestStream(request, resultSchema, options) {
     return this._server.requestStream(request, resultSchema, options);
+  }
+  /**
+   * Sends a sampling request and returns an AsyncGenerator that yields response messages.
+   * The generator is guaranteed to end with either a 'result' or 'error' message.
+   *
+   * For task-augmented requests, yields 'taskCreated' and 'taskStatus' messages
+   * before the final result.
+   *
+   * @example
+   * ```typescript
+   * const stream = server.experimental.tasks.createMessageStream({
+   *     messages: [{ role: 'user', content: { type: 'text', text: 'Hello' } }],
+   *     maxTokens: 100
+   * }, {
+   *     onprogress: (progress) => {
+   *         // Handle streaming tokens via progress notifications
+   *         console.log('Progress:', progress.message);
+   *     }
+   * });
+   *
+   * for await (const message of stream) {
+   *     switch (message.type) {
+   *         case 'taskCreated':
+   *             console.log('Task created:', message.task.taskId);
+   *             break;
+   *         case 'taskStatus':
+   *             console.log('Task status:', message.task.status);
+   *             break;
+   *         case 'result':
+   *             console.log('Final result:', message.result);
+   *             break;
+   *         case 'error':
+   *             console.error('Error:', message.error);
+   *             break;
+   *     }
+   * }
+   * ```
+   *
+   * @param params - The sampling request parameters
+   * @param options - Optional request options (timeout, signal, task creation params, onprogress, etc.)
+   * @returns AsyncGenerator that yields ResponseMessage objects
+   *
+   * @experimental
+   */
+  createMessageStream(params, options) {
+    const clientCapabilities = this._server.getClientCapabilities();
+    if ((params.tools || params.toolChoice) && !clientCapabilities?.sampling?.tools) {
+      throw new Error("Client does not support sampling tools capability.");
+    }
+    if (params.messages.length > 0) {
+      const lastMessage = params.messages[params.messages.length - 1];
+      const lastContent = Array.isArray(lastMessage.content) ? lastMessage.content : [lastMessage.content];
+      const hasToolResults = lastContent.some((c) => c.type === "tool_result");
+      const previousMessage = params.messages.length > 1 ? params.messages[params.messages.length - 2] : void 0;
+      const previousContent = previousMessage ? Array.isArray(previousMessage.content) ? previousMessage.content : [previousMessage.content] : [];
+      const hasPreviousToolUse = previousContent.some((c) => c.type === "tool_use");
+      if (hasToolResults) {
+        if (lastContent.some((c) => c.type !== "tool_result")) {
+          throw new Error("The last message must contain only tool_result content if any is present");
+        }
+        if (!hasPreviousToolUse) {
+          throw new Error("tool_result blocks are not matching any tool_use from the previous message");
+        }
+      }
+      if (hasPreviousToolUse) {
+        const toolUseIds = new Set(previousContent.filter((c) => c.type === "tool_use").map((c) => c.id));
+        const toolResultIds = new Set(lastContent.filter((c) => c.type === "tool_result").map((c) => c.toolUseId));
+        if (toolUseIds.size !== toolResultIds.size || ![...toolUseIds].every((id) => toolResultIds.has(id))) {
+          throw new Error("ids of tool_result blocks and tool_use blocks from previous message do not match");
+        }
+      }
+    }
+    return this.requestStream({
+      method: "sampling/createMessage",
+      params
+    }, CreateMessageResultSchema, options);
+  }
+  /**
+   * Sends an elicitation request and returns an AsyncGenerator that yields response messages.
+   * The generator is guaranteed to end with either a 'result' or 'error' message.
+   *
+   * For task-augmented requests (especially URL-based elicitation), yields 'taskCreated'
+   * and 'taskStatus' messages before the final result.
+   *
+   * @example
+   * ```typescript
+   * const stream = server.experimental.tasks.elicitInputStream({
+   *     mode: 'url',
+   *     message: 'Please authenticate',
+   *     elicitationId: 'auth-123',
+   *     url: 'https://example.com/auth'
+   * }, {
+   *     task: { ttl: 300000 } // Task-augmented for long-running auth flow
+   * });
+   *
+   * for await (const message of stream) {
+   *     switch (message.type) {
+   *         case 'taskCreated':
+   *             console.log('Task created:', message.task.taskId);
+   *             break;
+   *         case 'taskStatus':
+   *             console.log('Task status:', message.task.status);
+   *             break;
+   *         case 'result':
+   *             console.log('User action:', message.result.action);
+   *             break;
+   *         case 'error':
+   *             console.error('Error:', message.error);
+   *             break;
+   *     }
+   * }
+   * ```
+   *
+   * @param params - The elicitation request parameters
+   * @param options - Optional request options (timeout, signal, task creation params, etc.)
+   * @returns AsyncGenerator that yields ResponseMessage objects
+   *
+   * @experimental
+   */
+  elicitInputStream(params, options) {
+    const clientCapabilities = this._server.getClientCapabilities();
+    const mode = params.mode ?? "form";
+    switch (mode) {
+      case "url": {
+        if (!clientCapabilities?.elicitation?.url) {
+          throw new Error("Client does not support url elicitation.");
+        }
+        break;
+      }
+      case "form": {
+        if (!clientCapabilities?.elicitation?.form) {
+          throw new Error("Client does not support form elicitation.");
+        }
+        break;
+      }
+    }
+    const normalizedParams = mode === "form" && params.mode === void 0 ? { ...params, mode: "form" } : params;
+    return this.requestStream({
+      method: "elicitation/create",
+      params: normalizedParams
+    }, ElicitResultSchema, options);
   }
   /**
    * Gets the current status of a task.
@@ -77675,7 +77863,7 @@ var tools = [
   },
   {
     name: "mail",
-    description: "Manage Mail.app messages. Requires Mail.app to be running. Actions: accounts, mailboxes, messages (list), get (full message by ID), search, update (flags), move, delete, batch_update, batch_delete, send, reply, auth_check, schema (show input schema).",
+    description: "Manage Mail.app messages. Requires Mail.app to be running. Actions: accounts, mailboxes, messages (list), get (full message by ID), search, update (flags), move, delete, batch_update, batch_delete, send (with optional attachments), reply (with optional attachments), auth_check, schema (show input schema).",
     inputSchema: {
       type: "object",
       properties: {
@@ -77732,6 +77920,11 @@ var tools = [
         cc: { type: "array", items: { type: "string" }, description: "CC addresses (send)" },
         bcc: { type: "array", items: { type: "string" }, description: "BCC addresses (send)" },
         from: { type: "string", description: "Sender email address for account selection (send)" },
+        attachment: {
+          type: "array",
+          items: { type: "string" },
+          description: "File path(s) to attach (send/reply)."
+        },
         trustedSenders: { type: "string", description: "Path to trusted-senders.json (auth_check)" },
         configDir: { type: "string", description: "Override PIM config directory (OpenClaw only \u2014 ignored by MCP server)" },
         profile: { type: "string", description: "Override PIM profile name (OpenClaw only \u2014 MCP server uses APPLE_PIM_PROFILE env)" }
@@ -77886,10 +78079,14 @@ function describeMutation(tool, action, params) {
       return `Would mark reminder ${params.id || "?"} as ${params.undo ? "incomplete" : "complete"}`;
     case "move":
       return `Would move message ${params.id || "?"} to mailbox "${params.toMailbox || "?"}"`;
-    case "send":
-      return `Would send email to ${formatRecipients(params.to)} with subject "${params.subject || ""}"`;
-    case "reply":
-      return `Would reply to message ${params.id || "?"}`;
+    case "send": {
+      const attCount = params.attachment ? Array.isArray(params.attachment) ? params.attachment.length : 1 : 0;
+      return `Would send email to ${formatRecipients(params.to)} with subject "${params.subject || ""}"${attCount ? ` (${attCount} attachment${attCount > 1 ? "s" : ""})` : ""}`;
+    }
+    case "reply": {
+      const attCount = params.attachment ? Array.isArray(params.attachment) ? params.attachment.length : 1 : 0;
+      return `Would reply to message ${params.id || "?"}${attCount ? ` (${attCount} attachment${attCount > 1 ? "s" : ""})` : ""}`;
+    }
     default:
       return `Would perform ${action} on ${tool}`;
   }
@@ -78319,6 +78516,10 @@ async function handleContact(args, runCLI2) {
   }
 }
 
+// ../lib/handlers/mail.js
+import { existsSync as existsSync2 } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+
 // ../lib/mail-format.js
 var import_mailparser = __toESM(require_mailparser(), 1);
 var import_turndown = __toESM(require_turndown_cjs(), 1);
@@ -78517,6 +78718,16 @@ async function handleMail(args, runCLI2) {
       }
       if (args.from)
         sendArgs.push("--from", args.from);
+      if (args.attachment) {
+        const attachments = Array.isArray(args.attachment) ? args.attachment : [args.attachment];
+        for (const filePath of attachments) {
+          const expanded = filePath.replace(/^~/, homedir2());
+          if (!existsSync2(expanded)) {
+            throw new Error(`Attachment file not found: ${filePath}`);
+          }
+          sendArgs.push("--attachment", expanded);
+        }
+      }
       return await runCLI2("mail-cli", sendArgs);
     }
     case "reply": {
@@ -78529,6 +78740,16 @@ async function handleMail(args, runCLI2) {
         replyArgs.push("--mailbox", args.mailbox);
       if (args.account)
         replyArgs.push("--account", args.account);
+      if (args.attachment) {
+        const attachments = Array.isArray(args.attachment) ? args.attachment : [args.attachment];
+        for (const filePath of attachments) {
+          const expanded = filePath.replace(/^~/, homedir2());
+          if (!existsSync2(expanded)) {
+            throw new Error(`Attachment file not found: ${filePath}`);
+          }
+          replyArgs.push("--attachment", expanded);
+        }
+      }
       return await runCLI2("mail-cli", replyArgs);
     }
     case "auth_check": {
