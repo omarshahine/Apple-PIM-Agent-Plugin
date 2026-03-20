@@ -11,6 +11,7 @@ import { createCLIRunner, findSwiftBinDir } from "../lib/cli-runner.js";
 import { tools } from "../lib/schemas.js";
 import { markToolResult, getDatamarkingPreamble } from "../lib/sanitize.js";
 import { withAgentDX } from "../lib/agent-dx.js";
+import { initAccessConfig } from "../lib/access-control.js";
 import { handleCalendar } from "../lib/handlers/calendar.js";
 import { handleReminder } from "../lib/handlers/reminder.js";
 import { handleContact } from "../lib/handlers/contact.js";
@@ -26,6 +27,7 @@ interface PluginConfig {
   binDir?: string;
   profile?: string;
   configDir?: string;
+  accessFile?: string;
 }
 
 // Tool args always include optional isolation params
@@ -187,6 +189,11 @@ function resolveEnvOverrides(
 export default function activate(context: OpenClawContext): void {
   const config = context.config;
   const binDir = resolveBinDir(config);
+
+  // Load access control config (calendar/reminder visibility and write restrictions).
+  // Uses: config.accessFile > APPLE_PIM_ACCESS_FILE env > ~/.config/apple-pim/access.json
+  // If no file exists, all access is open (current behavior).
+  initAccessConfig(config?.accessFile);
 
   for (const tool of tools) {
     const openclawName = TOOL_NAME_MAP[tool.name];
