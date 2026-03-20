@@ -104,4 +104,63 @@ final class DateParsingTests: XCTestCase {
         XCTAssertEqual(result, "2026-03-16T04:00:00Z",
             "9 PM PDT should be 4 AM UTC next day")
     }
+
+    // MARK: - formatDate presets (APPLE_PIM_DATE_FORMAT)
+
+    private func clearDateEnv() {
+        unsetenv("APPLE_PIM_DATE_FORMAT")
+    }
+
+    func testFormatDateDefaultUTC() {
+        clearDateEnv()
+        let date = ISO8601DateFormatter().date(from: "2026-03-20T14:00:00Z")!
+        XCTAssertEqual(formatDate(date), "2026-03-20T14:00:00Z")
+    }
+
+    func testFormatDateLocal() {
+        clearDateEnv()
+        setenv("APPLE_PIM_DATE_FORMAT", "local", 1)
+        defer { clearDateEnv() }
+
+        let date = ISO8601DateFormatter().date(from: "2026-03-20T14:00:00Z")!
+        let result = formatDate(date)
+        // Must contain T separator, must NOT end with Z, must have offset like +/-HH:MM
+        XCTAssertTrue(result.contains("T"), "Local format should contain T separator")
+        XCTAssertFalse(result.hasSuffix("Z"), "Local format should not end with Z")
+        XCTAssertTrue(result.contains("+") || result.contains("-"),
+            "Local format should include timezone offset")
+    }
+
+    func testFormatDateDayUTC() {
+        clearDateEnv()
+        setenv("APPLE_PIM_DATE_FORMAT", "day-utc", 1)
+        defer { clearDateEnv() }
+
+        let date = ISO8601DateFormatter().date(from: "2026-03-20T14:00:00Z")!
+        XCTAssertEqual(formatDate(date), "Friday, 2026-03-20T14:00:00Z")
+    }
+
+    func testFormatDateDayLocal() {
+        clearDateEnv()
+        setenv("APPLE_PIM_DATE_FORMAT", "day-local", 1)
+        defer { clearDateEnv() }
+
+        let date = ISO8601DateFormatter().date(from: "2026-03-20T14:00:00Z")!
+        let result = formatDate(date)
+        XCTAssertTrue(result.hasPrefix("Friday,"), "day-local should start with day name")
+        XCTAssertFalse(result.hasSuffix("Z"), "day-local should not end with Z")
+        XCTAssertTrue(result.contains("+") || result.contains("-"),
+            "day-local should include timezone offset")
+    }
+
+    func testFormatDateUnknownPreset() {
+        clearDateEnv()
+        setenv("APPLE_PIM_DATE_FORMAT", "bogus", 1)
+        defer { clearDateEnv() }
+
+        let date = ISO8601DateFormatter().date(from: "2026-03-20T14:00:00Z")!
+        XCTAssertEqual(formatDate(date), "2026-03-20T14:00:00Z",
+            "Unknown preset should fall back to UTC")
+    }
+
 }
