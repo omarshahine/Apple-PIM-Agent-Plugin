@@ -19,11 +19,6 @@
         "type": "string",
         "description": "Path to access control config file (default: ~/.config/apple-pim/access.json)"
       },
-      "calendarBackend": {
-        "type": "string",
-        "enum": ["eventkit", "icloud-caldav"],
-        "description": "Deprecated. OpenClaw calendar now always uses direct iCloud CalDAV server state."
-      },
       "caldavServerUrl": {
         "type": "string",
         "description": "iCloud CalDAV server URL (defaults to MobileMe account config or https://caldav.icloud.com)"
@@ -59,9 +54,6 @@
     },
     "configDir": {
       "label": "Config Directory"
-    },
-    "calendarBackend": {
-      "label": "Calendar Backend"
     },
     "caldavServerUrl": {
       "label": "CalDAV URL"

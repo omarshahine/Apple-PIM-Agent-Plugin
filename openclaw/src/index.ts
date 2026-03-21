@@ -28,7 +28,6 @@ interface PluginConfig {
   profile?: string;
   configDir?: string;
   accessFile?: string;
-  calendarBackend?: string;
   caldavServerUrl?: string;
   caldavUsername?: string;
   caldavPassword?: string;
@@ -36,6 +35,19 @@ interface PluginConfig {
   calendarAliasesFile?: string;
   caldavTimeoutMs?: number;
 }
+
+const PLUGIN_CONFIG_KEYS = new Set([
+  "binDir",
+  "profile",
+  "configDir",
+  "accessFile",
+  "caldavServerUrl",
+  "caldavUsername",
+  "caldavPassword",
+  "caldavPasswordEnvVar",
+  "calendarAliasesFile",
+  "caldavTimeoutMs",
+]);
 
 // Tool args always include optional isolation params
 interface ToolArgs {
@@ -90,6 +102,30 @@ type OpenClawPluginToolFactory = (ctx: OpenClawPluginToolContext) =>
 interface OpenClawContext {
   config?: PluginConfig;
   registerTool(toolOrFactory: OpenClawToolDefinition | OpenClawPluginToolFactory): void;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function resolvePluginConfig(rawConfig?: unknown): PluginConfig | undefined {
+  const record = asRecord(rawConfig);
+  if (!record) return undefined;
+
+  // Some OpenClaw paths hand plugins their own config directly.
+  if (Object.keys(record).some((key) => PLUGIN_CONFIG_KEYS.has(key))) {
+    return record as PluginConfig;
+  }
+
+  // Other paths hand plugins the full gateway config. In that case, pull the
+  // nested plugin entry back out so handlers see the actual apple-pim config.
+  const plugins = asRecord(record.plugins);
+  const entries = asRecord(plugins?.entries);
+  const pluginEntry = asRecord(entries?.["apple-pim-cli"]);
+  const nestedConfig = asRecord(pluginEntry?.config);
+  return nestedConfig as PluginConfig | undefined;
 }
 
 // Map MCP tool names to OpenClaw snake_case names
@@ -196,7 +232,7 @@ function resolveEnvOverrides(
  * per-workspace config resolution via ctx.workspaceDir.
  */
 export default function activate(context: OpenClawContext): void {
-  const config = context.config;
+  const config = resolvePluginConfig(context.config);
   const binDir = resolveBinDir(config);
 
   // Load access control config (calendar/reminder visibility and write restrictions).
@@ -212,6 +248,7 @@ export default function activate(context: OpenClawContext): void {
 
     context.registerTool((ctx: OpenClawPluginToolContext) => {
       const workspaceDir = ctx.workspaceDir;
+      const runtimePluginConfig = resolvePluginConfig(ctx.config) || config;
 
       return {
         name: openclawName,
@@ -234,7 +271,7 @@ export default function activate(context: OpenClawContext): void {
           const toolArgs = params as ToolArgs;
 
           // Per-call environment isolation — never mutates process.env
-          const envOverrides = resolveEnvOverrides(toolArgs, config, workspaceDir);
+          const envOverrides = resolveEnvOverrides(toolArgs, runtimePluginConfig, workspaceDir);
           const { runCLI } = createCLIRunner(binDir, envOverrides);
           const handler = defaultHandler;
           const calendarBackend = tool.name === "calendar"
@@ -243,7 +280,7 @@ export default function activate(context: OpenClawContext): void {
 
           try {
             const rawResult = await handler(toolArgs, runCLI, {
-              pluginConfig: config,
+              pluginConfig: runtimePluginConfig,
               workspaceDir,
               toolContext: ctx,
             });

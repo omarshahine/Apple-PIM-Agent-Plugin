@@ -26,6 +26,13 @@ Apple provides frameworks and scripting interfaces for personal information mana
 
 Reminders and Contacts require explicit user permission via privacy prompts. Calendar uses direct iCloud CalDAV credentials. Mail.app requires Automation permission and must be running.
 
+## Calendar Rules
+
+- `apple_pim_calendar` uses direct iCloud CalDAV server state, not the Mac's local EventKit cache.
+- calendar ids are CalDAV collection URLs, and event ids are CalDAV object URLs.
+- use plain calendar names like `Daily Plan` or `Shared` unless the caller already has the exact URL.
+- if a calendar result comes back with a local-looking UUID instead of a CalDAV URL, that is stale/incorrect context and should be treated as a bug.
+
 ## Tools
 
 This plugin provides 5 tools:
@@ -146,6 +153,7 @@ Override path with `trustedSenders` parameter: `apple_pim_mail({ action: "auth_c
 2. **Preserve recurrence rules** when updating recurring events
 3. **Handle `.thisEvent` vs `.futureEvents`** scope for recurring event edits
 4. **Use `batch_create`** when creating multiple events for efficiency
+5. **Prefer `Daily Plan` and `Shared` by name** unless the user explicitly requests another calendar
 
 ### Recurring Event Scope
 
