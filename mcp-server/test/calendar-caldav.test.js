@@ -27,8 +27,14 @@ function makeClient({ calendars, objectsByUrl }) {
       });
       return { ok: true, status: 204 };
     },
-    async createCalendarObject() {
-      throw new Error("unexpected create call");
+    async createCalendarObject({ calendar, filename, iCalString }) {
+      const url = new URL(filename, calendar.url).href;
+      objectsByUrl.set(url, {
+        url,
+        etag: "created",
+        data: iCalString,
+      });
+      return { ok: true, status: 201 };
     },
     async deleteCalendarObject() {
       throw new Error("unexpected delete call");
@@ -91,6 +97,29 @@ END:VCALENDAR`,
     ).toBe(false);
   });
 
+  it("creates single-day all-day events with an exclusive next-day end", async () => {
+    const calendar = { displayName: "Daily Plan", url: "https://example.com/daily/" };
+    const objectsByUrl = new Map();
+    const handler = createCalDAVCalendarHandler(BASE_CONFIG, {
+      client: makeClient({ calendars: [calendar], objectsByUrl }),
+    });
+
+    const result = await handler({
+      action: "create",
+      title: "Holiday",
+      start: "2026-03-23",
+      allDay: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.event.isAllDay).toBe(true);
+
+    const created = [...objectsByUrl.values()][0];
+    const vevent = ICAL.Component.fromString(created.data).getFirstSubcomponent("vevent");
+    expect(vevent.getFirstPropertyValue("dtstart").toICALString()).toBe("20260323");
+    expect(vevent.getFirstPropertyValue("dtend").toICALString()).toBe("20260324");
+  });
+
   it("allows update to switch an event to all-day", async () => {
     const calendar = { displayName: "Daily Plan", url: "https://example.com/daily/" };
     const objectUrl = `${calendar.url}lunch.ics`;
@@ -127,6 +156,8 @@ END:VCALENDAR`,
     const vevent = updated.getFirstSubcomponent("vevent");
     expect(vevent.getFirstPropertyValue("dtstart").isDate).toBe(true);
     expect(vevent.getFirstPropertyValue("dtend").isDate).toBe(true);
+    expect(vevent.getFirstPropertyValue("dtstart").toICALString()).toBe("20260323");
+    expect(vevent.getFirstPropertyValue("dtend").toICALString()).toBe("20260324");
   });
 
   it("does not silently default to an arbitrary calendar when Daily Plan and Shared are absent", async () => {
