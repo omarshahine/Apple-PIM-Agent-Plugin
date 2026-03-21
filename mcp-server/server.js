@@ -15,6 +15,7 @@ import {
 import { createCLIRunner, findSwiftBinDir } from "../lib/cli-runner.js";
 import { tools } from "../lib/schemas.js";
 import { withAgentDX } from "../lib/agent-dx.js";
+import { initAccessConfig } from "../lib/access-control.js";
 import { handleCalendar } from "../lib/handlers/calendar.js";
 import { handleReminder } from "../lib/handlers/reminder.js";
 import { handleContact } from "../lib/handlers/contact.js";
@@ -32,7 +33,10 @@ const mcpLocations = [
 const SWIFT_BIN_DIR = findSwiftBinDir(mcpLocations);
 const { runCLI } = createCLIRunner(SWIFT_BIN_DIR);
 
-// Wrap handlers with agent DX features (fields, dryRun, schema)
+// Load access control config (APPLE_PIM_ACCESS_FILE env > ~/.config/apple-pim/access.json)
+initAccessConfig();
+
+// Wrap handlers with agent DX features (fields, dryRun, schema, access control)
 const handlers = {
   calendar: withAgentDX("calendar", handleCalendar),
   reminder: withAgentDX("reminder", handleReminder),

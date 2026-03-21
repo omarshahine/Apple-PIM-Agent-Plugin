@@ -5,7 +5,7 @@
 
 **GitHub**: [github.com/omarshahine/Apple-PIM-Agent-Plugin](https://github.com/omarshahine/Apple-PIM-Agent-Plugin)
 
-Native macOS integration for Calendar, Reminders, Contacts, and Mail using EventKit, Contacts, and JXA frameworks. Works with **Claude Code** (via MCP) and **OpenClaw** (via native tool registration).
+Native macOS integration for Calendar, Reminders, Contacts, and Mail using direct iCloud CalDAV, Contacts, EventKit (reminders), and JXA. Works with **Claude Code** (via MCP) and **OpenClaw** (via native tool registration).
 
 ## Features
 
@@ -17,7 +17,7 @@ Native macOS integration for Calendar, Reminders, Contacts, and Mail using Event
 - **Batch Operations**: Create multiple events or reminders in a single efficient transaction
 - **Per-Domain Control**: Enable or disable entire domains (calendars, reminders, contacts, mail) independently
 - **Multi-Agent Isolation**: Per-call config/profile overrides for workspace isolation
-- **Works with Claude Code and OpenClaw**: Same Swift CLIs, different integration layers
+- **Works with Claude Code and OpenClaw**: Shared calendar/mail/contact/reminder tool surface across both adapters
 
 ## Prerequisites
 
@@ -28,7 +28,7 @@ Native macOS integration for Calendar, Reminders, Contacts, and Mail using Event
 
 ## Installation
 
-### Swift CLI Tools (Required for both platforms)
+### Swift CLI Tools (Required for reminders, contacts, and mail)
 
 ```bash
 # Build the Swift CLIs
@@ -112,11 +112,11 @@ You can optionally restrict which domains and items the plugin can access. This 
 
 ```bash
 # Show current effective configuration
-calendar-cli config show
+apple_pim_system({ action: "config_show" })
 reminder-cli config show
 
 # Initialize config from available calendars/lists
-calendar-cli config init
+apple_pim_system({ action: "config_init" })
 reminder-cli config init
 ```
 
@@ -322,9 +322,9 @@ Natural language works via the `pim-assistant` agent:
 ### Direct CLI
 
 ```bash
-calendar-cli list
-calendar-cli events --from today --to tomorrow
-calendar-cli create --title "Lunch" --start "tomorrow 12pm" --duration 60
+apple_pim_calendar({ action: "list" })
+apple_pim_calendar({ action: "events", from: "today", to: "tomorrow" })
+apple_pim_calendar({ action: "create", title: "Lunch", start: "tomorrow 12pm", duration: 60 })
 reminder-cli lists
 reminder-cli items --list "Personal" --filter overdue
 contacts-cli search "John"
@@ -340,7 +340,7 @@ mail-cli auth-check --id "<message-id>"
 
 | Tool | Actions | Domain |
 |------|---------|--------|
-| `calendar` / `apple_pim_calendar` | `list`, `events`, `get`, `search`, `create`, `update`, `delete`, `batch_create` | Calendar events via EventKit |
+| `calendar` / `apple_pim_calendar` | `list`, `events`, `get`, `search`, `create`, `update`, `delete`, `batch_create` | Calendar events via direct iCloud CalDAV |
 | `reminder` / `apple_pim_reminder` | `lists`, `items`, `get`, `search`, `create`, `complete`, `update`, `delete`, `batch_create`, `batch_complete`, `batch_delete` | Reminders via EventKit |
 | `contact` / `apple_pim_contact` | `groups`, `list`, `search`, `get`, `create`, `update`, `delete` | Contacts framework |
 | `mail` / `apple_pim_mail` | `accounts`, `mailboxes`, `messages`, `get`, `search`, `send`, `reply`, `update`, `move`, `delete`, `batch_update`, `batch_delete`, `auth_check` | Mail.app via JXA/AppleScript |
@@ -379,7 +379,7 @@ Claude Code  <--MCP-->  mcp-server/server.js  ---+
                                                   |
 OpenClaw  <--tools-->  openclaw/src/index.ts  ----+--> lib/ (shared handlers, schemas, sanitize)
                                                   |
-Direct CLI  <--shell-->  --------------------------+--> Swift CLIs (EventKit / Contacts / JXA)
+Direct tools / MCP  <--shell-->  ------------------+--> CalDAV / Swift CLIs / JXA
                                                             |
                                                        PIMConfig
                                                   (~/.config/apple-pim/)
@@ -404,7 +404,7 @@ apple-pim/
 ├── swift/                    # Native Swift CLI tools
 │   ├── Sources/
 │   │   ├── PIMConfig/        # Shared config library
-│   │   ├── CalendarCLI/      # EventKit calendar operations
+│   │   ├── calendar-caldav.js # Shared CalDAV calendar handler
 │   │   ├── ReminderCLI/      # EventKit reminder operations
 │   │   ├── ContactsCLI/      # Contacts framework operations
 │   │   └── MailCLI/          # Mail.app via JXA
@@ -456,8 +456,8 @@ You may need to restart your app after granting permissions.
 ./setup.sh --install
 
 # Verify
-which calendar-cli
-calendar-cli list
+which reminder-cli
+apple_pim_calendar({ action: "list" })
 ```
 
 ### MCP Server Not Connecting (Claude Code)
@@ -468,7 +468,7 @@ calendar-cli list
 
 ### OpenClaw Tools Not Registering
 
-1. Verify CLIs are on PATH: `which calendar-cli`
+1. Verify CLIs are on PATH: `which reminder-cli`
 2. Check `openclaw plugins list` for the plugin
 3. If not on PATH, set `binDir` in plugin config
 
@@ -490,8 +490,7 @@ Timezone offsets are preserved end-to-end through the CLI layer, so `2024-01-15T
 ```bash
 cd swift/.build/release
 
-./calendar-cli list
-./calendar-cli events --from today --to tomorrow
+node ../mcp-server/server.js
 ./reminder-cli lists
 ./reminder-cli items --list "Personal"
 ./contacts-cli search "John"
@@ -501,15 +500,12 @@ cd swift/.build/release
 ### Using Profiles
 
 ```bash
-# CLI flag
-calendar-cli list --profile work
-
 # Environment variable
 export APPLE_PIM_PROFILE=work
-calendar-cli events --from today --to tomorrow
+reminder-cli items --filter today
 
 # View effective config
-calendar-cli config show --profile travel
+apple_pim_system({ action: "config_show", profile: "travel" })
 ```
 
 ### Agent Evals

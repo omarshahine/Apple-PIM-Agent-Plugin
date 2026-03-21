@@ -10,7 +10,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="${HOME}/.local/bin"
-CLIS=(calendar-cli reminder-cli contacts-cli mail-cli)
+CLIS=(reminder-cli contacts-cli mail-cli)
 
 echo "Building Swift CLI tools..."
 cd "$SCRIPT_DIR/swift"
@@ -66,7 +66,7 @@ echo ""
 echo "The plugin is now ready to use. Restart Claude Code to load the MCP server."
 echo ""
 echo "Test commands:"
-echo "  /apple-pim:calendars list"
+echo "  /apple-pim:calendar list"
 echo "  /apple-pim:reminders lists"
 echo "  /apple-pim:contacts search \"John\""
 echo "  /apple-pim:mail accounts"
@@ -74,7 +74,6 @@ echo ""
 echo "Note: Mail.app must be running for mail commands to work."
 echo ""
 echo "Permissions needed (System Settings > Privacy & Security):"
-echo "  - Calendars: Grant access to Terminal / Claude Code"
 echo "  - Reminders: Grant access to Terminal / Claude Code"
 echo "  - Contacts: Grant access to Terminal / Claude Code"
 echo "  - Automation: Allow Terminal / Claude Code to control Mail.app"

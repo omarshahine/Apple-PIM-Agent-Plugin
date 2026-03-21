@@ -1,6 +1,6 @@
 # Apple PIM Plugin
 
-macOS PIM (Personal Information Management) tools for Calendar, Reminders, Contacts, and Mail.app. Works with Claude Code (via MCP) and OpenClaw (via native tool registration). Both adapters share a common `lib/` layer that delegates to native Swift CLIs using EventKit, Contacts framework, and JXA.
+macOS PIM (Personal Information Management) tools for Calendar, Reminders, Contacts, and Mail.app. Works with Claude Code (via MCP) and OpenClaw (via native tool registration). Calendar is direct iCloud CalDAV; reminders and contacts still use native Swift CLIs, and mail uses JXA.
 
 ## Quick Commands
 
@@ -25,18 +25,18 @@ npm run eval
 
 ## Architecture
 
-Handler logic, schemas, and sanitization live in `lib/` (shared). The MCP server and OpenClaw plugin are thin adapters. All access control, filtering, and default resolution is handled by the Swift CLIs via the shared `PIMConfig` library:
+Handler logic, schemas, and sanitization live in `lib/` (shared). The MCP server and OpenClaw plugin are thin adapters. Calendar runs through the shared CalDAV handler; reminders, contacts, and mail still use the Swift CLIs via the shared `PIMConfig` library:
 
 ```
 Claude Code  <--MCP-->  mcp-server/server.js  ---+
                                                   +--> lib/ (handlers, schemas, sanitize)
 OpenClaw  <--tools-->  openclaw/src/index.ts  ---+           |
-                                                        Swift CLIs (EventKit / Contacts / JXA)
+                                                        CalDAV / Swift CLIs / JXA
                                                              |
                                                         PIMConfig (~/.config/apple-pim/)
 ```
 
-Each Swift CLI is a standalone binary that reads from macOS frameworks, validates access via PIMConfig, and writes JSON to stdout.
+Calendar reads and writes server state through CalDAV. The remaining Swift CLIs read from macOS frameworks, validate access via PIMConfig, and write JSON to stdout.
 
 ## Repo Layout
 
@@ -45,7 +45,6 @@ Each Swift CLI is a standalone binary that reads from macOS frameworks, validate
 | `lib/` | Shared handler logic, schemas, sanitize (used by both MCP and OpenClaw) |
 | `lib/handlers/` | Domain handlers: calendar, reminder, contact, mail, apple-pim |
 | `swift/Sources/PIMConfig` | Shared config library (filtering, profiles, validation) |
-| `swift/Sources/CalendarCLI` | EventKit calendar CLI |
 | `swift/Sources/ReminderCLI` | EventKit reminders CLI |
 | `swift/Sources/ContactsCLI` | Contacts framework CLI |
 | `swift/Sources/MailCLI` | Mail.app JXA-based CLI |
@@ -70,6 +69,7 @@ Each Swift CLI is a standalone binary that reads from macOS frameworks, validate
 - The MCP server does NOT do any config filtering — it passes `--profile` to CLIs when set.
 - **OpenClaw plugin** (`openclaw/`): Registers tools that spawn CLIs directly (no MCP). Supports per-call `configDir`/`profile` parameters for multi-agent workspace isolation. See [`docs/multi-agent-setup.md`](docs/multi-agent-setup.md).
 - **Direct CLI usage:** `APPLE_PIM_CONFIG_DIR` overrides the config root directory; `APPLE_PIM_PROFILE` selects a profile.
+- **Date format:** `APPLE_PIM_DATE_FORMAT` selects calendar date output format. Presets: `utc` (default, `2026-03-20T14:00:00Z`), `local` (`2026-03-20T07:00:00-07:00`), `day-utc` (`Friday, 2026-03-20T14:00:00Z`), `day-local` (`Friday, 2026-03-20T07:00:00-07:00`). Calendar handler only.
 
 ## Testing Notes
 

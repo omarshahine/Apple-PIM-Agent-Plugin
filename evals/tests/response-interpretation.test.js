@@ -134,7 +134,7 @@ describe("Category 2: Response Interpretation", () => {
   describe("error propagation from CLI", () => {
     it("CLI error propagates to handler caller", async () => {
       const mockCLI = createMockCLI({
-        "calendar-cli:events": new Error("Calendar 'NonExistent' not found"),
+        "calendar:events": new Error("Calendar 'NonExistent' not found"),
       });
 
       await expect(
@@ -144,7 +144,7 @@ describe("Category 2: Response Interpretation", () => {
 
     it("CLI error message is not swallowed by withAgentDX", async () => {
       const mockCLI = vi.fn().mockRejectedValue(new Error("Permission denied"));
-      const handler = async (args, cli) => cli("calendar-cli", ["list"]);
+      const handler = async (args, cli) => cli("calendar", ["list"]);
       const wrapped = withAgentDX("calendar", handler);
 
       await expect(

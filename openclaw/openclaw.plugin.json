@@ -14,6 +14,34 @@
       "configDir": {
         "type": "string",
         "description": "Default PIM config directory"
+      },
+      "accessFile": {
+        "type": "string",
+        "description": "Path to access control config file (default: ~/.config/apple-pim/access.json)"
+      },
+      "caldavServerUrl": {
+        "type": "string",
+        "description": "iCloud CalDAV server URL (defaults to MobileMe account config or https://caldav.icloud.com)"
+      },
+      "caldavUsername": {
+        "type": "string",
+        "description": "Apple ID / iCloud username for CalDAV auth"
+      },
+      "caldavPassword": {
+        "type": "string",
+        "description": "Apple app-specific password for CalDAV auth. Prefer caldavPasswordEnvVar instead of storing it here."
+      },
+      "caldavPasswordEnvVar": {
+        "type": "string",
+        "description": "Environment variable name holding the Apple app-specific password (default: ICLOUD_APP_SPECIFIC_PASSWORD)"
+      },
+      "calendarAliasesFile": {
+        "type": "string",
+        "description": "Path to a JSON file mapping friendly calendar names to exact CalDAV URLs or paths"
+      },
+      "caldavTimeoutMs": {
+        "type": "number",
+        "description": "CalDAV request timeout in milliseconds"
       }
     }
   },
@@ -26,6 +54,18 @@
     },
     "configDir": {
       "label": "Config Directory"
+    },
+    "caldavServerUrl": {
+      "label": "CalDAV URL"
+    },
+    "caldavUsername": {
+      "label": "CalDAV Username"
+    },
+    "caldavPasswordEnvVar": {
+      "label": "CalDAV Password Env Var"
+    },
+    "calendarAliasesFile": {
+      "label": "Calendar Aliases File"
     }
   }
 }

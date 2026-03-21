@@ -8,7 +8,6 @@ let package = Package(
     ],
     products: [
         .library(name: "PIMConfig", targets: ["PIMConfig"]),
-        .executable(name: "calendar-cli", targets: ["CalendarCLI"]),
         .executable(name: "reminder-cli", targets: ["ReminderCLI"]),
         .executable(name: "contacts-cli", targets: ["ContactsCLI"]),
         .executable(name: "mail-cli", targets: ["MailCLI"]),
@@ -23,14 +22,6 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             path: "Sources/PIMConfig"
-        ),
-        .executableTarget(
-            name: "CalendarCLI",
-            dependencies: [
-                .product(name: "ArgumentParser", package: "swift-argument-parser"),
-                "PIMConfig",
-            ],
-            path: "Sources/CalendarCLI"
         ),
         .executableTarget(
             name: "ReminderCLI",
@@ -60,11 +51,6 @@ let package = Package(
             name: "PIMConfigTests",
             dependencies: ["PIMConfig"],
             path: "Tests/PIMConfigTests"
-        ),
-        .testTarget(
-            name: "CalendarCLITests",
-            dependencies: ["CalendarCLI"],
-            path: "Tests/CalendarCLITests"
         ),
         .testTarget(
             name: "ReminderCLITests",

@@ -70,11 +70,11 @@ describe("Category 3: Multi-turn Sequences", () => {
       const { calls } = await runScenario(scenario, handlers);
 
       // First call: search
-      expect(calls[0].cli).toBe("calendar-cli");
+      expect(calls[0].cli).toBe("calendar");
       expect(calls[0].args[0]).toBe("search");
 
       // Second call: update with the correct event ID
-      expect(calls[1].cli).toBe("calendar-cli");
+      expect(calls[1].cli).toBe("calendar");
       expect(calls[1].args).toContain("update");
       expect(calls[1].args).toContain("--id");
       expect(calls[1].args).toContain("E003");

@@ -20,7 +20,7 @@ scenarios:
         value: 1
       - assert: call_cli
         index: 0
-        cli: "calendar-cli"
+        cli: "calendar"
       - assert: call_args_contain
         index: 0
         values: ["create", "--title", "Dinner with Alex"]
@@ -77,7 +77,7 @@ scenarios:
         value: 1
       - assert: call_cli
         index: 0
-        cli: "calendar-cli"
+        cli: "calendar"
       - assert: call_args_contain
         index: 0
         values: ["batch-create", "--json"]

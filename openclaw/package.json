@@ -1,14 +1,16 @@
 {
   "name": "apple-pim-cli",
   "version": "3.4.1",
-  "description": "OpenClaw plugin for macOS Calendar, Reminders, Contacts, and Mail via native Swift CLIs",
+  "description": "OpenClaw plugin for iCloud Calendar, Reminders, Contacts, and Mail",
   "type": "module",
   "scripts": {
     "prepack": "rm -rf lib && cp -R ../lib .",
     "postpack": "rm -rf lib && ln -s ../lib ."
   },
   "openclaw": {
-    "extensions": ["./src/index.ts"]
+    "extensions": [
+      "./src/index.ts"
+    ]
   },
   "files": [
     "src/",
@@ -23,7 +25,7 @@
     "reminders",
     "contacts",
     "mail",
-    "eventkit",
+    "caldav",
     "macos",
     "pim"
   ],
@@ -40,12 +42,17 @@
   "publishConfig": {
     "access": "public"
   },
-  "os": ["darwin"],
+  "os": [
+    "darwin"
+  ],
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
+    "chrono-node": "^2.9.0",
+    "ical.js": "^2.2.1",
     "mailparser": "^3.9.3",
+    "tsdav": "^2.1.8",
     "turndown": "^7.2.2"
   }
 }

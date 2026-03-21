@@ -98,12 +98,12 @@ apple_pim_calendar({ action: "list", profile: "work" })
 APPLE_PIM_PROFILE=travel   # Set in agent's environment
 ```
 
-**Direct CLI** (flag or environment):
+**Calendar tool** (profile or environment):
 
-```bash
-calendar-cli list --profile travel
+```text
+apple_pim_calendar({ action: "list", profile: "travel" })
 # or
-APPLE_PIM_PROFILE=travel calendar-cli list
+APPLE_PIM_PROFILE=travel apple_pim_calendar({ action: "list" })
 ```
 
 ### Profile Merge Semantics
@@ -135,21 +135,13 @@ apple_pim_calendar({ action: "list", configDir: "~/agents/travel/apple-pim" })
 apple_pim_calendar({ action: "list", configDir: "~/agents/work/apple-pim" })
 ```
 
-### Direct CLI Usage
+### Calendar Tool Usage
 
 Set `APPLE_PIM_CONFIG_DIR` per agent:
 
-```bash
-APPLE_PIM_CONFIG_DIR=~/agents/travel/apple-pim calendar-cli list
-APPLE_PIM_CONFIG_DIR=~/agents/work/apple-pim calendar-cli list
-```
-
-Or use wrapper scripts:
-
-```bash
-#!/bin/bash
-export APPLE_PIM_CONFIG_DIR="$(dirname "$0")/../apple-pim"
-exec /path/to/swift/.build/release/calendar-cli "$@"
+```text
+APPLE_PIM_CONFIG_DIR=~/agents/travel/apple-pim apple_pim_calendar({ action: "list" })
+APPLE_PIM_CONFIG_DIR=~/agents/work/apple-pim apple_pim_calendar({ action: "list" })
 ```
 
 ### Directory Layout
@@ -223,18 +215,18 @@ The OpenClaw plugin resolves these per-call and passes them as `child_process.sp
 
 Confirm each profile/config sees only its allowed data:
 
-```bash
+```text
 # Personal sees everything except Work
-calendar-cli list --profile personal | jq '.calendars[].title'
+apple_pim_calendar({ action: "list", profile: "personal" })
 
 # Travel sees only travel calendars
-calendar-cli list --profile travel | jq '.calendars[].title'
+apple_pim_calendar({ action: "list", profile: "travel" })
 
 # Work sees only Work calendar
-calendar-cli list --profile work | jq '.calendars[].title'
+apple_pim_calendar({ action: "list", profile: "work" })
 
 # Config dir isolation
-APPLE_PIM_CONFIG_DIR=~/agents/travel/apple-pim calendar-cli list | jq '.calendars[].title'
+APPLE_PIM_CONFIG_DIR=~/agents/travel/apple-pim apple_pim_calendar({ action: "list" })
 ```
 
 ## Common Mistakes

@@ -1,26 +1,27 @@
 ---
 name: apple-pim
 description: |
-  Native macOS personal information management for calendars, reminders, contacts, and local Mail.app. Use when the user wants to schedule meetings, create events, check their calendar, create or complete reminders, look up contacts, find someone's phone number or email, manage tasks and to-do lists, triage local Mail.app messages, or troubleshoot EventKit, Contacts, or Mail.app permissions on macOS.
+  Native macOS personal information management for calendars, reminders, contacts, and local Mail.app. Calendar actions use direct iCloud CalDAV server state. Use when the user wants to schedule meetings, create events, check their calendar, create or complete reminders, look up contacts, find someone's phone number or email, manage tasks and to-do lists, triage local Mail.app messages, or troubleshoot Contacts or Mail.app permissions on macOS.
 license: MIT
 compatibility: |
-  macOS only. Requires TCC permissions for Calendars, Reminders, and Contacts via Privacy & Security settings. Mail features require Mail.app running with Automation permission granted.
+  macOS only. Calendar uses iCloud CalDAV credentials. Reminders and Contacts still require TCC permissions via Privacy & Security settings. Mail features require Mail.app running with Automation permission granted.
 metadata:
   author: Omar Shahine
   version: 3.2.0
   mcp-server: apple-pim
 ---
 
-# Apple PIM (EventKit, Contacts & Mail)
+# Apple PIM (CalDAV, Contacts & Mail)
 
 ## Overview
 
 Apple provides frameworks and scripting interfaces for personal information management:
-- **EventKit**: Calendars and Reminders
+- **CalDAV**: Calendar server state in iCloud
+- **EventKit**: Reminders
 - **Contacts**: Address book management
 - **Mail.app**: Local email via JXA (JavaScript for Automation) and AppleScript
 
-EventKit and Contacts require explicit user permission via privacy prompts. Mail.app requires Automation permission and must be running.
+Reminders and Contacts require explicit user permission via privacy prompts. Calendar uses direct iCloud CalDAV credentials. Mail.app requires Automation permission and must be running.
 
 For detailed API property tables and code examples, see:
 - `references/eventkit-api.md` — EKEvent, EKReminder, EKCalendar, recurrence rules, alarms
@@ -31,11 +32,11 @@ For detailed API property tables and code examples, see:
 
 ### Permission Model
 
-Each PIM domain requires separate macOS authorization:
+Each PIM domain has its own auth path:
 
 | Domain | Framework | Permission Section |
 |--------|-----------|-------------------|
-| Calendars | EventKit | Privacy & Security > Calendars |
+| Calendars | iCloud CalDAV | Apple ID + app-specific password |
 | Reminders | EventKit | Privacy & Security > Reminders |
 | Contacts | Contacts | Privacy & Security > Contacts |
 | Mail | Automation (JXA) | Privacy & Security > Automation |
@@ -127,7 +128,7 @@ Both accept an optional `profile` parameter.
 When creating events or reminders, the default calendar/list is resolved in this order:
 1. Explicit `--calendar` or `--list` parameter
 2. Config `default` value for the domain
-3. System default calendar/list from EventKit
+3. Calendar handler fallback (`Daily Plan`, then `Shared`) or the system default reminder list
 
 ### Note
 
@@ -161,13 +162,13 @@ Override path with `trustedSenders` parameter: `mail({ action: "auth_check", id:
 ### Calendar Management
 1. **Use default calendar for new events** when user doesn't specify
 2. **Preserve recurrence rules** when updating recurring events
-3. **Handle `.thisEvent` vs `.futureEvents`** span for recurring event edits (see EKSpan below)
+3. **Handle `.thisEvent` vs `.futureEvents`** scope for recurring event edits
 4. **Check `allowsContentModifications`** before attempting writes
 5. **Use `calendar` with action `batch_create`** when creating multiple events for efficiency
 
-### EKSpan for Recurring Events
+### Recurring Event Scope
 
-EventKit uses `EKSpan` to control which occurrences are affected by save/delete operations:
+Recurring calendar edits support single-occurrence and future-occurrence scope:
 
 | Span | Effect | When to Use |
 |------|--------|-------------|
@@ -228,7 +229,7 @@ Support flexible input:
 - Relative: "in 2 hours", "next Tuesday"
 
 ### Time Zone Handling
-- EventKit stores dates in UTC
+- Calendar output is normalized to ISO timestamps
 - Display in local time zone
 - Be explicit about time zones in user output
 

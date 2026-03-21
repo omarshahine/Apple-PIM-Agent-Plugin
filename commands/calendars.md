@@ -7,7 +7,7 @@ allowed-tools:
 
 # Calendar Management
 
-Manage calendar events using the Apple EventKit framework.
+Manage calendar events using direct iCloud CalDAV server state.
 
 ## Available Operations
 

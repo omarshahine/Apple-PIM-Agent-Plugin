@@ -1,7 +1,7 @@
 ---
 name: apple-pim
 description: |
-  Native macOS personal information management for calendars, reminders, contacts, and local Mail.app. Use when the user wants to schedule meetings, create events, check their calendar, create or complete reminders, look up contacts, find someone's phone number or email, manage tasks and to-do lists, triage local Mail.app messages, or troubleshoot EventKit, Contacts, or Mail.app permissions on macOS.
+  Native macOS personal information management for calendars, reminders, contacts, and local Mail.app. Calendar actions use direct iCloud CalDAV server state. Use when the user wants to schedule meetings, create events, check their calendar, create or complete reminders, look up contacts, find someone's phone number or email, manage tasks and to-do lists, triage local Mail.app messages, or troubleshoot Contacts or Mail.app permissions on macOS.
 license: MIT
 compatibility: |
   macOS only. Requires TCC permissions for Calendars, Reminders, and Contacts via Privacy & Security settings. Mail features require Mail.app running with Automation permission granted.
@@ -11,19 +11,27 @@ metadata:
   openclaw:
     os: [darwin]
     requires:
-      bins: [calendar-cli]
+      bins: [reminder-cli, contacts-cli, mail-cli]
 ---
 
-# Apple PIM (EventKit, Contacts & Mail)
+# Apple PIM (CalDAV, Contacts & Mail)
 
 ## Overview
 
 Apple provides frameworks and scripting interfaces for personal information management:
-- **EventKit**: Calendars and Reminders
+- **CalDAV**: Calendar server state in iCloud
+- **EventKit**: Reminders
 - **Contacts**: Address book management
 - **Mail.app**: Local email via JXA (JavaScript for Automation)
 
-EventKit and Contacts require explicit user permission via privacy prompts. Mail.app requires Automation permission and must be running.
+Reminders and Contacts require explicit user permission via privacy prompts. Calendar uses direct iCloud CalDAV credentials. Mail.app requires Automation permission and must be running.
+
+## Calendar Rules
+
+- `apple_pim_calendar` uses direct iCloud CalDAV server state, not the Mac's local EventKit cache.
+- calendar ids are CalDAV collection URLs, and event ids are CalDAV object URLs.
+- use plain calendar names like `Daily Plan` or `Shared` unless the caller already has the exact URL.
+- if a calendar result comes back with a local-looking UUID instead of a CalDAV URL, that is stale/incorrect context and should be treated as a bug.
 
 ## Tools
 
@@ -31,7 +39,7 @@ This plugin provides 5 tools:
 
 | Tool | Actions | Domain |
 |------|---------|--------|
-| `apple_pim_calendar` | `list`, `events`, `get`, `search`, `create`, `update`, `delete`, `batch_create` | Calendar events via EventKit |
+| `apple_pim_calendar` | `list`, `events`, `get`, `search`, `create`, `update`, `delete`, `batch_create` | Calendar events via direct iCloud CalDAV |
 | `apple_pim_reminder` | `lists`, `items`, `get`, `search`, `create`, `complete`, `update`, `delete`, `batch_create`, `batch_complete`, `batch_delete` | Reminders via EventKit |
 | `apple_pim_contact` | `groups`, `list`, `search`, `get`, `create`, `update`, `delete` | Contacts framework |
 | `apple_pim_mail` | `accounts`, `mailboxes`, `messages`, `get`, `search`, `send`, `reply`, `update`, `move`, `delete`, `batch_update`, `batch_delete`, `auth_check` | Mail.app via JXA/AppleScript |
@@ -41,16 +49,18 @@ This plugin provides 5 tools:
 
 ### Permission Model
 
-Each PIM domain requires separate macOS authorization:
+Each PIM domain has its own auth path:
 
 | Domain | Framework | Permission Section |
 |--------|-----------|-------------------|
-| Calendars | EventKit | Privacy & Security > Calendars |
+| Calendars | iCloud CalDAV | Apple ID + app-specific password |
 | Reminders | EventKit | Privacy & Security > Reminders |
 | Contacts | Contacts | Privacy & Security > Contacts |
 | Mail | Automation (JXA) | Privacy & Security > Automation |
 
 ### Authorization States
+
+For calendars, `apple_pim_system` reports `configured` / `missingConfig` instead of macOS TCC states because the backend is direct CalDAV.
 
 | State | Meaning | Action |
 |-------|---------|--------|
@@ -141,10 +151,11 @@ Override path with `trustedSenders` parameter: `apple_pim_mail({ action: "auth_c
 ### Calendar Management
 1. **Use default calendar for new events** when user doesn't specify
 2. **Preserve recurrence rules** when updating recurring events
-3. **Handle `.thisEvent` vs `.futureEvents`** span for recurring event edits
+3. **Handle `.thisEvent` vs `.futureEvents`** scope for recurring event edits
 4. **Use `batch_create`** when creating multiple events for efficiency
+5. **Prefer `Daily Plan` and `Shared` by name** unless the user explicitly requests another calendar
 
-### EKSpan for Recurring Events
+### Recurring Event Scope
 
 | Span | Effect | When to Use |
 |------|--------|-------------|

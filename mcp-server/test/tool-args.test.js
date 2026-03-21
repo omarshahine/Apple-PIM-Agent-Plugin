@@ -56,6 +56,7 @@ describe("buildCalendarUpdateArgs", () => {
   it("maps futureEvents and recurrence args for calendar update", () => {
     const args = buildCalendarUpdateArgs({
       id: "evt_1",
+      calendar: "Shared",
       recurrence: { frequency: "monthly", daysOfTheMonth: [1, 15] },
       futureEvents: true,
     });
@@ -63,6 +64,8 @@ describe("buildCalendarUpdateArgs", () => {
       "update",
       "--id",
       "evt_1",
+      "--calendar",
+      "Shared",
       "--recurrence",
       JSON.stringify({ frequency: "monthly", daysOfTheMonth: [1, 15] }),
       "--future-events",
