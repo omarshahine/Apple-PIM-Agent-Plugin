@@ -99,19 +99,43 @@ Each Swift CLI is a standalone binary that reads from macOS frameworks, validate
 
 ## Versioning
 
-All three version sources are kept in sync:
+All four version sources are kept in sync:
 
 | Source | File |
 |--------|------|
 | MCP server | `mcp-server/package.json` |
 | OpenClaw plugin | `openclaw/package.json` |
+| OpenClaw manifest | `openclaw/openclaw.plugin.json` |
 | GitHub release | tag (e.g., `v3.0.1`) |
 
-When bumping a version, update **both** `package.json` files to the same value, rebuild `mcp-server/dist/server.js`, and tag the GitHub release with the matching version.
+When bumping a version, update all three files to the same value, rebuild `mcp-server/dist/server.js`, and tag the GitHub release with the matching version.
 
-## NPM Publishing (OpenClaw Plugin)
+## Publishing (OpenClaw Plugin)
 
-The OpenClaw plugin is published as `apple-pim-cli` on NPM.
+The OpenClaw plugin is published as `apple-pim-cli` on both ClawHub and NPM.
+
+### ClawHub (preferred)
+
+```bash
+clawhub package publish ./openclaw \
+  --family code-plugin \
+  --name "apple-pim-cli" \
+  --display-name "Apple PIM" \
+  --version <VERSION> \
+  --changelog "<description of changes>" \
+  --tags "latest" \
+  --source-repo "omarshahine/Apple-PIM-Agent-Plugin" \
+  --source-commit $(git rev-parse HEAD) \
+  --source-ref "main" \
+  --source-path "openclaw"
+```
+
+- Requires `clawhub` CLI authenticated (`clawhub login`, verify with `clawhub whoami`)
+- `--source-commit` links the release to a specific git SHA for reproducibility
+- Verify with `clawhub package inspect apple-pim-cli`
+- Users install with: `openclaw plugins install apple-pim-cli`
+
+### NPM (fallback)
 
 ```bash
 cd openclaw
@@ -121,9 +145,14 @@ npm publish
 
 - `prepack` script copies `lib/` from symlink into a real directory; `postpack` restores the symlink
 - `publishConfig.access: "public"` ensures public access by default
-- Bump version in both `openclaw/package.json` and `mcp-server/package.json` before publishing
-- OpenClaw normalizes scoped names to unscoped ids for `plugins.entries.*` config keys
-- Community plugin listing: PR to `openclaw/openclaw` repo, `docs/plugins/community.md`
+
+### Publishing checklist
+
+1. Bump version in both `openclaw/package.json` and `mcp-server/package.json`
+2. Update `version` in `openclaw/openclaw.plugin.json` to match
+3. Rebuild `mcp-server/dist/server.js`
+4. Commit, merge to main, tag the GitHub release
+5. Publish to ClawHub (primary) and NPM (fallback)
 
 ## Gotchas
 
