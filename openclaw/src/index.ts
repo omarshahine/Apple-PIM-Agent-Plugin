@@ -178,6 +178,7 @@ export default definePluginEntry({
             if (typeof params.action !== "string" || !params.action) {
               return toolResult(
                 JSON.stringify({ success: false, error: "Missing required 'action' parameter" }, null, 2),
+                { domain: tool.name, action: null },
               );
             }
             const toolArgs = params as ToolArgs;
@@ -201,6 +202,7 @@ export default definePluginEntry({
               const message = error instanceof Error ? error.message : String(error);
               return toolResult(
                 JSON.stringify({ success: false, error: message }, null, 2),
+                { domain: tool.name, action: toolArgs.action },
               );
             }
           },
