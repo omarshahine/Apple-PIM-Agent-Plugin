@@ -7,6 +7,7 @@
  * and automatic workspace convention discovery.
  */
 
+import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { createCLIRunner, findSwiftBinDir } from "../lib/cli-runner.js";
 import { tools } from "../lib/schemas.js";
 import { markToolResult, getDatamarkingPreamble } from "../lib/sanitize.js";
@@ -21,7 +22,7 @@ import { join, dirname } from "path";
 import { execFileSync } from "child_process";
 import { homedir } from "os";
 
-// OpenClaw plugin config (set by the gateway from openclaw.plugin.json configSchema)
+// Plugin config (set by the gateway from openclaw.plugin.json configSchema)
 interface PluginConfig {
   binDir?: string;
   profile?: string;
@@ -34,53 +35,6 @@ interface ToolArgs {
   configDir?: string;
   profile?: string;
   [key: string]: unknown;
-}
-
-// OpenClaw tool result content block (pi-agent-core AgentToolResult)
-interface TextContent {
-  type: "text";
-  text: string;
-}
-
-// OpenClaw tool definition (pi-agent-core AgentTool convention)
-//
-// OpenClaw's internal tool system uses `parameters` (not `inputSchema`) and a
-// 4-argument `execute` signature that returns `{ content: TextContent[] }`.
-// This differs from the MCP convention used by the MCP server in ../mcp-server/.
-interface OpenClawToolDefinition {
-  name: string;
-  label: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  execute: (
-    toolCallId: string,
-    params: Record<string, unknown>,
-    signal?: AbortSignal,
-    onUpdate?: (partialResult: unknown) => void
-  ) => Promise<{ content: TextContent[]; details?: unknown }>;
-}
-
-// Context provided to factory functions at tool resolution time.
-// Contains per-agent workspace information for config auto-discovery.
-interface OpenClawPluginToolContext {
-  config?: Record<string, unknown>; // full gateway config (NOT plugin config)
-  workspaceDir?: string;
-  agentDir?: string;
-  agentId?: string;
-  sessionKey?: string;
-  messageChannel?: string;
-  agentAccountId?: string;
-  sandboxed?: boolean;
-}
-
-// Factory function that receives per-agent context and returns tool definition(s)
-type OpenClawPluginToolFactory = (ctx: OpenClawPluginToolContext) =>
-  OpenClawToolDefinition | OpenClawToolDefinition[] | null | undefined;
-
-// OpenClaw plugin registration interface (pi-agent-core convention)
-interface OpenClawContext {
-  config?: PluginConfig;
-  registerTool(toolOrFactory: OpenClawToolDefinition | OpenClawPluginToolFactory): void;
 }
 
 // Map MCP tool names to OpenClaw snake_case names
@@ -177,68 +131,83 @@ function resolveEnvOverrides(
   return env;
 }
 
-/**
- * OpenClaw plugin activation function.
- * Called by the OpenClaw gateway when the plugin is loaded.
- *
- * Registers tool factories (not static tools) so each agent gets
- * per-workspace config resolution via ctx.workspaceDir.
- */
-export default function activate(context: OpenClawContext): void {
-  const config = context.config;
-  const binDir = resolveBinDir(config);
-
-  for (const tool of tools) {
-    const openclawName = TOOL_NAME_MAP[tool.name];
-    const handler = HANDLERS[tool.name];
-
-    if (!openclawName || !handler) continue;
-
-    context.registerTool((ctx: OpenClawPluginToolContext) => {
-      const workspaceDir = ctx.workspaceDir;
-
-      return {
-        name: openclawName,
-        label: openclawName,
-        description: tool.description,
-        parameters: tool.inputSchema as Record<string, unknown>,
-
-        async execute(
-          _toolCallId: string,
-          params: Record<string, unknown>,
-          _signal?: AbortSignal,
-          _onUpdate?: (partialResult: unknown) => void
-        ) {
-          // Runtime validation — ensure required 'action' field is present and valid
-          if (typeof params.action !== "string" || !params.action) {
-            return {
-              content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Missing required 'action' parameter" }, null, 2) }],
-            };
-          }
-          const toolArgs = params as ToolArgs;
-
-          // Per-call environment isolation — never mutates process.env
-          const envOverrides = resolveEnvOverrides(toolArgs, config, workspaceDir);
-          const { runCLI } = createCLIRunner(binDir, envOverrides);
-
-          try {
-            const result = await handler(toolArgs, runCLI);
-
-            // Apply datamarking for prompt injection defense
-            const markedResult = markToolResult(result, tool.name);
-            const preamble = getDatamarkingPreamble(tool.name);
-
-            return {
-              content: [{ type: "text" as const, text: `${preamble}\n\n${JSON.stringify(markedResult, null, 2)}` }],
-            };
-          } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : String(error);
-            return {
-              content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: message }, null, 2) }],
-            };
-          }
-        },
-      };
-    });
-  }
+/** Build a tool result with the required content + details shape. */
+function toolResult(text: string, details?: unknown) {
+  return {
+    content: [{ type: "text" as const, text }],
+    details,
+  };
 }
+
+/**
+ * OpenClaw plugin entry point.
+ *
+ * Uses definePluginEntry from the SDK. Registers tool factories (not static
+ * tools) so each agent gets per-workspace config resolution via ctx.workspaceDir.
+ */
+export default definePluginEntry({
+  id: "apple-pim-cli",
+  name: "Apple PIM",
+  description: "macOS Calendar, Reminders, Contacts, and Mail via native Swift CLIs",
+
+  register(api) {
+    const config = api.pluginConfig as PluginConfig | undefined;
+    const binDir = resolveBinDir(config);
+
+    for (const tool of tools) {
+      const openclawName = TOOL_NAME_MAP[tool.name];
+      const handler = HANDLERS[tool.name];
+
+      if (!openclawName || !handler) continue;
+
+      // Register as factory for per-workspace context resolution
+      api.registerTool((ctx) => {
+        const workspaceDir = ctx.workspaceDir;
+
+        return {
+          name: openclawName,
+          label: openclawName,
+          description: tool.description,
+          parameters: tool.inputSchema as Record<string, unknown>,
+
+          async execute(
+            _toolCallId: string,
+            params: Record<string, unknown>,
+          ) {
+            // Runtime validation — ensure required 'action' field is present and valid
+            if (typeof params.action !== "string" || !params.action) {
+              return toolResult(
+                JSON.stringify({ success: false, error: "Missing required 'action' parameter" }, null, 2),
+                { domain: tool.name, action: null },
+              );
+            }
+            const toolArgs = params as ToolArgs;
+
+            // Per-call environment isolation — never mutates process.env
+            const envOverrides = resolveEnvOverrides(toolArgs, config, workspaceDir);
+            const { runCLI } = createCLIRunner(binDir, envOverrides);
+
+            try {
+              const result = await handler(toolArgs, runCLI);
+
+              // Apply datamarking for prompt injection defense
+              const markedResult = markToolResult(result, tool.name);
+              const preamble = getDatamarkingPreamble(tool.name);
+
+              return toolResult(
+                `${preamble}\n\n${JSON.stringify(markedResult, null, 2)}`,
+                { domain: tool.name, action: toolArgs.action },
+              );
+            } catch (error: unknown) {
+              const message = error instanceof Error ? error.message : String(error);
+              return toolResult(
+                JSON.stringify({ success: false, error: message }, null, 2),
+                { domain: tool.name, action: toolArgs.action },
+              );
+            }
+          },
+        };
+      });
+    }
+  },
+});
