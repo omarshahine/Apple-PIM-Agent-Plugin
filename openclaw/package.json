@@ -37,6 +37,10 @@
     "url": "https://github.com/omarshahine/Apple-PIM-Agent-Plugin.git",
     "directory": "openclaw"
   },
+  "homepage": "https://github.com/omarshahine/Apple-PIM-Agent-Plugin#readme",
+  "bugs": {
+    "url": "https://github.com/omarshahine/Apple-PIM-Agent-Plugin/issues"
+  },
   "publishConfig": {
     "access": "public"
   },
@@ -46,6 +50,7 @@
   },
   "dependencies": {
     "mailparser": "^3.9.3",
+    "openclaw": "^2026.3.23",
     "turndown": "^7.2.2"
   }
 }

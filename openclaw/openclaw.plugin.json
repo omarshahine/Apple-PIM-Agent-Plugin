@@ -1,5 +1,8 @@
 {
   "id": "apple-pim-cli",
+  "name": "Apple PIM",
+  "description": "macOS Calendar, Reminders, Contacts, and Mail via native Swift CLIs",
+  "version": "3.4.1",
   "configSchema": {
     "type": "object",
     "properties": {
@@ -15,17 +18,23 @@
         "type": "string",
         "description": "Default PIM config directory"
       }
-    }
+    },
+    "additionalProperties": false
   },
   "uiHints": {
     "binDir": {
-      "label": "CLI Binary Directory"
+      "label": "CLI Binary Directory",
+      "help": "Path to the directory containing calendar-cli, reminder-cli, contacts-cli, mail-cli. Auto-detected from PATH if not set.",
+      "placeholder": "~/.local/bin"
     },
     "profile": {
-      "label": "PIM Profile"
+      "label": "PIM Profile",
+      "help": "Config profile name for filtering calendars/lists/contacts. See ~/.config/apple-pim/profiles/."
     },
     "configDir": {
-      "label": "Config Directory"
+      "label": "Config Directory",
+      "help": "Override the PIM config root directory (default: ~/.config/apple-pim/).",
+      "placeholder": "~/.config/apple-pim"
     }
   }
 }

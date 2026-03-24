@@ -64,9 +64,13 @@ The `pim-assistant` agent triggers automatically when you mention scheduling, re
 ### OpenClaw Plugin
 
 ```bash
-# Prerequisites: Swift CLIs must be on PATH (run ./setup.sh --install)
+# Install from ClawHub (preferred)
 openclaw plugins install apple-pim-cli
 
+# Or install from npm
+npm install -g apple-pim-cli
+
+# Prerequisites: Swift CLIs must be on PATH (run ./setup.sh --install)
 # Optional: configure binary location if not on PATH
 # In your OpenClaw config:
 # plugins.entries.apple-pim-cli.config.binDir = "/path/to/swift/.build/release"
