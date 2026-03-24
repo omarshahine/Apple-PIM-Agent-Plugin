@@ -8,7 +8,9 @@
     "postpack": "rm -rf lib && ln -s ../lib ."
   },
   "openclaw": {
-    "extensions": ["./src/index.ts"]
+    "extensions": [
+      "./src/index.ts"
+    ]
   },
   "files": [
     "src/",
@@ -44,13 +46,17 @@
   "publishConfig": {
     "access": "public"
   },
-  "os": ["darwin"],
+  "os": [
+    "darwin"
+  ],
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
     "mailparser": "^3.9.3",
-    "openclaw": "^2026.3.23",
     "turndown": "^7.2.2"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.3.23"
   }
 }
