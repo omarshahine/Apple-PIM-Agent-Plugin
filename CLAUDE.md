@@ -70,6 +70,7 @@ Each Swift CLI is a standalone binary that reads from macOS frameworks, validate
 - The MCP server does NOT do any config filtering — it passes `--profile` to CLIs when set.
 - **OpenClaw plugin** (`openclaw/`): Registers tools that spawn CLIs directly (no MCP). Supports per-call `configDir`/`profile` parameters for multi-agent workspace isolation. See [`docs/multi-agent-setup.md`](docs/multi-agent-setup.md).
 - **Direct CLI usage:** `APPLE_PIM_CONFIG_DIR` overrides the config root directory; `APPLE_PIM_PROFILE` selects a profile.
+- **Date format:** `APPLE_PIM_DATE_FORMAT` selects calendar date output format. Presets: `utc` (default, `2026-03-20T14:00:00Z`), `local` (`2026-03-20T07:00:00-07:00`), `day-utc` (`Friday, 2026-03-20T14:00:00Z`), `day-local` (`Friday, 2026-03-20T07:00:00-07:00`). CalendarCLI only.
 
 ## Testing Notes
 
