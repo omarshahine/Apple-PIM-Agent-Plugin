@@ -22,6 +22,7 @@ struct MailCLI: AsyncParsableCommand {
             BatchDeleteMessages.self,
             SendMessage.self,
             ReplyMessage.self,
+            SaveAttachment.self,
             AuthCheck.self,
             ConfigCommand.self,
         ]
@@ -190,6 +191,33 @@ func runAppleScript(_ script: String) throws -> String {
     }
 
     return String(data: stdoutData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+}
+
+/// Returns a JXA function that infers MIME type from a mail attachment.
+/// Tries the native `att.mimeType()` first; falls back to file-extension lookup.
+func inferMimeJXA() -> String {
+    return """
+    function inferMime(att) {
+        try { var m = att.mimeType(); if (m) return m; } catch(e) {}
+        var name = att.name() || '';
+        var dot = name.lastIndexOf('.');
+        if (dot < 0) return 'application/octet-stream';
+        var ext = name.slice(dot + 1).toLowerCase();
+        var map = {
+            md:'text/markdown', txt:'text/plain', pdf:'application/pdf',
+            jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', gif:'image/gif',
+            doc:'application/msword',
+            docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            xls:'application/vnd.ms-excel',
+            xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            pptx:'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            csv:'text/csv', html:'text/html', htm:'text/html',
+            json:'application/json', xml:'application/xml', rtf:'application/rtf',
+            zip:'application/zip', gz:'application/gzip'
+        };
+        return map[ext] || 'application/octet-stream';
+    }
+    """
 }
 
 func ensureMailRunning() throws {
@@ -571,6 +599,8 @@ struct ListMessages: AsyncParsableCommand {
                         if (filterType === 'unread' && isRead) continue;
                         if (filterType === 'flagged' && !isFlagged) continue;
                         const dr = m.dateReceived();
+                        var attCount = 0;
+                        try { attCount = m.mailAttachments.length; } catch(e2) {}
                         results.push({
                             messageId: m.messageId(),
                             sender: m.sender(),
@@ -578,7 +608,8 @@ struct ListMessages: AsyncParsableCommand {
                             dateReceived: dr ? dr.toISOString() : null,
                             isRead: isRead,
                             isFlagged: isFlagged,
-                            isJunk: m.junkMailStatus()
+                            isJunk: m.junkMailStatus(),
+                            attachmentCount: attCount
                         });
                     } catch(e) { /* skip messages that fail to read */ }
                 }
@@ -642,6 +673,8 @@ struct GetMessage: AsyncParsableCommand {
         let findHelper = findMessageJXA(targetId: id, mailbox: mailbox, account: account)
 
         let script = """
+        \(inferMimeJXA())
+
         \(findHelper)
 
         const msg = findMessage();
@@ -684,6 +717,26 @@ struct GetMessage: AsyncParsableCommand {
             try {
                 result.allHeaders = msg.allHeaders();
             } catch(e) {}
+
+            // Collect attachment metadata
+            var attachments = [];
+            try {
+                var attCount = msg.mailAttachments.length;
+                for (var i = 0; i < attCount; i++) {
+                    try {
+                        var att = msg.mailAttachments[i];
+                        attachments.push({
+                            index: i,
+                            name: att.name(),
+                            fileSize: att.fileSize(),
+                            downloaded: att.downloaded(),
+                            mimeType: inferMime(att)
+                        });
+                    } catch(e) {}
+                }
+            } catch(e) {}
+            result.attachments = attachments;
+            result.attachmentCount = attachments.length;
 
             JSON.stringify(result);
         }
@@ -1391,6 +1444,275 @@ struct ReplyMessage: AsyncParsableCommand {
             "inReplyTo": id,
             "originalSubject": dict["subject"] ?? ""
         ])
+    }
+}
+
+// MARK: - Save Attachment
+
+struct SaveAttachment: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "save-attachment",
+        abstract: "Save one or all attachments from a message to a local directory"
+    )
+
+    @OptionGroup var pimOptions: PIMOptions
+
+    @Option(name: .long, help: "RFC 2822 message ID")
+    var id: String
+
+    @Option(name: .long, help: "Zero-based attachment index (saves all if omitted)")
+    var index: Int?
+
+    @Option(name: .long, help: "Directory to save into (default: system temp)")
+    var destDir: String?
+
+    @Option(name: .long, help: "Mailbox name hint (speeds up lookup)")
+    var mailbox: String?
+
+    @Option(name: .long, help: "Account name hint (speeds up lookup)")
+    var account: String?
+
+    func run() async throws {
+        try ensureMailRunning()
+        let config = pimOptions.loadConfig()
+        try checkMailEnabled(config: config)
+
+        // Phase 1: Get attachment metadata via JXA
+        let findHelper = findMessageJXA(targetId: id, mailbox: mailbox, account: account)
+
+        let metadataScript = """
+        \(inferMimeJXA())
+
+        \(findHelper)
+
+        const msg = findMessage();
+        if (!msg) {
+            JSON.stringify({error: "Message not found: \(escapeForJXA(id))"});
+        } else {
+            var attachments = [];
+            try {
+                var attCount = msg.mailAttachments.length;
+                for (var i = 0; i < attCount; i++) {
+                    try {
+                        var att = msg.mailAttachments[i];
+                        attachments.push({
+                            index: i,
+                            name: att.name(),
+                            fileSize: att.fileSize(),
+                            downloaded: att.downloaded(),
+                            mimeType: inferMime(att)
+                        });
+                    } catch(e) {}
+                }
+            } catch(e) {}
+            JSON.stringify({attachments: attachments});
+        }
+        """
+
+        let metadataRaw = try runJXA(metadataScript)
+
+        guard let metadataDict = metadataRaw as? [String: Any] else {
+            throw CLIError.jxaError("Unexpected output from attachment metadata lookup")
+        }
+
+        if let error = metadataDict["error"] as? String {
+            throw CLIError.notFound(error)
+        }
+
+        let attachments = metadataDict["attachments"] as? [[String: Any]] ?? []
+
+        guard !attachments.isEmpty else {
+            throw CLIError.invalidInput("Message has no attachments")
+        }
+
+        // Determine which attachments to save
+        let targetAttachments: [[String: Any]]
+        if let idx = index {
+            guard idx >= 0 && idx < attachments.count else {
+                throw CLIError.invalidInput("Attachment index \(idx) out of range (message has \(attachments.count) attachment\(attachments.count == 1 ? "" : "s"))")
+            }
+            targetAttachments = [attachments[idx]]
+        } else {
+            targetAttachments = attachments
+        }
+
+        // Check all target attachments are downloaded
+        for att in targetAttachments {
+            let downloaded = att["downloaded"] as? Bool ?? false
+            if !downloaded {
+                let name = att["name"] as? String ?? "unknown"
+                throw CLIError.invalidInput("Attachment \"\(name)\" has not been downloaded from the server yet")
+            }
+        }
+
+        // Phase 2: Create destination directory and compute safe filenames
+        let destDirURL: URL
+        if let destDirPath = destDir {
+            destDirURL = URL(fileURLWithPath: NSString(string: destDirPath).expandingTildeInPath)
+        } else {
+            destDirURL = FileManager.default.temporaryDirectory.appendingPathComponent("apple-pim-attachments")
+        }
+
+        try FileManager.default.createDirectory(at: destDirURL, withIntermediateDirectories: true)
+
+        // Build save targets with deduplicated filenames.
+        // Track allocated paths within this batch so two attachments with the
+        // same sanitized name don't collide before any files hit disk.
+        var saveTargets = [(index: Int, destPath: String, name: String, fileSize: Int, mimeType: String)]()
+        var allocatedPaths = Set<String>()
+
+        for att in targetAttachments {
+            let attIndex = att["index"] as? Int ?? 0
+            let rawName = att["name"] as? String ?? ""
+            let fileSize = att["fileSize"] as? Int ?? 0
+            let mimeType = att["mimeType"] as? String ?? "application/octet-stream"
+
+            let safeName = sanitizeFilename(rawName, fallback: "attachment_\(attIndex)")
+            var destPath = deduplicatePath(destDirURL.appendingPathComponent(safeName).path)
+            // Also deduplicate against paths already planned in this batch
+            while allocatedPaths.contains(destPath) {
+                destPath = deduplicatePath(destPath + "_\(attIndex)")
+            }
+            allocatedPaths.insert(destPath)
+            saveTargets.append((index: attIndex, destPath: destPath, name: safeName, fileSize: fileSize, mimeType: mimeType))
+        }
+
+        // Phase 3: Save attachments via JXA.
+        // Note: This is a separate JXA call from Phase 1 (metadata fetch), which
+        // introduces a TOCTOU window — Mail could move or re-index the message
+        // between calls. We accept this trade-off because: (a) it keeps the
+        // metadata-only path lightweight for agents that just need attachment info,
+        // and (b) combining both phases into one JXA script would require passing
+        // pre-computed paths into the metadata script, complicating the flow.
+        // The error message "not found on second lookup" is specific enough to
+        // diagnose if this ever triggers in practice.
+        let findHelper2 = findMessageJXA(targetId: id, mailbox: mailbox, account: account)
+
+        var saveStatements = ""
+        for (i, target) in saveTargets.enumerated() {
+            let escapedPath = escapeForJXA(target.destPath)
+            saveStatements += """
+            try {
+                var att\(i) = msg.mailAttachments[\(target.index)];
+                Mail.save(att\(i), {in: Path('\(escapedPath)')});
+                saved.push({index: \(target.index), path: '\(escapedPath)', success: true});
+            } catch(e) {
+                errors.push({index: \(target.index), error: e.message || String(e)});
+            }
+
+            """
+        }
+
+        let saveScript = """
+        \(findHelper2)
+
+        const Mail = Application("Mail");
+        const msg = findMessage();
+        if (!msg) {
+            JSON.stringify({error: "Message not found on second lookup"});
+        } else {
+            var saved = [];
+            var errors = [];
+            \(saveStatements)
+            JSON.stringify({saved: saved, errors: errors});
+        }
+        """
+
+        let saveRaw = try runJXA(saveScript)
+
+        guard let saveDict = saveRaw as? [String: Any] else {
+            throw CLIError.jxaError("Unexpected output from attachment save")
+        }
+
+        if let error = saveDict["error"] as? String {
+            throw CLIError.jxaError(error)
+        }
+
+        let savedResults = saveDict["saved"] as? [[String: Any]] ?? []
+        let saveErrors = saveDict["errors"] as? [[String: Any]] ?? []
+
+        // Build final response with full metadata
+        var savedOutput = [[String: Any]]()
+        for result in savedResults {
+            guard let resultIndex = result["index"] as? Int,
+                  let path = result["path"] as? String else { continue }
+            if let target = saveTargets.first(where: { $0.index == resultIndex }) {
+                savedOutput.append([
+                    "index": resultIndex,
+                    "name": target.name,
+                    "path": path,
+                    "fileSize": target.fileSize,
+                    "mimeType": target.mimeType
+                ])
+            }
+        }
+
+        if !saveErrors.isEmpty {
+            outputJSON([
+                "success": false,
+                "saved": savedOutput,
+                "errors": saveErrors
+            ])
+        } else {
+            outputJSON([
+                "success": true,
+                "saved": savedOutput
+            ])
+        }
+    }
+
+    /// Sanitize a filename: strip path separators, null bytes, and leading dots.
+    private func sanitizeFilename(_ name: String, fallback: String) -> String {
+        var sanitized = name
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "\0", with: "")
+            .trimmingCharacters(in: .whitespaces)
+
+        while sanitized.hasPrefix(".") {
+            sanitized = String(sanitized.dropFirst())
+        }
+
+        if sanitized.isEmpty {
+            return fallback
+        }
+
+        return sanitized
+    }
+
+    /// Deduplicate a file path by appending _1, _2, etc. before the extension.
+    private func deduplicatePath(_ path: String) -> String {
+        guard FileManager.default.fileExists(atPath: path) else {
+            return path
+        }
+
+        let url = URL(fileURLWithPath: path)
+        let directory = url.deletingLastPathComponent().path
+        let ext = url.pathExtension
+        let stem: String
+        if ext.isEmpty {
+            stem = url.lastPathComponent
+        } else {
+            stem = String(url.lastPathComponent.dropLast(ext.count + 1))
+        }
+
+        for i in 1...99 {
+            let candidate: String
+            if ext.isEmpty {
+                candidate = "\(directory)/\(stem)_\(i)"
+            } else {
+                candidate = "\(directory)/\(stem)_\(i).\(ext)"
+            }
+            if !FileManager.default.fileExists(atPath: candidate) {
+                return candidate
+            }
+        }
+
+        let ts = Int(Date().timeIntervalSince1970)
+        if ext.isEmpty {
+            return "\(directory)/\(stem)_\(ts)"
+        } else {
+            return "\(directory)/\(stem)_\(ts).\(ext)"
+        }
     }
 }
 

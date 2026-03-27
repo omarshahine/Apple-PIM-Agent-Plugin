@@ -1,0 +1,43 @@
+{
+  "success": true,
+  "message": {
+    "messageId": "msg-att@example.com",
+    "subject": "Q1 Report with Attachments",
+    "sender": "colleague@example.com",
+    "dateReceived": "2026-03-15T14:30:00-07:00",
+    "dateSent": "2026-03-15T14:29:45-07:00",
+    "isRead": true,
+    "isFlagged": false,
+    "isJunk": false,
+    "replyTo": "",
+    "mailbox": "INBOX",
+    "account": "Google",
+    "content": "Hi, please find the Q1 report and supporting data attached.",
+    "to": [{ "name": "Joe", "address": "joe@example.com" }],
+    "cc": [],
+    "attachments": [
+      {
+        "index": 0,
+        "name": "q1-report.pdf",
+        "fileSize": 245760,
+        "downloaded": true,
+        "mimeType": "application/pdf"
+      },
+      {
+        "index": 1,
+        "name": "data.xlsx",
+        "fileSize": 51200,
+        "downloaded": true,
+        "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      },
+      {
+        "index": 2,
+        "name": "notes.md",
+        "fileSize": 1024,
+        "downloaded": true,
+        "mimeType": "text/markdown"
+      }
+    ],
+    "attachmentCount": 3
+  }
+}
