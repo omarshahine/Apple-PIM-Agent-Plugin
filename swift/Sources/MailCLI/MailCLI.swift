@@ -1254,6 +1254,9 @@ struct SendMessage: AsyncParsableCommand {
     @Option(name: .long, help: "Sender email address (selects account)")
     var from: String?
 
+    @Option(name: .long, help: "File path to attach (repeatable)")
+    var attachment: [String] = []
+
     func run() async throws {
         try ensureMailRunning()
         let config = pimOptions.loadConfig()
@@ -1261,6 +1264,16 @@ struct SendMessage: AsyncParsableCommand {
 
         guard !to.isEmpty else {
             throw CLIError.invalidInput("At least one --to recipient is required")
+        }
+
+        // Validate attachment files exist before building the script
+        var attachmentLines = ""
+        for filePath in attachment {
+            let expandedPath = (filePath as NSString).expandingTildeInPath
+            guard FileManager.default.fileExists(atPath: expandedPath) else {
+                throw CLIError.invalidInput("Attachment file not found: \(filePath)")
+            }
+            attachmentLines += "\n        make new attachment with properties {file name:\"\(escapeForAppleScript(expandedPath))\"} at after the last paragraph"
         }
 
         // Write body to temp file to avoid AppleScript escaping issues
@@ -1283,25 +1296,35 @@ struct SendMessage: AsyncParsableCommand {
         let escapedSubject = escapeForAppleScript(subject)
         let senderProp = from.map { ", sender:\"\(escapeForAppleScript($0))\"" } ?? ""
 
+        let attachmentBlock = attachmentLines.isEmpty ? "" : """
+
+            tell newMessage\(attachmentLines)
+            end tell
+        """
+
         let script = """
         set bodyText to read POSIX file "\(bodyFile.path)" as «class utf8»
         tell application "Mail"
             set newMessage to make new outgoing message with properties {subject:"\(escapedSubject)", visible:false\(senderProp)}
             tell newMessage\(recipientLines)
             end tell
-            set content of newMessage to bodyText
+            set content of newMessage to bodyText\(attachmentBlock)
             send newMessage
         end tell
         """
 
         _ = try runAppleScript(script)
 
-        outputJSON([
+        var result: [String: Any] = [
             "success": true,
             "message": "Email sent successfully",
             "to": to,
             "subject": subject
-        ])
+        ]
+        if !attachment.isEmpty {
+            result["attachments"] = attachment.map { ($0 as NSString).expandingTildeInPath }
+        }
+        outputJSON(result)
     }
 }
 
@@ -1325,10 +1348,23 @@ struct ReplyMessage: AsyncParsableCommand {
     @Option(name: .long, help: "Account name hint (speeds up lookup)")
     var account: String?
 
+    @Option(name: .long, help: "File path to attach (repeatable)")
+    var attachment: [String] = []
+
     func run() async throws {
         try ensureMailRunning()
         let config = pimOptions.loadConfig()
         try checkMailEnabled(config: config)
+
+        // Validate attachment files exist before building the script
+        var attachmentLines = ""
+        for filePath in attachment {
+            let expandedPath = (filePath as NSString).expandingTildeInPath
+            guard FileManager.default.fileExists(atPath: expandedPath) else {
+                throw CLIError.invalidInput("Attachment file not found: \(filePath)")
+            }
+            attachmentLines += "\n        make new attachment with properties {file name:\"\(escapeForAppleScript(expandedPath))\"} at after the last paragraph"
+        }
 
         // Step 1: Use JXA to find the message by RFC 2822 messageId and get its numeric Apple Mail ID
         let findHelper = findMessageJXA(targetId: id, mailbox: mailbox, account: account)
@@ -1373,24 +1409,34 @@ struct ReplyMessage: AsyncParsableCommand {
         let escapedAccount = escapeForAppleScript(accountName)
         let escapedMailbox = escapeForAppleScript(mailboxName)
 
+        let attachmentBlock = attachmentLines.isEmpty ? "" : """
+
+            tell replyMsg\(attachmentLines)
+            end tell
+        """
+
         let replyScript = """
         set replyBody to read POSIX file "\(bodyFile.path)" as «class utf8»
         tell application "Mail"
             set origMsg to first message of mailbox "\(escapedMailbox)" of account "\(escapedAccount)" whose id is \(appleMailId)
             set replyMsg to reply origMsg with opening window
-            set content of replyMsg to replyBody & return & return & content of replyMsg
+            set content of replyMsg to replyBody & return & return & content of replyMsg\(attachmentBlock)
             send replyMsg
         end tell
         """
 
         _ = try runAppleScript(replyScript)
 
-        outputJSON([
+        var result: [String: Any] = [
             "success": true,
             "message": "Reply sent successfully",
             "inReplyTo": id,
             "originalSubject": dict["subject"] ?? ""
-        ])
+        ]
+        if !attachment.isEmpty {
+            result["attachments"] = attachment.map { ($0 as NSString).expandingTildeInPath }
+        }
+        outputJSON(result)
     }
 }
 
