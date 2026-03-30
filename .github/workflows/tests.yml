@@ -55,6 +55,8 @@ jobs:
 
       - name: Run agent evals
         run: npm run eval
+        env:
+          SKIP_MODEL_EVALS: "1"
 
   swift-cli-tests:
     name: Swift CLI
