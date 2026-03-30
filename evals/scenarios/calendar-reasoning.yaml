@@ -1,0 +1,119 @@
+name: "Calendar Reasoning"
+category: calendar-reasoning
+description: "Model-in-the-loop evals for calendar date reasoning, UTC handling, and query strategy"
+
+# System context given to the model for all scenarios
+system_context: |
+  You are an AI assistant with access to an apple_pim_calendar tool.
+  Calendar events include both UTC timestamps (startDate/endDate) and local times (localStart/localEnd).
+  Always use localStart/localEnd for display and reasoning — UTC timestamps cross midnight boundaries.
+
+  When checking availability over a date range:
+  1. Fetch the full range in ONE tool call.
+  2. Use localStart/localEnd for grouping and display.
+  3. Organize results by local date before reasoning.
+  4. Identify blocking ranges first — multi-day events (trips, visits) block the whole stretch.
+  5. Present results date-by-date with events listed.
+
+  Do NOT query each day individually.
+
+scenarios:
+  # --- UTC Cross-Midnight Date Assignment ---
+  - id: utc-cross-midnight
+    description: "Events whose UTC date differs from local date must be assigned to the local date"
+    fixture: "calendar/multi-week-schedule"
+    user_message: "Which events do I have on March 31?"
+    grading:
+      must_mention:
+        - "Meeting with Matt"           # localStart: 2026-03-31 5:00 PM (UTC: Apr 1 00:00)
+        - "Wildwood Budget"             # localStart: 2026-03-31 7:00 PM (UTC: Apr 1 02:00)
+      must_not_mention:
+        - "Bessemer"                    # localStart: 2026-04-01 (NOT March 31)
+        - "1:1 with VP"                # localStart: 2026-04-02
+
+  - id: utc-cross-midnight-april3
+    description: "April 3 has Canlis (6 PM local) and School Conference (5 PM local) despite UTC dates crossing into April 4"
+    fixture: "calendar/multi-week-schedule"
+    user_message: "What's on my calendar for April 3?"
+    grading:
+      must_mention:
+        - "Canlis"                      # localStart: 2026-04-03 6:00 PM (UTC: Apr 4 01:00)
+        - "School Conference"           # localStart: 2026-04-03 5:00 PM (UTC: Apr 4 00:00)
+      must_not_mention:
+        - "Puppy Yoga"                  # localStart: 2026-04-04
+
+  # --- Multi-Day Blocking Range Detection ---
+  - id: blocking-range-sarah-visit
+    description: "Sarah Easter Break (Apr 2-10) should block the entire range for family dinner planning"
+    fixture: "calendar/multi-week-schedule"
+    user_message: "I want to plan a dinner out with just Lora (no kids). Which evenings between April 1 and April 18 are open?"
+    grading:
+      must_identify_blocked:
+        - "2026-04-02"                  # Sarah Easter Break starts
+        - "2026-04-03"                  # Canlis + Sarah visiting
+        - "2026-04-09"                  # Sarah + Joyce dinner
+      must_identify_blocked_range:
+        range: ["2026-04-11", "2026-04-17"]
+        reason: "Spring Break Mexico"
+      must_identify_available:
+        - "2026-04-01"                  # Only work events during the day
+
+  - id: blocking-range-mexico
+    description: "Spring Break Mexico (Apr 11-18) blocks the entire week including the return flight day"
+    fixture: "calendar/multi-week-schedule"
+    user_message: "Am I free for a work dinner on April 15?"
+    grading:
+      must_mention:
+        - "Mexico"                      # Must identify the blocking trip
+      answer: "no"
+
+  # --- Availability Analysis ---
+  - id: open-evening-identification
+    description: "Correctly identify which Wed/Thu/Fri evenings are genuinely open"
+    fixture: "calendar/multi-week-schedule"
+    user_message: "Find me open Wednesday, Thursday, or Friday evenings for dinner between April 1 and April 18. Exclude dates when Sarah is visiting or we're traveling."
+    grading:
+      must_identify_available:
+        - "2026-04-01"                  # Wednesday - work events end by 1 PM
+        - "2026-04-08"                  # Wednesday - dentist+OPG end by 3 PM
+        - "2026-04-10"                  # Friday - board meeting ends at 1 PM (Sarah leaves)
+      must_identify_blocked:
+        - "2026-04-02"                  # Thursday - Sarah pickup + Easter break
+        - "2026-04-03"                  # Friday - Canlis already booked
+        - "2026-04-09"                  # Thursday - Joyce dinner already booked
+        - "2026-04-15"                  # Wednesday - Mexico trip
+        - "2026-04-16"                  # Thursday - Mexico trip
+        - "2026-04-17"                  # Friday - Mexico trip + return flight
+
+  # --- Existing Event Detection ---
+  - id: dinner-already-booked
+    description: "Must recognize existing dinner events and not suggest those evenings as 'open'"
+    fixture: "calendar/multi-week-schedule"
+    user_message: "Which evenings this week (Mar 31 - Apr 6) already have dinner plans?"
+    grading:
+      must_mention:
+        - "Wildwood Budget"             # Mar 31 evening
+        - "Canlis"                      # Apr 3 evening
+      must_not_claim_open:
+        - "2026-03-31"                  # Wildwood at 7 PM
+        - "2026-04-03"                  # Canlis at 6 PM
+
+  # --- Late Night / Cross-Midnight Events ---
+  - id: late-dinner-date-assignment
+    description: "Altura dinner (9:30 PM - midnight) is on April 15, not April 16 despite UTC endDate being April 16"
+    fixture: "calendar/multi-week-schedule"
+    user_message: "Do I have anything on the evening of April 15?"
+    grading:
+      must_mention:
+        - "Altura"
+      correct_date: "2026-04-15"        # Must assign to April 15 (localStart), NOT April 16 (UTC)
+
+  # --- Query Strategy ---
+  - id: single-range-query
+    description: "Model should plan a single range query, not enumerate dates one by one"
+    fixture: null
+    user_message: "I want to check my calendar for open dinner nights over the next 3 weeks. Before you do anything, describe your plan for how you would query the calendar. Do not make any tool calls — just explain your approach."
+    grading:
+      strategy_check: true
+      must_plan_single_query: true       # Should describe fetching a 3-week range in one call
+      must_not_plan_daily_queries: true   # Should NOT describe checking "each day" or "one at a time"

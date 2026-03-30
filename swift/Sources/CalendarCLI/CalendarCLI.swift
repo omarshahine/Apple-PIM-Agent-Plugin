@@ -182,12 +182,21 @@ func calendarTypeString(_ type: EKCalendarType) -> String {
     }
 }
 
+private let localDateFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "yyyy-MM-dd h:mm a"
+    f.timeZone = .current
+    return f
+}()
+
 func eventToDict(_ event: EKEvent) -> [String: Any] {
     var dict: [String: Any] = [
         "id": event.eventIdentifier ?? "",
         "title": event.title ?? "",
         "startDate": ISO8601DateFormatter().string(from: event.startDate),
         "endDate": ISO8601DateFormatter().string(from: event.endDate),
+        "localStart": localDateFormatter.string(from: event.startDate),
+        "localEnd": localDateFormatter.string(from: event.endDate),
         "isAllDay": event.isAllDay,
         "calendar": event.calendar?.title ?? "",
         "calendarId": event.calendar?.calendarIdentifier ?? ""

@@ -1,0 +1,193 @@
+{
+  "description": "3-week schedule with cross-midnight UTC events, multi-day trips, and mixed calendars. localStart/localEnd are PDT (UTC-7).",
+  "dateRange": {
+    "from": "2026-04-01T07:00:00Z",
+    "to": "2026-04-20T07:00:00Z"
+  },
+  "count": 18,
+  "events": [
+    {
+      "id": "E001",
+      "title": "Wildwood Budget Ratification Meeting",
+      "startDate": "2026-04-01T02:00:00Z",
+      "endDate": "2026-04-01T04:30:00Z",
+      "localStart": "2026-03-31 7:00 PM",
+      "localEnd": "2026-03-31 9:30 PM",
+      "isAllDay": false,
+      "calendar": "Personal"
+    },
+    {
+      "id": "E002",
+      "title": "Pick up Sarah at SEA",
+      "startDate": "2026-04-02T23:00:00Z",
+      "endDate": "2026-04-03T01:00:00Z",
+      "localStart": "2026-04-02 4:00 PM",
+      "localEnd": "2026-04-02 6:00 PM",
+      "isAllDay": false,
+      "calendar": "Family"
+    },
+    {
+      "id": "E003",
+      "title": "Sarah Easter Break",
+      "startDate": "2026-04-02T07:00:00Z",
+      "endDate": "2026-04-10T07:00:00Z",
+      "localStart": "2026-04-02 12:00 AM",
+      "localEnd": "2026-04-10 12:00 AM",
+      "isAllDay": true,
+      "calendar": "Family"
+    },
+    {
+      "id": "E004",
+      "title": "Canlis Dinner",
+      "startDate": "2026-04-04T01:00:00Z",
+      "endDate": "2026-04-04T04:00:00Z",
+      "localStart": "2026-04-03 6:00 PM",
+      "localEnd": "2026-04-03 9:00 PM",
+      "isAllDay": false,
+      "calendar": "Personal",
+      "location": "Canlis, 2576 Aurora Ave N, Seattle"
+    },
+    {
+      "id": "E005",
+      "title": "Puppy Yoga with Sarah",
+      "startDate": "2026-04-04T17:00:00Z",
+      "endDate": "2026-04-04T18:30:00Z",
+      "localStart": "2026-04-04 10:00 AM",
+      "localEnd": "2026-04-04 11:30 AM",
+      "isAllDay": false,
+      "calendar": "Family"
+    },
+    {
+      "id": "E006",
+      "title": "OPG Staff Meeting",
+      "startDate": "2026-04-08T21:00:00Z",
+      "endDate": "2026-04-08T22:00:00Z",
+      "localStart": "2026-04-08 2:00 PM",
+      "localEnd": "2026-04-08 3:00 PM",
+      "isAllDay": false,
+      "calendar": "Microsoft"
+    },
+    {
+      "id": "E007",
+      "title": "Dinner with Joyce Park and husband",
+      "startDate": "2026-04-10T01:30:00Z",
+      "endDate": "2026-04-10T04:00:00Z",
+      "localStart": "2026-04-09 6:30 PM",
+      "localEnd": "2026-04-09 9:00 PM",
+      "isAllDay": false,
+      "calendar": "Personal"
+    },
+    {
+      "id": "E008",
+      "title": "Board Meeting",
+      "startDate": "2026-04-10T18:00:00Z",
+      "endDate": "2026-04-10T20:00:00Z",
+      "localStart": "2026-04-10 11:00 AM",
+      "localEnd": "2026-04-10 1:00 PM",
+      "isAllDay": false,
+      "calendar": "Microsoft"
+    },
+    {
+      "id": "E009",
+      "title": "Spring Break Mexico",
+      "startDate": "2026-04-11T07:00:00Z",
+      "endDate": "2026-04-18T07:00:00Z",
+      "localStart": "2026-04-11 12:00 AM",
+      "localEnd": "2026-04-18 12:00 AM",
+      "isAllDay": true,
+      "calendar": "Family"
+    },
+    {
+      "id": "E010",
+      "title": "NetJets BFI→SJD",
+      "startDate": "2026-04-11T16:00:00Z",
+      "endDate": "2026-04-11T23:00:00Z",
+      "localStart": "2026-04-11 9:00 AM",
+      "localEnd": "2026-04-11 4:00 PM",
+      "isAllDay": false,
+      "calendar": "Personal"
+    },
+    {
+      "id": "E011",
+      "title": "NetJets SJD→BFI",
+      "startDate": "2026-04-18T00:00:00Z",
+      "endDate": "2026-04-18T08:00:00Z",
+      "localStart": "2026-04-17 5:00 PM",
+      "localEnd": "2026-04-18 1:00 AM",
+      "isAllDay": false,
+      "calendar": "Personal"
+    },
+    {
+      "id": "E012",
+      "title": "Late dinner at Altura",
+      "startDate": "2026-04-16T04:30:00Z",
+      "endDate": "2026-04-16T07:00:00Z",
+      "localStart": "2026-04-15 9:30 PM",
+      "localEnd": "2026-04-16 12:00 AM",
+      "isAllDay": false,
+      "calendar": "Personal",
+      "location": "Altura, 617 Broadway E, Seattle"
+    },
+    {
+      "id": "E013",
+      "title": "Mom and Dad Meeting with Matt",
+      "startDate": "2026-04-01T00:00:00Z",
+      "endDate": "2026-04-01T01:00:00Z",
+      "localStart": "2026-03-31 5:00 PM",
+      "localEnd": "2026-03-31 6:00 PM",
+      "isAllDay": false,
+      "calendar": "Family"
+    },
+    {
+      "id": "E014",
+      "title": "1:1 with VP",
+      "startDate": "2026-04-02T17:00:00Z",
+      "endDate": "2026-04-02T17:30:00Z",
+      "localStart": "2026-04-02 10:00 AM",
+      "localEnd": "2026-04-02 10:30 AM",
+      "isAllDay": false,
+      "calendar": "Microsoft"
+    },
+    {
+      "id": "E015",
+      "title": "Dentist Appointment",
+      "startDate": "2026-04-08T19:00:00Z",
+      "endDate": "2026-04-08T20:00:00Z",
+      "localStart": "2026-04-08 12:00 PM",
+      "localEnd": "2026-04-08 1:00 PM",
+      "isAllDay": false,
+      "calendar": "Personal"
+    },
+    {
+      "id": "E016",
+      "title": "Team All-hands",
+      "startDate": "2026-04-09T18:00:00Z",
+      "endDate": "2026-04-09T19:00:00Z",
+      "localStart": "2026-04-09 11:00 AM",
+      "localEnd": "2026-04-09 12:00 PM",
+      "isAllDay": false,
+      "calendar": "Microsoft"
+    },
+    {
+      "id": "E017",
+      "title": "School Conference Call",
+      "startDate": "2026-04-04T00:00:00Z",
+      "endDate": "2026-04-04T01:00:00Z",
+      "localStart": "2026-04-03 5:00 PM",
+      "localEnd": "2026-04-03 6:00 PM",
+      "isAllDay": false,
+      "calendar": "Family"
+    },
+    {
+      "id": "E018",
+      "title": "Bessemer Venture Partners Summit",
+      "startDate": "2026-04-01T15:00:00Z",
+      "endDate": "2026-04-01T20:00:00Z",
+      "localStart": "2026-04-01 8:00 AM",
+      "localEnd": "2026-04-01 1:00 PM",
+      "isAllDay": false,
+      "calendar": "Microsoft",
+      "location": "EC One"
+    }
+  ]
+}
