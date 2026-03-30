@@ -185,6 +185,7 @@ func calendarTypeString(_ type: EKCalendarType) -> String {
 private let localDateFormatter: DateFormatter = {
     let f = DateFormatter()
     f.dateFormat = "yyyy-MM-dd h:mm a"
+    f.locale = Locale(identifier: "en_US_POSIX")
     f.timeZone = .current
     return f
 }()
