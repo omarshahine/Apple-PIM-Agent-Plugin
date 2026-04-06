@@ -96,23 +96,18 @@ func outputJSON(_ value: Any) {
     }
 }
 
+private let dateOnlyISO = try! NSRegularExpression(pattern: #"^\d{4}-\d{2}-\d{2}$"#)
+private let dateOnlyUS  = try! NSRegularExpression(pattern: #"^\d{2}/\d{2}/\d{4}$"#)
+
 /// Returns true if the string represents a date without an explicit time component.
 /// Used to decide whether an end-date should be pushed to end-of-day (23:59:59).
 func isDateOnly(_ string: String) -> Bool {
     let trimmed = string.trimmingCharacters(in: .whitespaces)
     let lowercased = trimmed.lowercased()
-    // Relative day names are date-only
     if ["today", "tomorrow", "yesterday"].contains(lowercased) { return true }
-    // yyyy-MM-dd or MM/dd/yyyy without any time portion
-    let dateOnlyPatterns = [
-        #"^\d{4}-\d{2}-\d{2}$"#,
-        #"^\d{2}/\d{2}/\d{4}$"#,
-    ]
-    return dateOnlyPatterns.contains { pattern in
-        (try? NSRegularExpression(pattern: pattern))?.firstMatch(
-            in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)
-        ) != nil
-    }
+    let range = NSRange(trimmed.startIndex..., in: trimmed)
+    return dateOnlyISO.firstMatch(in: trimmed, range: range) != nil
+        || dateOnlyUS.firstMatch(in: trimmed, range: range) != nil
 }
 
 /// Adjusts a date to end-of-day (23:59:59) when the original string had no time component.
