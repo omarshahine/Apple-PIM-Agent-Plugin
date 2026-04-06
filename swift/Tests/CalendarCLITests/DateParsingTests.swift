@@ -91,6 +91,57 @@ final class DateParsingTests: XCTestCase {
         XCTAssertNotNil(date)
     }
 
+    // MARK: - isDateOnly detection
+
+    func testIsDateOnlyRelativeNames() {
+        XCTAssertTrue(isDateOnly("today"))
+        XCTAssertTrue(isDateOnly("Tomorrow"))
+        XCTAssertTrue(isDateOnly("yesterday"))
+    }
+
+    func testIsDateOnlyISODate() {
+        XCTAssertTrue(isDateOnly("2026-03-15"))
+        XCTAssertTrue(isDateOnly("2026-12-01"))
+    }
+
+    func testIsDateOnlyUSDate() {
+        XCTAssertTrue(isDateOnly("03/15/2026"))
+    }
+
+    func testIsDateOnlyFalseForDateTimes() {
+        XCTAssertFalse(isDateOnly("2026-03-15T13:30:00"))
+        XCTAssertFalse(isDateOnly("2026-03-15T13:30:00-07:00"))
+        XCTAssertFalse(isDateOnly("2026-03-15 13:30"))
+        XCTAssertFalse(isDateOnly("03/15/2026 13:30"))
+        XCTAssertFalse(isDateOnly("next week"))
+    }
+
+    // MARK: - adjustToEndOfDay
+
+    func testAdjustToEndOfDayForDateOnlyString() {
+        let date = parseDate("2026-03-15")!
+        let adjusted = adjustToEndOfDay(date, originalString: "2026-03-15")
+        let comps = Calendar.current.dateComponents([.hour, .minute, .second], from: adjusted)
+        XCTAssertEqual(comps.hour, 23)
+        XCTAssertEqual(comps.minute, 59)
+        XCTAssertEqual(comps.second, 59)
+    }
+
+    func testAdjustToEndOfDayForToday() {
+        let date = parseDate("today")!
+        let adjusted = adjustToEndOfDay(date, originalString: "today")
+        let comps = Calendar.current.dateComponents([.hour, .minute, .second], from: adjusted)
+        XCTAssertEqual(comps.hour, 23)
+        XCTAssertEqual(comps.minute, 59)
+        XCTAssertEqual(comps.second, 59)
+    }
+
+    func testAdjustToEndOfDayNoOpForDateTime() {
+        let date = parseDate("2026-03-15T13:30:00")!
+        let adjusted = adjustToEndOfDay(date, originalString: "2026-03-15T13:30:00")
+        XCTAssertEqual(date, adjusted, "Should not adjust when time is explicit")
+    }
+
     // MARK: - Precision: offset dates should NOT lose time component
 
     func testOffsetDatePreservesExactTime() {

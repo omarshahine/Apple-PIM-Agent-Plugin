@@ -77374,7 +77374,7 @@ var agentDXProperties = {
   fields: {
     type: "array",
     items: { type: "string" },
-    description: `Limit returned fields to these keys (e.g., ["id", "title", "start"]). Reduces token usage. The 'id' field is always included.`
+    description: `Limit returned fields to these keys (e.g., ["id", "title", "start"]). Reduces token usage. The 'id' field is always included. Requesting 'start'/'startDate' auto-includes 'localStart'; requesting 'end'/'endDate' auto-includes 'localEnd'.`
   },
   dryRun: {
     type: "boolean",
@@ -77788,6 +77788,10 @@ function pickFields(obj, fields) {
     return obj;
   const fieldSet = new Set(fields);
   fieldSet.add("id");
+  if (fieldSet.has("start") || fieldSet.has("startDate"))
+    fieldSet.add("localStart");
+  if (fieldSet.has("end") || fieldSet.has("endDate"))
+    fieldSet.add("localEnd");
   const picked = {};
   for (const key of Object.keys(obj)) {
     if (fieldSet.has(key)) {
@@ -77803,6 +77807,12 @@ function applyFieldSelection(result, fields) {
   if (!result || typeof result !== "object") {
     return result;
   }
+  const fieldSet = new Set(fields);
+  fieldSet.add("id");
+  if (fieldSet.has("start") || fieldSet.has("startDate"))
+    fieldSet.add("localStart");
+  if (fieldSet.has("end") || fieldSet.has("endDate"))
+    fieldSet.add("localEnd");
   const filtered = {};
   for (const [key, value] of Object.entries(result)) {
     if (WRAPPER_KEYS.has(key) && Array.isArray(value)) {
@@ -77810,7 +77820,7 @@ function applyFieldSelection(result, fields) {
     } else if (WRAPPER_KEYS.has(key)) {
       filtered[key] = value;
     } else {
-      if (fields.includes(key) || key === "id") {
+      if (fieldSet.has(key)) {
         filtered[key] = value;
       }
     }
