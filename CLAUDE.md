@@ -79,6 +79,7 @@ Each Swift CLI is a standalone binary that reads from macOS frameworks, validate
 - Full EventKit/Contacts/Mail integration paths can require local TCC permissions and Mail.app running.
 - **Agent evals** (`evals/`) test the tool layer from the agent's perspective: argument correctness, response interpretation, multi-turn workflows, and safety properties. All evals run against mock CLI fixtures (zero TCC, no real data). Run with `npm run eval` from repo root.
 - To add new eval cases, edit the YAML files in `evals/scenarios/` and add fixture JSON in `evals/fixtures/` as needed. No test code changes required for new cases in existing categories.
+- **Calendar reasoning evals** (`tests/calendar-reasoning.test.js`) are model-in-the-loop: they call `claude -p` with fixtures and grade responses with an LLM judge. They require `ANTHROPIC_API_KEY` in the environment. A full run of 8 scenarios costs ~$2.31 and takes ~8 minutes. These are non-deterministic and may flake on edge-case reasoning.
 
 ## CI And PR Workflow
 
