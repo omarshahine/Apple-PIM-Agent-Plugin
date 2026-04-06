@@ -114,37 +114,29 @@ When bumping a version, update all three files to the same value, rebuild `mcp-s
 
 The OpenClaw plugin is published as `apple-pim-cli` on both ClawHub and NPM.
 
-### ClawHub (preferred)
+### Automated (CI)
 
-Use the publish script at the repo root:
+ClawHub publishing is automated via GitHub Actions (`.github/workflows/publish-clawhub.yml`). To publish a new version:
+
+```bash
+# 1. Follow the publishing checklist below
+# 2. Commit and push
+# 3. Tag and push the tag
+git tag -a v3.1.0 -m "Description of changes"
+git push origin v3.1.0
+```
+
+The workflow extracts the version from the tag name and the changelog from the tag annotation. Authenticates with the `CLAWHUB_TOKEN` repository secret.
+
+**Note**: The CI workflow does NOT handle the `lib/` symlink prepack/postpack step. If the `openclaw/lib/` symlink needs resolving for ClawHub, use the manual script instead.
+
+### Manual (fallback)
 
 ```bash
 ./publish-clawhub.sh --changelog "description of changes"
 ```
 
-The script extracts the version from `openclaw/package.json`, runs prepack/postpack automatically (to handle the `lib/` symlink), and calls `clawhub package publish` with all required flags. If `--changelog` is omitted, it prompts interactively.
-
-Equivalent manual command:
-
-```bash
-clawhub package publish ./openclaw \
-  --family code-plugin \
-  --name "apple-pim-cli" \
-  --display-name "Apple PIM" \
-  --version <VERSION> \
-  --changelog "<description of changes>" \
-  --tags "latest" \
-  --source-repo "omarshahine/Apple-PIM-Agent-Plugin" \
-  --source-commit $(git rev-parse HEAD) \
-  --source-ref "main" \
-  --source-path "openclaw"
-```
-
-- Requires `clawhub` CLI authenticated (`clawhub login`, verify with `clawhub whoami`)
-- **Critical**: Must run `npm run prepack` in `openclaw/` before publish (copies `lib/` from symlink to real directory), then `npm run postpack` after (restores symlink). The publish script handles this automatically.
-- `openclaw/package.json` must have `openclaw.compat.pluginApi` and `openclaw.build.openclawVersion` fields for ClawHub compatibility
-- Verify with `clawhub package inspect apple-pim-cli`
-- Users install with: `openclaw plugins install apple-pim-cli`
+The script handles prepack/postpack automatically (copies `lib/` from symlink to real directory, publishes, then restores the symlink). Requires `clawhub` CLI installed and authenticated.
 
 ### NPM (fallback)
 
@@ -163,8 +155,14 @@ npm publish
 2. Update `version` in `openclaw/openclaw.plugin.json` to match
 3. Rebuild `mcp-server/dist/server.js`
 4. Commit, merge to main, tag the GitHub release
-5. Publish to ClawHub (primary) and NPM (fallback)
-6. Run `./publish-clawhub.sh` (or the manual command above)
+5. ClawHub publishes automatically via CI on tag push (or use manual script)
+
+### Verify / Install
+
+```bash
+clawhub package inspect apple-pim-cli
+openclaw plugins install apple-pim-cli
+```
 
 ## Gotchas
 
