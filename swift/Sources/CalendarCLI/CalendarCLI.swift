@@ -96,6 +96,31 @@ func outputJSON(_ value: Any) {
     }
 }
 
+private let dateOnlyISO = try! NSRegularExpression(pattern: #"^\d{4}-\d{2}-\d{2}$"#)
+private let dateOnlyUS  = try! NSRegularExpression(pattern: #"^\d{2}/\d{2}/\d{4}$"#)
+
+/// Returns true if the string represents a date without an explicit time component.
+/// Used to decide whether an end-date should be pushed to end-of-day (23:59:59).
+func isDateOnly(_ string: String) -> Bool {
+    let trimmed = string.trimmingCharacters(in: .whitespaces)
+    let lowercased = trimmed.lowercased()
+    if ["today", "tomorrow", "yesterday"].contains(lowercased) { return true }
+    let range = NSRange(trimmed.startIndex..., in: trimmed)
+    return dateOnlyISO.firstMatch(in: trimmed, range: range) != nil
+        || dateOnlyUS.firstMatch(in: trimmed, range: range) != nil
+}
+
+/// Adjusts a date to end-of-day (23:59:59) when the original string had no time component.
+/// This ensures `--from today --to today` spans the full day instead of a zero-width range.
+func adjustToEndOfDay(_ date: Date, originalString: String) -> Date {
+    guard isDateOnly(originalString) else { return date }
+    var components = Calendar.current.dateComponents([.year, .month, .day], from: date)
+    components.hour = 23
+    components.minute = 59
+    components.second = 59
+    return Calendar.current.date(from: components) ?? date
+}
+
 func parseDate(_ string: String) -> Date? {
     // Handle relative dates first
     let lowercased = string.lowercased()
@@ -554,7 +579,7 @@ struct ListEvents: AsyncParsableCommand {
             guard let parsed = parseDate(toStr) else {
                 throw CLIError.invalidInput("Invalid end date: \(toStr)")
             }
-            endDate = parsed
+            endDate = adjustToEndOfDay(parsed, originalString: toStr)
         } else {
             endDate = Calendar.current.date(byAdding: .day, value: 7, to: startDate) ?? startDate
         }
@@ -644,7 +669,12 @@ struct SearchEvents: AsyncParsableCommand {
         let config = pimOptions.loadConfig()
 
         let startDate = from.flatMap { parseDate($0) } ?? Calendar.current.date(byAdding: .day, value: -30, to: Date())!
-        let endDate = to.flatMap { parseDate($0) } ?? Calendar.current.date(byAdding: .year, value: 1, to: Date())!
+        let endDate: Date
+        if let toStr = to, let parsed = parseDate(toStr) {
+            endDate = adjustToEndOfDay(parsed, originalString: toStr)
+        } else {
+            endDate = Calendar.current.date(byAdding: .year, value: 1, to: Date())!
+        }
 
         // Resolve calendars: explicit filter > all allowed calendars
         var calendars: [EKCalendar]?
