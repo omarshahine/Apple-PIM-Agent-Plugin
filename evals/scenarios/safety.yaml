@@ -70,7 +70,7 @@ id_required_actions:
     error_pattern: "ID is required"
 
   - tool: mail
-    actions: [get, update, move, delete, reply, auth_check]
+    actions: [get, update, move, delete, reply, save_attachment, auth_check]
     error_pattern: "ID is required"
 
 # Actions that delegate to buildArgs without ID validation (schema-enforced only):

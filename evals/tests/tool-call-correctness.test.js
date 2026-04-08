@@ -286,6 +286,40 @@ describe("Category 1: Tool Call Correctness", () => {
       await expect(handleMail({ action: "search" }, mockCLI))
         .rejects.toThrow("query");
     });
+
+    it("mail save_attachment throws without id", async () => {
+      const mockCLI = createMockCLI({});
+      await expect(handleMail({ action: "save_attachment" }, mockCLI))
+        .rejects.toThrow("Message ID is required");
+    });
+  });
+
+  describe("save_attachment argument construction", () => {
+    it("passes --index when index is provided", async () => {
+      const mockCLI = createMockCLI({ "mail-cli:save-attachment": { success: true, saved: [] } });
+      await handleMail({ action: "save_attachment", id: "msg_1", index: 2 }, mockCLI);
+
+      const callArgs = mockCLI.mock.calls[0][1];
+      expect(callArgs).toContain("save-attachment");
+      expect(argsPairPresent(callArgs, "--id", "msg_1")).toBe(true);
+      expect(argsPairPresent(callArgs, "--index", "2")).toBe(true);
+    });
+
+    it("passes --dest-dir when destDir is provided", async () => {
+      const mockCLI = createMockCLI({ "mail-cli:save-attachment": { success: true, saved: [] } });
+      await handleMail({ action: "save_attachment", id: "msg_1", destDir: "/tmp/test" }, mockCLI);
+
+      const callArgs = mockCLI.mock.calls[0][1];
+      expect(argsPairPresent(callArgs, "--dest-dir", "/tmp/test")).toBe(true);
+    });
+
+    it("omits --index when index is not provided", async () => {
+      const mockCLI = createMockCLI({ "mail-cli:save-attachment": { success: true, saved: [] } });
+      await handleMail({ action: "save_attachment", id: "msg_1" }, mockCLI);
+
+      const callArgs = mockCLI.mock.calls[0][1];
+      expect(callArgs).not.toContain("--index");
+    });
   });
 
   describe("batch operation validation", () => {
