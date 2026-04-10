@@ -160,7 +160,9 @@ export default definePluginEntry({
 
       if (!openclawName || !handler) continue;
 
-      // Register as factory for per-workspace context resolution
+      // Register as factory for per-workspace context resolution.
+      // Pass the stable tool name explicitly so `openclaw plugins inspect`
+      // can render names for factory-registered tools instead of `(anonymous)`.
       api.registerTool((ctx) => {
         const workspaceDir = ctx.workspaceDir;
 
@@ -207,7 +209,7 @@ export default definePluginEntry({
             }
           },
         };
-      });
+      }, { name: openclawName });
     }
   },
 });
