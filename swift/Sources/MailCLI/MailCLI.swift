@@ -222,11 +222,15 @@ func inferMimeJXA() -> String {
 
 /// Validate that a destination directory is within the user's home or system temp.
 /// Prevents agents from writing attachments to arbitrary filesystem locations.
+/// Call after createDirectory so resolvingSymlinksInPath works on the real path.
 func validateDestDir(_ url: URL) throws {
-    let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
-    let tmp = FileManager.default.temporaryDirectory.standardizedFileURL.path
-    let resolved = url.standardizedFileURL.path
-    guard resolved.hasPrefix(home) || resolved.hasPrefix(tmp) else {
+    let home = FileManager.default.homeDirectoryForCurrentUser
+        .resolvingSymlinksInPath().standardizedFileURL.path
+    let tmp = FileManager.default.temporaryDirectory
+        .resolvingSymlinksInPath().standardizedFileURL.path
+    let resolved = url.resolvingSymlinksInPath().standardizedFileURL.path
+    guard resolved == home || resolved.hasPrefix(home + "/") ||
+          resolved == tmp  || resolved.hasPrefix(tmp  + "/") else {
         throw CLIError.invalidInput("destDir must be within your home directory or system temp directory, got: \(resolved)")
     }
 }
@@ -1610,12 +1614,15 @@ struct SaveAttachment: AsyncParsableCommand {
             destDirURL = FileManager.default.temporaryDirectory.appendingPathComponent("apple-pim-attachments")
         }
 
-        // Security: restrict writes to home directory or system temp
-        try validateDestDir(destDirURL)
-
         try FileManager.default.createDirectory(at: destDirURL, withIntermediateDirectories: true)
 
-        // Build save targets with deduplicated filenames
+        // Security: restrict writes to home directory or system temp.
+        // Called after createDirectory so resolvingSymlinksInPath works on the real path.
+        try validateDestDir(destDirURL)
+
+        // Build save targets with deduplicated filenames.
+        // allocatedPaths tracks planned writes so batch saves with duplicate
+        // names get unique suffixes without malformed double-numbering.
         var saveTargets = [(index: Int, destPath: String, name: String, fileSize: Int, mimeType: String)]()
         var allocatedPaths = Set<String>()
 
@@ -1626,10 +1633,7 @@ struct SaveAttachment: AsyncParsableCommand {
             let mimeType = att["mimeType"] as? String ?? "application/octet-stream"
 
             let safeName = sanitizeFilename(rawName, fallback: "attachment_\(attIndex)")
-            var destPath = deduplicatePath(destDirURL.appendingPathComponent(safeName).path)
-            while allocatedPaths.contains(destPath) {
-                destPath = deduplicatePath(destPath + "_\(attIndex)")
-            }
+            let destPath = deduplicatePath(destDirURL.appendingPathComponent(safeName).path, avoiding: allocatedPaths)
             allocatedPaths.insert(destPath)
             saveTargets.append((index: attIndex, destPath: destPath, name: safeName, fileSize: fileSize, mimeType: mimeType))
         }
@@ -1733,10 +1737,15 @@ struct SaveAttachment: AsyncParsableCommand {
         return sanitized
     }
 
-    private func deduplicatePath(_ path: String) -> String {
-        guard FileManager.default.fileExists(atPath: path) else {
-            return path
+    /// Find a unique path by appending _1, _2, etc. before the extension.
+    /// Checks both disk and the `avoiding` set so batch saves with duplicate
+    /// names get clean suffixes (report_1.pdf, report_2.pdf) not garbled ones.
+    private func deduplicatePath(_ path: String, avoiding: Set<String> = []) -> String {
+        func isTaken(_ p: String) -> Bool {
+            avoiding.contains(p) || FileManager.default.fileExists(atPath: p)
         }
+
+        guard isTaken(path) else { return path }
 
         let url = URL(fileURLWithPath: path)
         let directory = url.deletingLastPathComponent().path
@@ -1755,7 +1764,7 @@ struct SaveAttachment: AsyncParsableCommand {
             } else {
                 candidate = "\(directory)/\(stem)_\(i).\(ext)"
             }
-            if !FileManager.default.fileExists(atPath: candidate) {
+            if !isTaken(candidate) {
                 return candidate
             }
         }
