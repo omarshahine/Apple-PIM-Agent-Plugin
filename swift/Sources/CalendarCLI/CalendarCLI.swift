@@ -430,13 +430,21 @@ private func setAttendeesOnEvent(_ event: EKEvent, attendees attendeeInputs: [At
         let attendee = ekAttendeeClass.init()
 
         // UUID is required — EventKit's _addNewAttendeesToRecentsIfNeeded
-        // uses it as a dictionary key and crashes with nil if missing
-        safeSetValue(attendee, UUID().uuidString, forKey: "UUID")
+        // uses it as a dictionary key and crashes with nil if missing.
+        // Fail loudly if UUID can't be set rather than risking a later NSException.
+        guard safeSetValue(attendee, UUID().uuidString, forKey: "UUID") else {
+            throw CLIError.invalidInput(
+                "EKAttendee on this macOS version does not support setUUID:. " +
+                "Cannot safely create attendees without UUID support."
+            )
+        }
         safeSetValue(attendee, input.email, forKey: "emailAddress")
 
-        if let name = input.name {
+        if let name = input.name, !name.isEmpty {
             let parts = name.split(separator: " ", maxSplits: 1)
-            safeSetValue(attendee, String(parts[0]), forKey: "firstName")
+            if let first = parts.first {
+                safeSetValue(attendee, String(first), forKey: "firstName")
+            }
             if parts.count > 1 {
                 safeSetValue(attendee, String(parts[1]), forKey: "lastName")
             }
@@ -458,7 +466,14 @@ private func setAttendeesOnEvent(_ event: EKEvent, attendees attendeeInputs: [At
         attendeeObjects.append(attendee)
     }
 
-    // Set attendees on the event via KVC (replaces any existing attendees)
+    // Set attendees on the event via KVC (replaces any existing attendees).
+    // Guard against NSException if EKEvent doesn't expose this key.
+    guard event.responds(to: NSSelectorFromString("setAttendees:")) else {
+        throw CLIError.invalidInput(
+            "EKEvent on this macOS version does not support setAttendees:. " +
+            "Attendee write support is not available."
+        )
+    }
     event.setValue(attendeeObjects, forKey: "attendees")
 }
 
