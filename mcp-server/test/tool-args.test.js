@@ -50,6 +50,28 @@ describe("buildCalendarCreateArgs", () => {
       JSON.stringify({ frequency: "weekly", daysOfTheWeek: ["monday"] }),
     ]);
   });
+
+  it("passes attendees as JSON-stringified --attendees flag", () => {
+    const attendees = [
+      { email: "alice@example.com", name: "Alice", role: "required" },
+      { email: "bob@example.com" },
+    ];
+    const args = buildCalendarCreateArgs(
+      { title: "Meeting", start: "2026-03-01 14:00", attendees },
+      "Work"
+    );
+    expect(args).toContain("--attendees");
+    const attIndex = args.indexOf("--attendees");
+    expect(JSON.parse(args[attIndex + 1])).toEqual(attendees);
+  });
+
+  it("omits --attendees when not provided", () => {
+    const args = buildCalendarCreateArgs(
+      { title: "Solo", start: "2026-03-01 14:00" },
+      "Work"
+    );
+    expect(args).not.toContain("--attendees");
+  });
 });
 
 describe("buildCalendarUpdateArgs", () => {
@@ -67,6 +89,14 @@ describe("buildCalendarUpdateArgs", () => {
       JSON.stringify({ frequency: "monthly", daysOfTheMonth: [1, 15] }),
       "--future-events",
     ]);
+  });
+
+  it("passes attendees as JSON-stringified --attendees flag on update", () => {
+    const attendees = [{ email: "carol@example.com", role: "chair" }];
+    const args = buildCalendarUpdateArgs({ id: "evt_2", attendees });
+    expect(args).toContain("--attendees");
+    const attIndex = args.indexOf("--attendees");
+    expect(JSON.parse(args[attIndex + 1])).toEqual(attendees);
   });
 });
 

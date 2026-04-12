@@ -76,7 +76,8 @@ final class BatchCreateEventValidationTests: XCTestCase {
             url: nil,
             allDay: nil,
             alarm: nil,
-            recurrence: nil
+            recurrence: nil,
+            attendees: nil
         )
 
         let dates = try resolveBatchEventDates(input)
@@ -96,7 +97,8 @@ final class BatchCreateEventValidationTests: XCTestCase {
             url: nil,
             allDay: nil,
             alarm: nil,
-            recurrence: nil
+            recurrence: nil,
+            attendees: nil
         )
 
         let dates = try resolveBatchEventDates(input)
@@ -116,7 +118,8 @@ final class BatchCreateEventValidationTests: XCTestCase {
             url: nil,
             allDay: nil,
             alarm: nil,
-            recurrence: nil
+            recurrence: nil,
+            attendees: nil
         )
 
         XCTAssertThrowsError(try resolveBatchEventDates(input)) { error in
@@ -140,7 +143,8 @@ final class BatchCreateEventValidationTests: XCTestCase {
             url: nil,
             allDay: nil,
             alarm: nil,
-            recurrence: nil
+            recurrence: nil,
+            attendees: nil
         )
 
         XCTAssertThrowsError(try resolveBatchEventDates(input)) { error in

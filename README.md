@@ -9,10 +9,10 @@ Native macOS integration for Calendar, Reminders, Contacts, and Mail using Event
 
 ## Features
 
-- **Calendar Management**: List calendars, create/read/update/delete events, search by date/title
+- **Calendar Management**: List calendars, create/read/update/delete events, search by date/title, attendee support (add/replace attendees via CalDAV invitation emails)
 - **Reminder Management**: List reminder lists, create/complete/update/delete reminders, search
 - **Contact Management**: List groups, create/read/update/delete contacts, search by name/email/phone, birthday support (with or without year)
-- **Mail Integration**: List accounts/mailboxes, read/search/send/reply/move/delete messages, update flags, verify sender authentication (via Apple Mail.app + JXA/AppleScript)
+- **Mail Integration**: List accounts/mailboxes, read/search/send/reply/move/delete messages, update flags, attachment support (metadata, save-to-disk, send/reply with attachments), verify sender authentication (via Apple Mail.app + JXA/AppleScript)
 - **Recurrence Rules**: Create recurring events and reminders (daily, weekly, monthly, yearly)
 - **Batch Operations**: Create multiple events or reminders in a single efficient transaction
 - **Per-Domain Control**: Enable or disable entire domains (calendars, reminders, contacts, mail) independently
@@ -334,8 +334,11 @@ reminder-cli items --list "Personal" --filter overdue
 contacts-cli search "John"
 mail-cli messages --mailbox INBOX --limit 10
 mail-cli send --to "user@example.com" --subject "Hello" --body "Message"
+mail-cli send --to "user@example.com" --subject "Report" --body "See attached" --attachment ~/report.pdf
 mail-cli reply --id "<message-id>" --body "Thanks!"
+mail-cli save-attachment --id "<message-id>" --dest-dir ~/Downloads
 mail-cli auth-check --id "<message-id>"
+calendar-cli create --title "Meeting" --start "tomorrow 2pm" --attendees '[{"email":"a@example.com"}]'
 ```
 
 ## Tools Reference
@@ -347,7 +350,7 @@ mail-cli auth-check --id "<message-id>"
 | `calendar` / `apple_pim_calendar` | `list`, `events`, `get`, `search`, `create`, `update`, `delete`, `batch_create` | Calendar events via EventKit |
 | `reminder` / `apple_pim_reminder` | `lists`, `items`, `get`, `search`, `create`, `complete`, `update`, `delete`, `batch_create`, `batch_complete`, `batch_delete` | Reminders via EventKit |
 | `contact` / `apple_pim_contact` | `groups`, `list`, `search`, `get`, `create`, `update`, `delete` | Contacts framework |
-| `mail` / `apple_pim_mail` | `accounts`, `mailboxes`, `messages`, `get`, `search`, `send`, `reply`, `update`, `move`, `delete`, `batch_update`, `batch_delete`, `auth_check` | Mail.app via JXA/AppleScript |
+| `mail` / `apple_pim_mail` | `accounts`, `mailboxes`, `messages`, `get`, `search`, `send`, `reply`, `save_attachment`, `update`, `move`, `delete`, `batch_update`, `batch_delete`, `auth_check` | Mail.app via JXA/AppleScript |
 | `apple-pim` / `apple_pim_system` | `status`, `authorize`, `config_show`, `config_init` | Authorization & configuration |
 
 ### Recurrence Rules
@@ -422,7 +425,7 @@ apple-pim/
 │   ├── openclaw.plugin.json  # Plugin manifest + config schema
 │   ├── lib -> ../lib         # Symlink to shared code
 │   └── skills/apple-pim/     # OpenClaw skill knowledge
-├── evals/                    # Agent eval framework (125 tests)
+├── evals/                    # Agent eval framework (137 tests)
 │   ├── helpers/              # Mock CLI, scenario runner, grading
 │   ├── fixtures/             # Canned CLI JSON responses
 │   ├── scenarios/            # YAML eval case definitions
@@ -521,7 +524,7 @@ calendar-cli config show --profile travel
 The eval framework tests how well the tool layer serves AI agents. All tests run against mock CLI fixtures with zero TCC permissions and no real macOS data.
 
 ```bash
-# Run all 125 eval tests
+# Run all eval tests
 npm run eval
 
 # Watch mode during development
