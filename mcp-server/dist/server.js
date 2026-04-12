@@ -77411,6 +77411,19 @@ var tools = [
         allDay: { type: "boolean", description: "All-day event" },
         alarm: { type: "array", items: { type: "number" }, description: "Alarm minutes before event" },
         url: { type: "string", description: "URL" },
+        attendees: {
+          type: "array",
+          description: "Event attendees (create/update). Replaces all existing attendees on update.",
+          items: {
+            type: "object",
+            properties: {
+              email: { type: "string", description: "Email address (required)" },
+              name: { type: "string", description: "Display name" },
+              role: { type: "string", description: "required, optional, chair, or nonParticipant" }
+            },
+            required: ["email"]
+          }
+        },
         recurrence: recurrenceSchema,
         futureEvents: { type: "boolean", description: "Apply to future occurrences (update/delete recurring)" },
         configDir: { type: "string", description: "Override PIM config directory (OpenClaw only \u2014 ignored by MCP server)" },
@@ -77431,6 +77444,19 @@ var tools = [
               url: { type: "string" },
               allDay: { type: "boolean" },
               alarm: { type: "array", items: { type: "number" } },
+              attendees: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    email: { type: "string" },
+                    name: { type: "string" },
+                    role: { type: "string", description: "required, optional, chair, or nonParticipant" }
+                  },
+                  required: ["email"]
+                },
+                description: "Event attendees (batch_create)"
+              },
               recurrence: recurrenceSchema
             },
             required: ["title", "start"]
@@ -78030,6 +78056,9 @@ function buildCalendarCreateArgs(args, targetCalendar) {
   if (args.recurrence) {
     cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
   }
+  if (args.attendees) {
+    cliArgs.push("--attendees", JSON.stringify(args.attendees));
+  }
   return cliArgs;
 }
 function buildCalendarUpdateArgs(args) {
@@ -78048,6 +78077,8 @@ function buildCalendarUpdateArgs(args) {
     cliArgs.push("--url", args.url);
   if (args.recurrence)
     cliArgs.push("--recurrence", JSON.stringify(args.recurrence));
+  if (args.attendees)
+    cliArgs.push("--attendees", JSON.stringify(args.attendees));
   if (args.futureEvents)
     cliArgs.push("--future-events");
   return cliArgs;

@@ -376,6 +376,92 @@ func buildVerification(event: EKEvent, requestedStart: String, requestedEnd: Str
     return dict
 }
 
+// MARK: - Attendee Write Support (Private API)
+
+struct AttendeeJSON: Codable {
+    let email: String
+    let name: String?
+    let role: String?
+}
+
+func addAttendeesToEvent(_ event: EKEvent, json: String) throws {
+    guard let data = json.data(using: .utf8) else {
+        throw CLIError.invalidInput("Invalid attendees JSON encoding")
+    }
+    let attendeeInputs = try JSONDecoder().decode([AttendeeJSON].self, from: data)
+    try setAttendeesOnEvent(event, attendees: attendeeInputs)
+}
+
+func addAttendeesToEvent(_ event: EKEvent, attendees attendeeInputs: [AttendeeJSON]) throws {
+    try setAttendeesOnEvent(event, attendees: attendeeInputs)
+}
+
+/// Safely set a value via KVC, checking that the setter exists first.
+/// Returns true if the setter was found and called, false otherwise.
+/// This avoids uncatchable NSException crashes from setValue:forUndefinedKey:.
+@discardableResult
+private func safeSetValue(_ object: NSObject, _ value: Any?, forKey key: String) -> Bool {
+    let setter = NSSelectorFromString("set\(key.prefix(1).uppercased())\(key.dropFirst()):")
+    guard object.responds(to: setter) else { return false }
+    object.setValue(value, forKey: key)
+    return true
+}
+
+private func setAttendeesOnEvent(_ event: EKEvent, attendees attendeeInputs: [AttendeeJSON]) throws {
+    guard let ekAttendeeClass = NSClassFromString("EKAttendee") as? NSObject.Type else {
+        throw CLIError.invalidInput(
+            "EKAttendee class not available on this macOS version. " +
+            "Attendee write support requires the private EKAttendee class."
+        )
+    }
+
+    // Verify required KVC keys are available on this macOS version
+    let probe = ekAttendeeClass.init()
+    guard probe.responds(to: NSSelectorFromString("setEmailAddress:")) else {
+        throw CLIError.invalidInput(
+            "EKAttendee on this macOS version does not support setEmailAddress:. " +
+            "Attendee write support is not available."
+        )
+    }
+
+    var attendeeObjects: [NSObject] = []
+
+    for input in attendeeInputs {
+        let attendee = ekAttendeeClass.init()
+
+        // UUID is required — EventKit's _addNewAttendeesToRecentsIfNeeded
+        // uses it as a dictionary key and crashes with nil if missing
+        safeSetValue(attendee, UUID().uuidString, forKey: "UUID")
+        safeSetValue(attendee, input.email, forKey: "emailAddress")
+
+        if let name = input.name {
+            let parts = name.split(separator: " ", maxSplits: 1)
+            safeSetValue(attendee, String(parts[0]), forKey: "firstName")
+            if parts.count > 1 {
+                safeSetValue(attendee, String(parts[1]), forKey: "lastName")
+            }
+        }
+
+        let role: Int
+        switch input.role?.lowercased() {
+        case "optional":
+            role = EKParticipantRole.optional.rawValue
+        case "chair":
+            role = EKParticipantRole.chair.rawValue
+        case "nonparticipant":
+            role = EKParticipantRole.nonParticipant.rawValue
+        default:
+            role = EKParticipantRole.required.rawValue
+        }
+        safeSetValue(attendee, role, forKey: "participantRole")
+
+        attendeeObjects.append(attendee)
+    }
+
+    // Set attendees on the event via KVC (replaces any existing attendees)
+    event.setValue(attendeeObjects, forKey: "attendees")
+}
+
 // MARK: - Config Helpers
 
 /// Get only the calendars allowed by the current PIM config.
@@ -747,6 +833,9 @@ struct CreateEvent: AsyncParsableCommand {
     @Option(name: .long, help: "Recurrence rule as JSON (e.g., '{\"frequency\":\"weekly\",\"interval\":1}')")
     var recurrence: String?
 
+    @Option(name: .long, help: "Attendees as JSON array (e.g., '[{\"email\":\"a@b.com\",\"name\":\"Name\"}]')")
+    var attendees: String?
+
     func run() async throws {
         try await requestCalendarAccess()
 
@@ -793,6 +882,11 @@ struct CreateEvent: AsyncParsableCommand {
         // Add recurrence rule if specified
         if let recurrenceJSON = recurrence, let rule = parseRecurrenceRule(recurrenceJSON) {
             event.addRecurrenceRule(rule)
+        }
+
+        // Add attendees if specified
+        if let attendeesJSON = attendees {
+            try addAttendeesToEvent(event, json: attendeesJSON)
         }
 
         try eventStore.save(event, span: .thisEvent)
@@ -842,6 +936,9 @@ struct UpdateEvent: AsyncParsableCommand {
 
     @Option(name: .long, help: "Recurrence rule as JSON (e.g., '{\"frequency\":\"weekly\",\"interval\":1}')")
     var recurrence: String?
+
+    @Option(name: .long, help: "Attendees as JSON array (replaces all existing attendees)")
+    var attendees: String?
 
     @Flag(name: .long, help: "Apply changes to all future events in a recurring series")
     var futureEvents: Bool = false
@@ -894,6 +991,11 @@ struct UpdateEvent: AsyncParsableCommand {
             if let rule = parseRecurrenceRule(recurrenceJSON) {
                 event.addRecurrenceRule(rule)
             }
+        }
+
+        // Update attendees if specified
+        if let attendeesJSON = attendees {
+            try addAttendeesToEvent(event, json: attendeesJSON)
         }
 
         // Only use futureEvents span when explicitly requested by user
@@ -971,6 +1073,7 @@ struct BatchEventInput: Codable {
     let allDay: Bool?
     let alarm: [Int]?
     let recurrence: RecurrenceJSON?
+    let attendees: [AttendeeJSON]?
 }
 
 func decodeBatchEvents(_ json: String) throws -> [BatchEventInput] {
@@ -1063,6 +1166,11 @@ struct BatchCreateEvent: AsyncParsableCommand {
                        let rule = parseRecurrenceRule(recurrenceStr) {
                         event.addRecurrenceRule(rule)
                     }
+                }
+
+                // Add attendees if specified
+                if let attendeeInputs = eventInput.attendees {
+                    try addAttendeesToEvent(event, attendees: attendeeInputs)
                 }
 
                 // Save with commit: false to batch changes
