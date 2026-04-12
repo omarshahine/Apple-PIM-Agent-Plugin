@@ -77675,7 +77675,7 @@ var tools = [
   },
   {
     name: "mail",
-    description: "Manage Mail.app messages. Requires Mail.app to be running. Actions: accounts, mailboxes, messages (list), get (full message by ID), search, update (flags), move, delete, batch_update, batch_delete, send, reply, auth_check, schema (show input schema).",
+    description: "Manage Mail.app messages. Requires Mail.app to be running. Actions: accounts, mailboxes, messages (list with attachmentCount), get (full message by ID with attachment metadata), search, update (flags), move, delete, batch_update, batch_delete, send (with optional attachments), reply (with optional attachments), save_attachment (save message attachments to disk), auth_check, schema (show input schema).",
     inputSchema: {
       type: "object",
       properties: {
@@ -77694,13 +77694,14 @@ var tools = [
             "batch_delete",
             "send",
             "reply",
+            "save_attachment",
             "auth_check",
             "schema"
           ],
           description: "Operation to perform"
         },
         ...agentDXProperties,
-        id: { type: "string", description: "RFC 2822 message ID (get/update/move/delete/reply/auth_check)" },
+        id: { type: "string", description: "RFC 2822 message ID (get/update/move/delete/reply/save_attachment/auth_check)" },
         ids: { type: "array", items: { type: "string" }, description: "Message IDs (batch_update/batch_delete)" },
         account: { type: "string", description: "Account name" },
         mailbox: { type: "string", description: "Mailbox name" },
@@ -77732,6 +77733,9 @@ var tools = [
         cc: { type: "array", items: { type: "string" }, description: "CC addresses (send)" },
         bcc: { type: "array", items: { type: "string" }, description: "BCC addresses (send)" },
         from: { type: "string", description: "Sender email address for account selection (send)" },
+        attachment: { type: "array", items: { type: "string" }, description: "Absolute or ~-prefixed file paths to attach (send/reply). Files must exist on disk." },
+        index: { type: "integer", minimum: 0, description: "Zero-based attachment index (save_attachment). Omit to save all attachments." },
+        destDir: { type: "string", description: "Directory to save attachments into (save_attachment). Must be within home directory or system temp. Defaults to system temp. Use dryRun: true to preview." },
         trustedSenders: { type: "string", description: "Path to trusted-senders.json (auth_check)" },
         configDir: { type: "string", description: "Override PIM config directory (OpenClaw only \u2014 ignored by MCP server)" },
         profile: { type: "string", description: "Override PIM profile name (OpenClaw only \u2014 MCP server uses APPLE_PIM_PROFILE env)" }
@@ -77848,7 +77852,8 @@ var MUTATION_ACTIONS = {
     "batch_update",
     "batch_delete",
     "send",
-    "reply"
+    "reply",
+    "save_attachment"
   ])
 };
 function isMutation(toolName, action) {
@@ -77896,10 +77901,16 @@ function describeMutation(tool, action, params) {
       return `Would mark reminder ${params.id || "?"} as ${params.undo ? "incomplete" : "complete"}`;
     case "move":
       return `Would move message ${params.id || "?"} to mailbox "${params.toMailbox || "?"}"`;
-    case "send":
-      return `Would send email to ${formatRecipients(params.to)} with subject "${params.subject || ""}"`;
-    case "reply":
-      return `Would reply to message ${params.id || "?"}`;
+    case "send": {
+      const sendAttCount = params.attachment ? Array.isArray(params.attachment) ? params.attachment.length : 1 : 0;
+      return `Would send email to ${formatRecipients(params.to)} with subject "${params.subject || ""}"${sendAttCount ? ` (${sendAttCount} attachment${sendAttCount > 1 ? "s" : ""})` : ""}`;
+    }
+    case "reply": {
+      const replyAttCount = params.attachment ? Array.isArray(params.attachment) ? params.attachment.length : 1 : 0;
+      return `Would reply to message ${params.id || "?"}${replyAttCount ? ` (${replyAttCount} attachment${replyAttCount > 1 ? "s" : ""})` : ""}`;
+    }
+    case "save_attachment":
+      return `Would save ${params.index !== void 0 ? `attachment #${params.index}` : "all attachments"} from message ${params.id || "?"} to ${params.destDir || "temp directory"}`;
     default:
       return `Would perform ${action} on ${tool}`;
   }
@@ -78329,6 +78340,10 @@ async function handleContact(args, runCLI2) {
   }
 }
 
+// ../lib/handlers/mail.js
+import { existsSync as existsSync2 } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+
 // ../lib/mail-format.js
 var import_mailparser = __toESM(require_mailparser(), 1);
 var import_turndown = __toESM(require_turndown_cjs(), 1);
@@ -78527,6 +78542,16 @@ async function handleMail(args, runCLI2) {
       }
       if (args.from)
         sendArgs.push("--from", args.from);
+      if (args.attachment) {
+        const attachments = Array.isArray(args.attachment) ? args.attachment : [args.attachment];
+        for (const filePath of attachments) {
+          const expanded = filePath.startsWith("~/") ? homedir2() + filePath.slice(1) : filePath;
+          if (!existsSync2(expanded)) {
+            throw new Error(`Attachment file not found: ${expanded}`);
+          }
+          sendArgs.push("--attachment", expanded);
+        }
+      }
       return await runCLI2("mail-cli", sendArgs);
     }
     case "reply": {
@@ -78539,7 +78564,31 @@ async function handleMail(args, runCLI2) {
         replyArgs.push("--mailbox", args.mailbox);
       if (args.account)
         replyArgs.push("--account", args.account);
+      if (args.attachment) {
+        const attachments = Array.isArray(args.attachment) ? args.attachment : [args.attachment];
+        for (const filePath of attachments) {
+          const expanded = filePath.startsWith("~/") ? homedir2() + filePath.slice(1) : filePath;
+          if (!existsSync2(expanded)) {
+            throw new Error(`Attachment file not found: ${expanded}`);
+          }
+          replyArgs.push("--attachment", expanded);
+        }
+      }
       return await runCLI2("mail-cli", replyArgs);
+    }
+    case "save_attachment": {
+      if (!args.id)
+        throw new Error("Message ID is required for save_attachment");
+      const saveArgs = ["save-attachment", "--id", args.id];
+      if (args.index !== void 0)
+        saveArgs.push("--index", String(args.index));
+      if (args.destDir)
+        saveArgs.push("--dest-dir", args.destDir);
+      if (args.mailbox)
+        saveArgs.push("--mailbox", args.mailbox);
+      if (args.account)
+        saveArgs.push("--account", args.account);
+      return await runCLI2("mail-cli", saveArgs);
     }
     case "auth_check": {
       if (!args.id)

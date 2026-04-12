@@ -137,7 +137,7 @@ describe("Category 4: Safety Properties", () => {
       const covered = new Set([
         "accounts", "mailboxes", "messages", "get", "search",
         "update", "move", "delete", "batch_update", "batch_delete",
-        "send", "reply", "auth_check", "schema",
+        "send", "reply", "save_attachment", "auth_check", "schema",
       ]);
       for (const action of actions) {
         expect(covered.has(action)).toBe(true);
@@ -177,6 +177,7 @@ describe("Category 4: Safety Properties", () => {
       expect(isMutation("mail", "batch_delete")).toBe(true);
       expect(isMutation("mail", "send")).toBe(true);
       expect(isMutation("mail", "reply")).toBe(true);
+      expect(isMutation("mail", "save_attachment")).toBe(true);
       expect(isMutation("mail", "accounts")).toBe(false);
       expect(isMutation("mail", "messages")).toBe(false);
     });
