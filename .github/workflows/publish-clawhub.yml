@@ -42,7 +42,7 @@ jobs:
 
       - name: Publish to ClawHub
         run: |
-          clawhub package publish . \
+          clawhub package publish openclaw/ \
             --family code-plugin \
             --name apple-pim-cli \
             --display-name "Apple PIM" \
