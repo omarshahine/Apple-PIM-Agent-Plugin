@@ -169,10 +169,10 @@ export default definePluginEntry({
           description: tool.description,
           parameters: tool.inputSchema as Record<string, unknown>,
 
-          async execute(
+          execute: async (
             _toolCallId: string,
             params: Record<string, unknown>,
-          ) {
+          ) => {
             // Runtime validation — ensure required 'action' field is present and valid
             if (typeof params.action !== "string" || !params.action) {
               return toolResult(
