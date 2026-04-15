@@ -18,8 +18,7 @@ import { handleContact } from "../lib/handlers/contact.js";
 import { handleMail } from "../lib/handlers/mail.js";
 import { handleApplePim } from "../lib/handlers/apple-pim.js";
 import { existsSync } from "fs";
-import { join, dirname } from "path";
-import { execFileSync } from "child_process";
+import { join } from "path";
 import { homedir } from "os";
 
 // Plugin config (set by the gateway from openclaw.plugin.json configSchema)
@@ -74,14 +73,12 @@ function resolveBinDir(config?: PluginConfig): string {
     return envBinDir;
   }
 
-  // 3. PATH lookup (execFileSync avoids shell injection)
-  try {
-    const whichResult = execFileSync("which", ["calendar-cli"], { encoding: "utf8" }).trim();
-    if (whichResult) {
-      return dirname(whichResult);
+  // 3. Common PATH locations
+  const pathDirs = (process.env.PATH || "").split(":").filter(Boolean);
+  for (const dir of pathDirs) {
+    if (existsSync(join(dir, "calendar-cli"))) {
+      return dir;
     }
-  } catch {
-    // Not on PATH, continue
   }
 
   // 4-5. Standard locations via findSwiftBinDir
