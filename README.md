@@ -63,15 +63,23 @@ The `pim-assistant` agent triggers automatically when you mention scheduling, re
 
 ### OpenClaw Plugin
 
+This plugin uses `child_process` to spawn native macOS Swift binaries (calendar-cli, reminder-cli, contacts-cli, mail-cli) that interact with EventKit and Contacts frameworks. Because it executes local binaries, OpenClaw's security scanner will flag the install and block it by default. This is expected behavior, not a security issue. The plugin needs to spawn these CLIs to access macOS Calendar, Reminders, Contacts, and Mail.app data through Apple's native frameworks.
+
+To install, use the `--dangerously-force-unsafe-install` flag:
+
 ```bash
-# Install from ClawHub (preferred)
-openclaw plugins install apple-pim-cli
+# Install from ClawHub (required flag due to child_process usage)
+openclaw plugins install apple-pim-cli --dangerously-force-unsafe-install
 
 # Or install from npm
 npm install -g apple-pim-cli
+```
 
-# Prerequisites: Swift CLIs must be on PATH (run ./setup.sh --install)
-# Optional: configure binary location if not on PATH
+**Prerequisites**: Swift CLIs must be on PATH (run `./setup.sh --install` first).
+
+Optionally, configure the binary location if the CLIs are not on PATH:
+
+```bash
 # In your OpenClaw config:
 # plugins.entries.apple-pim-cli.config.binDir = "/path/to/swift/.build/release"
 ```
