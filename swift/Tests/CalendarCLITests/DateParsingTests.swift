@@ -155,4 +155,47 @@ final class DateParsingTests: XCTestCase {
         XCTAssertEqual(result, "2026-03-16T04:00:00Z",
             "9 PM PDT should be 4 AM UTC next day")
     }
+
+    // MARK: - formatDate presets (APPLE_PIM_DATE_FORMAT)
+
+    private let testDate = ISO8601DateFormatter().date(from: "2026-03-20T14:00:00Z")!
+
+    func testFormatDateDefaultUTC() {
+        XCTAssertEqual(formatDate(testDate, preset: "utc"), "2026-03-20T14:00:00Z")
+    }
+
+    func testFormatDateLocal() {
+        let result = formatDate(testDate, preset: "local")
+        XCTAssertTrue(result.contains("T"), "Local format should contain T separator")
+        XCTAssertFalse(result.hasSuffix("Z"), "Local format should not end with Z")
+        XCTAssertTrue(result.contains("+") || result.contains("-"),
+            "Local format should include timezone offset")
+    }
+
+    func testFormatDateDayUTC() {
+        XCTAssertEqual(formatDate(testDate, preset: "day-utc"), "Friday, 2026-03-20T14:00:00Z")
+    }
+
+    func testFormatDateDayLocal() {
+        let result = formatDate(testDate, preset: "day-local")
+        // Don't hardcode day name — local timezone may shift the date (e.g. UTC+10 sees Saturday)
+        let parts = result.split(separator: ",", maxSplits: 1)
+        XCTAssertEqual(parts.count, 2, "day-local should contain a comma separating day name and ISO timestamp")
+        XCTAssertFalse(result.hasSuffix("Z"), "day-local should not end with Z")
+        XCTAssertTrue(result.contains("+") || result.dropFirst(10).contains("-"),
+            "day-local should include timezone offset")
+    }
+
+    func testFormatDateUnknownPreset() {
+        XCTAssertEqual(formatDate(testDate, preset: "bogus"), "2026-03-20T14:00:00Z",
+            "Unknown preset should fall back to UTC")
+    }
+
+    func testFormatDateNilPresetFallsBackToEnv() {
+        // With no preset and no APPLE_PIM_DATE_FORMAT env var, should default to UTC
+        let result = formatDate(testDate)
+        XCTAssertEqual(result, "2026-03-20T14:00:00Z",
+            "With no preset and no APPLE_PIM_DATE_FORMAT env var, should default to UTC")
+    }
+
 }

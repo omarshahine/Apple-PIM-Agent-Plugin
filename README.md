@@ -100,11 +100,13 @@ openclaw plugins install -l ./openclaw
 
 ## Configuration
 
-You can optionally restrict which domains and items the plugin can access. This is useful for:
-- Privacy — hide calendars you don't need the agent to see
-- Reducing noise — only show relevant reminder lists
-- Avoiding conflicts — disable mail here if you use a separate email MCP
-- Multi-agent setups — give each agent a profile with different access
+The plugin includes a full access control system (PIMConfig) that lets you restrict which calendars, reminder lists, and domains each agent can see. This is useful for:
+- **Access control** — allowlist or blocklist specific calendars and reminder lists
+- **Privacy** — hide calendars you don't need the agent to see
+- **Reducing noise** — only show relevant reminder lists
+- **Avoiding conflicts** — disable mail here if you use a separate email MCP
+- **Multi-agent setups** — give each agent a profile with different access
+- **Read-only calendars** — let agents see but not modify certain calendars
 
 ### Interactive Setup (Claude Code)
 
@@ -271,6 +273,24 @@ apple_pim_mail({ action: "auth_check", id: "<message-id>" })
 ```
 
 The `--trusted-senders` flag overrides the default config path. If the file doesn't exist, the verdict is `unknown` with a warning.
+
+### Date Output Format
+
+Set `APPLE_PIM_DATE_FORMAT` to control how CalendarCLI formats dates in JSON output. This helps LLM agents avoid wasting tokens computing day-of-week from raw ISO dates.
+
+| Preset | Example |
+|--------|---------|
+| `utc` (default) | `2026-03-20T14:00:00Z` |
+| `local` | `2026-03-20T07:00:00-07:00` |
+| `day-utc` | `Friday, 2026-03-20T14:00:00Z` |
+| `day-local` | `Friday, 2026-03-20T07:00:00-07:00` |
+
+```bash
+# Set in your shell profile or agent environment
+export APPLE_PIM_DATE_FORMAT=day-local
+```
+
+No env var = `utc` (current behavior, fully backwards compatible). CalendarCLI only; ReminderCLI uses a different date codepath.
 
 ### Notes
 

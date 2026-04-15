@@ -96,6 +96,40 @@ func outputJSON(_ value: Any) {
     }
 }
 
+// MARK: - Date Output Formatting
+
+private let posixLocale = Locale(identifier: "en_US_POSIX")
+
+/// Format a date using the preset from APPLE_PIM_DATE_FORMAT (or an explicit override).
+/// Presets: utc (default), local, day-utc, day-local. Unknown values fall back to utc.
+func formatDate(_ date: Date, preset: String? = nil) -> String {
+    let preset = (preset ?? ProcessInfo.processInfo.environment["APPLE_PIM_DATE_FORMAT"] ?? "utc").lowercased()
+    let useLocal = preset == "local" || preset == "day-local"
+    let useDay = preset == "day-utc" || preset == "day-local"
+
+    let iso: String
+    if useLocal {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd'T'HH:mm:ssxxxxx"
+        fmt.locale = posixLocale
+        iso = fmt.string(from: date)
+    } else {
+        iso = ISO8601DateFormatter().string(from: date)
+    }
+
+    if useDay {
+        let dayFmt = DateFormatter()
+        dayFmt.dateFormat = "EEEE"
+        dayFmt.locale = posixLocale
+        dayFmt.timeZone = useLocal ? TimeZone.current : TimeZone(identifier: "UTC")!
+        return "\(dayFmt.string(from: date)), \(iso)"
+    }
+
+    return iso
+}
+
+// MARK: - Date-Only Detection
+
 private let dateOnlyISO = try! NSRegularExpression(pattern: #"^\d{4}-\d{2}-\d{2}$"#)
 private let dateOnlyUS  = try! NSRegularExpression(pattern: #"^\d{2}/\d{2}/\d{4}$"#)
 
@@ -219,8 +253,8 @@ func eventToDict(_ event: EKEvent) -> [String: Any] {
     var dict: [String: Any] = [
         "id": event.eventIdentifier ?? "",
         "title": event.title ?? "",
-        "startDate": ISO8601DateFormatter().string(from: event.startDate),
-        "endDate": ISO8601DateFormatter().string(from: event.endDate),
+        "startDate": formatDate(event.startDate),
+        "endDate": formatDate(event.endDate),
         "localStart": localDateFormatter.string(from: event.startDate),
         "localEnd": localDateFormatter.string(from: event.endDate),
         "isAllDay": event.isAllDay,
@@ -257,7 +291,7 @@ func ruleToDict(_ rule: EKRecurrenceRule) -> [String: Any] {
     ]
     if let end = rule.recurrenceEnd {
         if let endDate = end.endDate {
-            dict["endDate"] = ISO8601DateFormatter().string(from: endDate)
+            dict["endDate"] = formatDate(endDate)
         } else {
             dict["occurrenceCount"] = end.occurrenceCount
         }
@@ -326,9 +360,8 @@ func participantRoleString(_ role: EKParticipantRole) -> String {
 /// Build a verification dict comparing requested inputs against stored event values.
 /// Gives calling agents an immediate signal if date parsing produced wrong times.
 func buildVerification(event: EKEvent, requestedStart: String, requestedEnd: String?, requestedCalendar: String?) -> [String: Any] {
-    let isoFmt = ISO8601DateFormatter()
-    let storedStart = isoFmt.string(from: event.startDate)
-    let storedEnd = isoFmt.string(from: event.endDate)
+    let storedStart = formatDate(event.startDate)
+    let storedEnd = formatDate(event.endDate)
 
     // Re-parse the requested strings to compare as Date values (tolerating 1s for rounding)
     let startMatch: Bool
@@ -705,8 +738,8 @@ struct ListEvents: AsyncParsableCommand {
             "events": Array(events),
             "count": events.count,
             "dateRange": [
-                "from": ISO8601DateFormatter().string(from: startDate),
-                "to": ISO8601DateFormatter().string(from: endDate)
+                "from": formatDate(startDate),
+                "to": formatDate(endDate)
             ]
         ])
     }
