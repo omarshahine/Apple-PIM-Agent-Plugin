@@ -130,7 +130,7 @@ git push origin v3.1.0
 
 The workflow extracts the version from the tag name and the changelog from the tag annotation. Authenticates with the `CLAWHUB_TOKEN` repository secret.
 
-**Note**: The CI workflow does NOT handle the `lib/` symlink prepack/postpack step. If the `openclaw/lib/` symlink needs resolving for ClawHub, use the manual script instead.
+**Note**: The CI workflow runs `npm run prepack` in `openclaw/` to resolve the `lib/` symlink into a real directory copy before publishing. This mirrors what the manual script does.
 
 ### Manual (fallback)
 

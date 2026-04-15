@@ -40,6 +40,11 @@ jobs:
           fi
           echo "text=$MSG" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve lib/ symlink for packaging
+        run: |
+          cd openclaw
+          npm run prepack
+
       - name: Publish to ClawHub
         run: |
           clawhub package publish openclaw/ \
