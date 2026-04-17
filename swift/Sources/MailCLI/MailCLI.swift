@@ -25,6 +25,8 @@ struct MailCLI: AsyncParsableCommand {
             SaveAttachment.self,
             AuthCheck.self,
             ConfigCommand.self,
+            SMTPSend.self,
+            Secrets.self,
         ]
     )
 }
