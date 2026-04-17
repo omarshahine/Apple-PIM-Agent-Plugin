@@ -9,6 +9,7 @@ public struct PIMConfiguration: Codable, Equatable, Sendable {
     public var mail: DomainConfig
     public var defaultCalendar: String?
     public var defaultReminderList: String?
+    public var smtp: SMTPDefaults?
 
     public init(
         calendars: DomainFilterConfig = DomainFilterConfig(),
@@ -16,7 +17,8 @@ public struct PIMConfiguration: Codable, Equatable, Sendable {
         contacts: DomainFilterConfig = DomainFilterConfig(),
         mail: DomainConfig = DomainConfig(),
         defaultCalendar: String? = nil,
-        defaultReminderList: String? = nil
+        defaultReminderList: String? = nil,
+        smtp: SMTPDefaults? = nil
     ) {
         self.calendars = calendars
         self.reminders = reminders
@@ -24,12 +26,34 @@ public struct PIMConfiguration: Codable, Equatable, Sendable {
         self.mail = mail
         self.defaultCalendar = defaultCalendar
         self.defaultReminderList = defaultReminderList
+        self.smtp = smtp
     }
 
     enum CodingKeys: String, CodingKey {
-        case calendars, reminders, contacts, mail
+        case calendars, reminders, contacts, mail, smtp
         case defaultCalendar = "default_calendar"
         case defaultReminderList = "default_reminder_list"
+    }
+}
+
+/// Non-secret SMTP connection defaults.
+/// The password lives in `SecretsStore` under the key at `secretKey` (default `smtp.icloud.password`).
+public struct SMTPDefaults: Codable, Equatable, Sendable {
+    public var host: String?
+    public var port: Int?
+    public var username: String?
+    public var secretKey: String?
+
+    public init(host: String? = nil, port: Int? = nil, username: String? = nil, secretKey: String? = nil) {
+        self.host = host
+        self.port = port
+        self.username = username
+        self.secretKey = secretKey
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case host, port, username
+        case secretKey = "secret_key"
     }
 }
 

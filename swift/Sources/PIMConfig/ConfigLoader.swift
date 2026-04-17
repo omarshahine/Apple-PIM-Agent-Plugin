@@ -123,6 +123,7 @@ public struct ConfigLoader {
         if let mail = profile.mail { merged.mail = mail }
         if let defaultCalendar = profile.defaultCalendar { merged.defaultCalendar = defaultCalendar }
         if let defaultReminderList = profile.defaultReminderList { merged.defaultReminderList = defaultReminderList }
+        if let smtp = profile.smtp { merged.smtp = smtp }
         return merged
     }
 
