@@ -338,8 +338,86 @@ mail-cli send --to "user@example.com" --subject "Report" --body "See attached" -
 mail-cli reply --id "<message-id>" --body "Thanks!"
 mail-cli save-attachment --id "<message-id>" --dest-dir ~/Downloads
 mail-cli auth-check --id "<message-id>"
+
+# Native SMTP send (no Mail.app — see "Direct SMTP path" below)
+mail-cli secrets set smtp.icloud.password
+mail-cli smtp-send --to "user@example.com" --subject "Hello" \
+  --from "me@icloud.com" --html-file ./body.html
+
 calendar-cli create --title "Meeting" --start "tomorrow 2pm" --attendees '[{"email":"a@example.com"}]'
 ```
+
+### Direct SMTP path (`mail-cli smtp-send`)
+
+`mail-cli send` composes through **Mail.app** via JXA — which means the outgoing
+message shows up in Mail.app's Sent folder, uses your configured accounts, and
+inherits the system's send pipeline. Good default, but it has two real
+limitations: it requires Mail.app to be running, and Mail 16 on iCloud-type
+accounts silently drops AppleScript's `html content` property
+([FB11734014](https://developer.apple.com/forums/thread/738842)) so HTML
+sends arrive as empty plain text.
+
+`mail-cli smtp-send` is the native Swift alternative: hand-rolled SMTP state
+machine over `NWConnection` + `NWProtocolTLS` (implicit TLS on port 465, AUTH
+LOGIN), with a `multipart/alternative` MIME builder. No Mail.app dependency,
+no third-party Swift deps.
+
+**Setup (one-time):**
+
+```bash
+# Store an app-specific password (interactive, no echo).
+# Apple ID → Sign-In and Security → App-Specific Passwords → Generate.
+mail-cli secrets set smtp.icloud.password
+
+# Or read from ~/.openclaw/secrets.json if the OpenClaw store exists.
+# Password resolution: $SMTP_ICLOUD_PASSWORD → ~/.openclaw/secrets.json → ~/.config/apple-pim/secrets.json
+
+# Set connection defaults so you don't pass --from on every call (optional):
+mail-cli config set-smtp --username "me@icloud.com"  # if/when the config command is added
+# Until then, pass --from explicitly or put `smtp.username` in ~/.config/apple-pim/config.json.
+```
+
+**Send:**
+
+```bash
+# Dry run — prints rendered RFC 5322 bytes and exits 0:
+mail-cli smtp-send --dry-run --to you@example.com --from me@icloud.com \
+  --subject "Dry run" --body "hello"
+
+# Real send with HTML body and plain-text fallback:
+mail-cli smtp-send --to you@example.com --from me@icloud.com \
+  --subject "Digest" --html-file ./body.html --body "Plain fallback"
+
+# With attachment:
+mail-cli smtp-send --to you@example.com --from me@icloud.com \
+  --subject "Report" --html-file ./body.html --attachment ~/report.pdf
+
+# Verbose mode logs the SMTP conversation to stderr (password redacted):
+mail-cli smtp-send --verbose --to you@example.com --from me@icloud.com \
+  --subject "Debug" --body "hi"
+```
+
+**Secrets management:**
+
+```bash
+mail-cli secrets set   smtp.icloud.password          # prompt silently
+mail-cli secrets get   smtp.icloud.password          # print (for scripts)
+mail-cli secrets list                                # keys only, never values
+mail-cli secrets unset smtp.icloud.password
+
+# Force the OpenClaw-shared store instead of the standalone one:
+mail-cli secrets set smtp.icloud.password --store openclaw
+```
+
+#### Known Limitations
+
+| Limitation | Detail |
+|---|---|
+| **No Sent-folder entry** | `smtp-send` does not IMAP-APPEND to your Sent folder, so the message won't appear in Mail.app's Sent view. A stderr note is emitted at send time. Use `mail-cli send` instead if Sent-folder visibility is required. |
+| **STARTTLS not supported** | Only implicit TLS on port 465 in v1. Works for iCloud, Gmail, Fastmail, most modern hosts. A port-587 STARTTLS path could be added later. |
+| **AUTH LOGIN only** | AUTH PLAIN / CRAM-MD5 / OAUTHBEARER not implemented. Sufficient for iCloud app-specific passwords. |
+| **App-specific password required for iCloud** | The regular Apple ID password will return `535 5.7.8 Authentication failed`. Generate one at [appleid.apple.com](https://appleid.apple.com) → Sign-In and Security → App-Specific Passwords. |
+| **`--from` must match the authenticated account** | iCloud (and most relays) will silently rewrite or reject messages whose `From:` doesn't match the authenticating user. |
 
 ## Tools Reference
 
