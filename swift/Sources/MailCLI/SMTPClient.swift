@@ -184,15 +184,18 @@ public struct SMTPClient: Sendable {
             throw SMTPClientError.dataRejected(dataReady)
         }
 
-        // 7. Body + end-of-data marker
+        // 7. Body + end-of-data marker — sent as a single payload so the state is
+        //    atomic from the server's point of view (and so scripted fake transports
+        //    can match a single predicate per step).
         let rendered = try msg.render()
         let dotStuffed = Self.dotStuff(rendered)
-        try await transport.send(dotStuffed)
+        var payload = dotStuffed
         // Guarantee the body ends with CRLF before the terminator.
-        if !dotStuffed.suffix(2).elementsEqual("\r\n".utf8) {
-            try await transport.send(Data("\r\n".utf8))
+        if !payload.suffix(2).elementsEqual("\r\n".utf8) {
+            payload.append(Data("\r\n".utf8))
         }
-        try await transport.send(Data(".\r\n".utf8))
+        payload.append(Data(".\r\n".utf8))
+        try await transport.send(payload)
         if verbose {
             logSink.log("C: <\(dotStuffed.count) bytes of message body>\nC: .")
         }

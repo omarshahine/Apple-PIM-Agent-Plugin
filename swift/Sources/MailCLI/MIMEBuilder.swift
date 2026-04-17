@@ -131,7 +131,13 @@ public struct MIMEMessage: Sendable {
     private func buildBody() throws -> ([(String, String)], Data) {
         // Case 1: attachments present → multipart/mixed wrapping either a single
         // content part or a multipart/alternative sub-part.
+        //
+        // Allocate the OUTER boundary first so the factory is called in
+        // lexical order (outer, then inner via renderAlternative()). This is
+        // visible to tests that inject a deterministic factory and matters
+        // only for that — protocol-wise either order is fine.
         if !attachments.isEmpty {
+            var boundary = boundaryFactory()
             let contentPart: Data = try {
                 if text != nil && html != nil {
                     // Nested multipart/alternative for the content side.
@@ -145,8 +151,8 @@ public struct MIMEMessage: Sendable {
                 }
             }()
 
-            var boundary = boundaryFactory()
-            // Collision check: if the boundary appears in content, re-generate up to a few times.
+            // Collision check: if the outer boundary appears in any attached
+            // content or in the inner multipart, regenerate up to a few times.
             var attempts = 0
             while Self.boundaryCollides(boundary, with: contentPart)
                     || attachments.contains(where: { Self.boundaryCollides(boundary, with: $0.data) })

@@ -58,8 +58,9 @@ struct SMTPClientTests {
             .reply(lines: ["250 OK"]),
             .expectSend({ $0 == "DATA\r\n" }, label: "DATA"),
             .reply(lines: ["354 End data with <CR><LF>.<CR><LF>"]),
-            .expectSend({ $0.hasPrefix("From: user@example.com\r\n") }, label: "message body"),
-            .expectSend({ $0 == ".\r\n" }, label: "end-of-data marker"),
+            .expectSend({
+                $0.hasPrefix("From: user@example.com\r\n") && $0.hasSuffix("\r\n.\r\n")
+            }, label: "message body + end-of-data"),
             .reply(lines: ["250 2.0.0 OK: queued as ABC123"]),
             .expectSend({ $0 == "QUIT\r\n" }, label: "QUIT"),
             .reply(lines: ["221 bye"]),
@@ -185,8 +186,7 @@ struct SMTPClientTests {
             .reply(lines: ["250 ok"]),
             .expectSend({ $0 == "DATA\r\n" }, label: "DATA"),
             .reply(lines: ["354 go"]),
-            .expectSend({ _ in true }, label: "body"),
-            .expectSend({ $0 == ".\r\n" }, label: "end"),
+            .expectSend({ $0.hasSuffix("\r\n.\r\n") }, label: "body + end"),
             .reply(lines: ["250 queued"]),
             .expectSend({ $0 == "QUIT\r\n" }, label: "QUIT"),
             .reply(lines: ["221 bye"]),
