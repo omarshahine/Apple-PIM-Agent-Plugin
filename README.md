@@ -46,34 +46,32 @@ The `--install` flag creates symlinks in `~/.local/bin/`, so rebuilding (`swift 
 
 ### Claude Code Plugin
 
-```bash
-# Option 1: Standalone from this repo
-claude plugin marketplace add omarshahine/Apple-PIM-Agent-Plugin
-claude plugin install apple-pim@apple-pim
-~/.claude/plugins/cache/apple-pim/apple-pim/*/setup.sh
+Inside Claude Code, run:
 
-# Option 2: Via omarshahine-agent-plugins marketplace
-claude plugin install apple-pim@omarshahine-agent-plugins
-~/.claude/plugins/cache/omarshahine-agent-plugins/apple-pim/*/setup.sh
-
-# Restart Claude Code to load the MCP server
+```
+/plugin marketplace add omarshahine/Apple-PIM-Agent-Plugin
+/plugin install apple-pim@apple-pim
 ```
 
-The `pim-assistant` agent triggers automatically when you mention scheduling, reminders, contacts, or email.
+Then build the Swift CLIs (once, from a shell):
+
+```bash
+~/.claude/plugins/cache/apple-pim/apple-pim/*/setup.sh
+```
+
+Restart Claude Code to load the MCP server. The `pim-assistant` agent triggers automatically when you mention scheduling, reminders, contacts, or email.
 
 ### OpenClaw Plugin
 
-This plugin uses `child_process` to spawn native macOS Swift binaries (calendar-cli, reminder-cli, contacts-cli, mail-cli) that interact with EventKit and Contacts frameworks. Because it executes local binaries, OpenClaw's security scanner will flag the install and block it by default. This is expected behavior, not a security issue. The plugin needs to spawn these CLIs to access macOS Calendar, Reminders, Contacts, and Mail.app data through Apple's native frameworks.
-
-To install, use the `--dangerously-force-unsafe-install` flag:
-
 ```bash
-# Install from ClawHub (required flag due to child_process usage)
-openclaw plugins install apple-pim-cli --dangerously-force-unsafe-install
+# Install from ClawHub
+openclaw plugins install apple-pim-cli
 
 # Or install from npm
 npm install -g apple-pim-cli
 ```
+
+Under the hood, the plugin spawns native macOS Swift binaries (calendar-cli, reminder-cli, contacts-cli, mail-cli) that interact with EventKit, Contacts, and Mail.app via Apple's frameworks.
 
 **Prerequisites**: Swift CLIs must be on PATH (run `./setup.sh --install` first).
 
@@ -98,11 +96,18 @@ Optionally, configure the binary location if the CLIs are not on PATH:
 git clone https://github.com/omarshahine/Apple-PIM-Agent-Plugin.git
 cd Apple-PIM-Agent-Plugin
 ./setup.sh
+```
 
-# Claude Code
-claude --plugin-dir .
+Then inside Claude Code, add the local checkout as a marketplace:
 
-# OpenClaw (loads TypeScript directly, no build step)
+```
+/plugin marketplace add /absolute/path/to/Apple-PIM-Agent-Plugin
+/plugin install apple-pim@apple-pim
+```
+
+For OpenClaw (loads TypeScript directly, no build step):
+
+```bash
 openclaw plugins install -l ./openclaw
 ```
 
@@ -627,24 +632,25 @@ calendar-cli config show --profile travel
 
 ### Agent Evals
 
-The eval framework tests how well the tool layer serves AI agents. All tests run against mock CLI fixtures with zero TCC permissions and no real macOS data.
+The eval framework tests how well the tool layer serves AI agents. The four core categories run against mock CLI fixtures with zero TCC permissions and no real macOS data. A separate model-in-the-loop suite (`calendar-reasoning`) exercises date/time reasoning with a real `claude -p` call graded by an LLM judge — it requires `ANTHROPIC_API_KEY` and is non-deterministic.
 
 ```bash
-# Run all eval tests
+# Run all eval tests (mock + model-in-the-loop)
 npm run eval
 
 # Watch mode during development
 npm run eval:watch
 ```
 
-**4 eval categories:**
+**Eval categories:**
 
 | Category | Tests | What it verifies |
 |----------|-------|------------------|
-| Tool Call Correctness | 47 | CLI argument construction for every input variant |
+| Tool Call Correctness | 58 | CLI argument construction for every input variant |
 | Response Interpretation | 22 | Verification visibility, datamarking, injection detection |
 | Multi-turn Sequences | 8 | Correct tool call ordering for multi-step workflows |
-| Safety Properties | 48 | Destructive warnings, ID validation, schema coverage |
+| Safety Properties | 49 | Destructive warnings, ID validation, schema coverage |
+| Calendar Reasoning (model) | 8 | Day-of-week math, cross-midnight events, query strategy (requires `ANTHROPIC_API_KEY`) |
 
 To add new eval cases, edit YAML files in `evals/scenarios/` and add fixture JSON in `evals/fixtures/`. No test code changes needed.
 
