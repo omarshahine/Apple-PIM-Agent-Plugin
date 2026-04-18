@@ -118,7 +118,7 @@ All five version sources must agree, plus the matching GitHub release tag:
 scripts/bump-version.sh 3.7.2
 ```
 
-**Verify consistency** (also run in CI as the `Version Consistency` required check):
+**Verify consistency** (CI runs the same check via the composite action `omarshahine/version-consistency-action@v1` as the `Version Consistency` required check):
 
 ```bash
 scripts/check-versions.sh
