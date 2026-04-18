@@ -1,7 +1,8 @@
 import { build } from "esbuild";
 import { builtinModules } from "module";
 
-await build({
+async function main() {
+  await build({
   entryPoints: ["server.js"],
   bundle: true,
   platform: "node",
@@ -15,4 +16,10 @@ await build({
     // Provide a real require() for CJS dependencies bundled into ESM.
     js: `import { createRequire } from "module"; const require = createRequire(import.meta.url);`,
   },
+});
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
 });
