@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   publish:
@@ -22,6 +23,9 @@ jobs:
           node-version: 22
           registry-url: "https://registry.npmjs.org"
 
+      - name: Ensure npm supports trusted publishing
+        run: npm install -g npm@latest
+
       - name: Assert tag matches package version
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
@@ -32,11 +36,9 @@ jobs:
           fi
         working-directory: openclaw
 
-      - name: Publish to NPM
-        run: npm publish
+      - name: Publish to NPM (OIDC trusted publishing)
+        run: npm publish --provenance --access public
         working-directory: openclaw
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Verify
         run: npm view apple-pim-cli version
