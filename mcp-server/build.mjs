@@ -14,7 +14,9 @@ async function main() {
   external: builtinModules.flatMap((m) => [m, `node:${m}`]),
   banner: {
     // Provide a real require() for CJS dependencies bundled into ESM.
-    js: `import { createRequire } from "module"; const require = createRequire(import.meta.url);`,
+    // Use a unique identifier so we don't collide with source-level `import { createRequire }` statements
+    // (esbuild treats the banner as opaque text and can't dedupe against real imports).
+    js: `import { createRequire as __esbuildBannerCreateRequire } from "module"; const require = __esbuildBannerCreateRequire(import.meta.url);`,
   },
 });
 }

@@ -1,18 +1,29 @@
 {
   "name": "apple-pim",
-  "version": "3.7.1",
+  "version": "3.7.2",
   "description": "Native macOS integration for Calendar, Reminders, Contacts, and Mail using EventKit, Contacts, and JXA frameworks",
   "author": {
     "name": "Omar Shahine",
     "email": "omar@shahine.com"
   },
   "license": "MIT",
-  "keywords": ["calendar", "reminders", "contacts", "mail", "eventkit", "jxa", "macos", "pim"],
+  "keywords": [
+    "calendar",
+    "reminders",
+    "contacts",
+    "mail",
+    "eventkit",
+    "jxa",
+    "macos",
+    "pim"
+  ],
   "mcpServers": {
     "apple-pim": {
       "type": "stdio",
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/server.js"]
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/server.js"
+      ]
     }
   }
 }

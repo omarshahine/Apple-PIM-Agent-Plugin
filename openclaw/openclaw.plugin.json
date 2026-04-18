@@ -2,7 +2,7 @@
   "id": "apple-pim-cli",
   "name": "Apple PIM",
   "description": "macOS Calendar, Reminders, Contacts, and Mail via native Swift CLIs",
-  "version": "3.7.1",
+  "version": "3.7.2",
   "configSchema": {
     "type": "object",
     "properties": {
