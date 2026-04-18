@@ -101,16 +101,30 @@ Each Swift CLI is a standalone binary that reads from macOS frameworks, validate
 
 ## Versioning
 
-All four version sources are kept in sync:
+All five version sources must agree, plus the matching GitHub release tag:
 
-| Source | File |
-|--------|------|
-| MCP server | `mcp-server/package.json` |
-| OpenClaw plugin | `openclaw/package.json` |
-| OpenClaw manifest | `openclaw/openclaw.plugin.json` |
-| GitHub release | tag (e.g., `v3.0.1`) |
+| Source | File | jq path |
+|--------|------|---------|
+| Claude Code plugin | `.claude-plugin/plugin.json` | `.version` |
+| Claude Code marketplace | `.claude-plugin/marketplace.json` | `.plugins[0].version` |
+| MCP server | `mcp-server/package.json` | `.version` |
+| OpenClaw plugin | `openclaw/package.json` | `.version` |
+| OpenClaw manifest | `openclaw/openclaw.plugin.json` | `.version` |
+| GitHub release | tag (e.g., `v3.7.1`) | — |
 
-When bumping a version, update all three files to the same value, rebuild `mcp-server/dist/server.js`, and tag the GitHub release with the matching version.
+**Canonical bump path** (rewrites all five files atomically and rebuilds the MCP bundle):
+
+```bash
+scripts/bump-version.sh 3.7.2
+```
+
+**Verify consistency** (also run in CI as the `Version Consistency` required check):
+
+```bash
+scripts/check-versions.sh
+```
+
+After bumping: commit, tag `v<new>`, push. CI enforces agreement on every PR — a drifted manifest will fail the `Version Consistency` job.
 
 ## Publishing (OpenClaw Plugin)
 

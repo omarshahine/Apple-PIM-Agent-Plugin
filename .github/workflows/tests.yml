@@ -73,3 +73,13 @@ jobs:
 
       - name: Run Swift tests
         run: swift test
+
+  version-check:
+    name: Version Consistency
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check all version sources agree
+        run: ./scripts/check-versions.sh
