@@ -23,8 +23,11 @@ jobs:
           node-version: 22
           registry-url: "https://registry.npmjs.org"
 
-      - name: Ensure npm supports trusted publishing
-        run: npm install -g npm@latest
+      - name: Print npm version
+        # Bundled npm in node 22 (10.9+) supports `--provenance` natively.
+        # Avoid `npm install -g npm@latest`: the bundled npm's self-upgrade path
+        # is broken on current runner images with `Cannot find module 'promise-retry'`.
+        run: npm --version
 
       - name: Assert tag matches package version
         run: |
