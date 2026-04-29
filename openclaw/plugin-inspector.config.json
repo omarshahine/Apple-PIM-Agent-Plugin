@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "plugin": {
+    "id": "apple-pim-cli",
+    "priority": "high",
+    "seams": [
+      "plugin-runtime"
+    ],
+    "sourceRoot": "src"
+  },
+  "capture": {
+    "mockSdk": true
+  }
+}

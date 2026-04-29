@@ -50,3 +50,4 @@ site/.astro/
 .windsurf/
 .zencoder/
 .playwright-cli/
+openclaw/reports/
