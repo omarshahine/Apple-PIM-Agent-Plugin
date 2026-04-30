@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-      - run: npx --yes @openclaw/plugin-inspector ci --no-openclaw --runtime --mock-sdk --allow-execute
+      - run: npx --yes @openclaw/plugin-inspector ci --no-openclaw --no-runtime
       - uses: actions/upload-artifact@v5
         if: always()
         with:
