@@ -18,15 +18,17 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
+        # Node 24 ships with npm 11.x. Trusted Publisher OIDC requires
+        # npm >= 11.5.1 (per https://docs.npmjs.com/trusted-publishers).
+        # Node 22's bundled npm 10.9.x silently 404s on the publish PUT
+        # despite signed provenance landing in sigstore — that was the
+        # cause of every failed CI publish since the OIDC migration.
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           registry-url: "https://registry.npmjs.org"
 
       - name: Print npm version
-        # Bundled npm in node 22 (10.9+) supports `--provenance` natively.
-        # Avoid `npm install -g npm@latest`: the bundled npm's self-upgrade path
-        # is broken on current runner images with `Cannot find module 'promise-retry'`.
         run: npm --version
 
       - name: Assert tag matches package version
