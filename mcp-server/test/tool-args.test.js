@@ -72,6 +72,26 @@ describe("buildCalendarCreateArgs", () => {
     );
     expect(args).not.toContain("--attendees");
   });
+
+  it("converts negative alarm values to positive", () => {
+    const args = buildCalendarCreateArgs(
+      { title: "Meeting", start: "2026-03-01 14:00", alarm: [-60, -720] },
+      "Work"
+    );
+    expect(args).toContain("--alarm");
+    const idx1 = args.indexOf("--alarm");
+    expect(args[idx1 + 1]).toBe("60");
+    const idx2 = args.indexOf("--alarm", idx1 + 1);
+    expect(args[idx2 + 1]).toBe("720");
+  });
+
+  it("drops non-numeric alarm values", () => {
+    const args = buildCalendarCreateArgs(
+      { title: "Meeting", start: "2026-03-01 14:00", alarm: ["abc", NaN] },
+      "Work"
+    );
+    expect(args).not.toContain("--alarm");
+  });
 });
 
 describe("buildCalendarUpdateArgs", () => {
