@@ -48,7 +48,7 @@ jobs:
       - name: Install + build (compile TS so clawhub validator finds dist/)
         run: |
           cd openclaw
-          npm install
+          npm install --force
           npm run build
 
       - name: Publish to ClawHub

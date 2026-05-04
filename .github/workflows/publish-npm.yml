@@ -41,6 +41,13 @@ jobs:
           fi
         working-directory: openclaw
 
+      - name: Install + build (compile TS so publish has dist/)
+        run: |
+          cd openclaw
+          npm install
+          cd openclaw
+          npm run build
+
       - name: Publish to NPM (OIDC trusted publishing)
         run: npm publish --provenance --access public
         working-directory: openclaw
