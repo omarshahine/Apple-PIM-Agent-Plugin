@@ -34,7 +34,7 @@ Use `mail` with action `get` to get a single message with full body content:
 ### Search Messages
 Use `mail` with action `search` to find messages by subject, sender, or content:
 - Required: `query` (search term)
-- Optional: `field` (subject, sender, content, all), `mailbox`, `account`, `limit`
+- Optional: `field` (subject, sender, content, all), `mailbox`, `account`, `limit`, `since` (ISO 8601 date)
 
 ### Send Message
 Use `mail` with action `send` to send an email through Mail.app:

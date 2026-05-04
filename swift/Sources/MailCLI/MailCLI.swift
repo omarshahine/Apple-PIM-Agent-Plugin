@@ -130,6 +130,38 @@ func escapeForJXA(_ s: String) -> String {
         .replacingOccurrences(of: "\t", with: "\\t")
 }
 
+/// Parse an ISO 8601 date string (YYYY-MM-DD or full datetime) into a JXA-safe Date constructor argument.
+/// Returns the validated ISO string suitable for `new Date('...')` in JXA, or nil if invalid.
+func parseISO8601ForJXA(_ input: String) -> String? {
+    let trimmed = input.trimmingCharacters(in: .whitespaces)
+    if trimmed.isEmpty { return nil }
+
+    let isoFull = ISO8601DateFormatter()
+    isoFull.formatOptions = [.withInternetDateTime]
+    if let date = isoFull.date(from: trimmed) {
+        return isoFull.string(from: date)
+    }
+
+    isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = isoFull.date(from: trimmed) {
+        let out = ISO8601DateFormatter()
+        out.formatOptions = [.withInternetDateTime]
+        return out.string(from: date)
+    }
+
+    let dateOnly = DateFormatter()
+    dateOnly.dateFormat = "yyyy-MM-dd"
+    dateOnly.locale = Locale(identifier: "en_US_POSIX")
+    dateOnly.timeZone = TimeZone.current
+    if let date = dateOnly.date(from: trimmed) {
+        let out = ISO8601DateFormatter()
+        out.formatOptions = [.withInternetDateTime]
+        return out.string(from: date)
+    }
+
+    return nil
+}
+
 /// Escape a string for safe interpolation into AppleScript string literals (double-quoted).
 func escapeForAppleScript(_ s: String) -> String {
     return s
@@ -340,7 +372,11 @@ func findMessageJXA(targetId: String, mailbox: String?, account: String?) -> Str
         }
 
         // Search priority mailboxes first, then remaining mailboxes
-        const priority = ['INBOX', 'Sent Messages', 'Archive', 'Drafts', 'Deleted Messages', 'Junk'];
+        const priority = ['INBOX',
+            'Sent Messages', 'Sent Mail', 'Sent Items',
+            'Archive', 'All Mail', 'Drafts',
+            'Deleted Messages', 'Deleted Items', 'Trash',
+            'Junk', 'Junk Email', 'Junk E-mail', 'Bulk', 'Spam'];
         const accounts = acctHint ? Mail.accounts.whose({name: acctHint})() : Mail.accounts();
         const searched = new Set();
 
@@ -395,7 +431,12 @@ func batchFindMessageJXA(mailbox: String?, account: String?) -> String {
     const acctHint = \(accountFilter);
 
     function findMsg(targetId) {
-        const priority = ['INBOX', 'Sent Messages', 'Archive', 'Drafts', 'Deleted Messages', 'Junk'];
+        // Search priority mailboxes first, then remaining mailboxes
+        const priority = ['INBOX',
+            'Sent Messages', 'Sent Mail', 'Sent Items',
+            'Archive', 'All Mail', 'Drafts',
+            'Deleted Messages', 'Deleted Items', 'Trash',
+            'Junk', 'Junk Email', 'Junk E-mail', 'Bulk', 'Spam'];
         const accounts = acctHint ? Mail.accounts.whose({name: acctHint})() : Mail.accounts();
         const searched = new Set();
 
@@ -795,6 +836,9 @@ struct SearchMessages: AsyncParsableCommand {
     @Option(name: .long, help: "Maximum results (default: 25)")
     var limit: Int = 25
 
+    @Option(name: .long, help: "Only messages received on or after this date (ISO 8601: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)")
+    var since: String?
+
     func run() async throws {
         try ensureMailRunning()
         let config = pimOptions.loadConfig()
@@ -805,6 +849,16 @@ struct SearchMessages: AsyncParsableCommand {
         let mailboxFilter = mailbox.map { "'\(escapeForJXA($0))'" } ?? "null"
         let escapedField = escapeForJXA(field)
 
+        let sinceParam: String
+        if let since = since {
+            guard let isoDate = parseISO8601ForJXA(since) else {
+                throw CLIError.invalidInput("Invalid date format for --since. Use ISO 8601: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ")
+            }
+            sinceParam = "new Date('\(escapeForJXA(isoDate))')"
+        } else {
+            sinceParam = "null"
+        }
+
         let script = """
         const Mail = Application("Mail");
         const query = '\(escapedQuery)';
@@ -812,44 +866,54 @@ struct SearchMessages: AsyncParsableCommand {
         const accountFilter = \(accountFilter);
         const mailboxFilter = \(mailboxFilter);
         const limit = \(limit);
+        const sinceDate = \(sinceParam);
         const results = [];
 
         function searchMailbox(mbox, accountName) {
             if (results.length >= limit) return;
 
-            const msgs = mbox.messages;
+            // Build .whose() predicate for server-side filtering.
+            // subject, sender, and 'all' (subject OR sender) use _contains.
+            // content requires client-side matching (body not in .whose()).
+            var predicate = {};
+            if (sinceDate) {
+                predicate.dateReceived = {">=": sinceDate};
+            }
+            if (searchField === 'subject') {
+                predicate.subject = {_contains: query};
+            } else if (searchField === 'sender') {
+                predicate.sender = {_contains: query};
+            } else if (searchField === 'all') {
+                predicate._or = [{subject: {_contains: query}}, {sender: {_contains: query}}];
+            }
+
+            const useWhose = Object.keys(predicate).length > 0;
+            const needsClientMatch = searchField === 'content';
+            const msgs = useWhose ? mbox.messages.whose(predicate)() : mbox.messages;
             const count = msgs.length;
-            const batchSize = Math.min(count, 500);
+            const batchSize = needsClientMatch ? Math.min(count, 500) : Math.min(count, limit);
 
             for (let i = 0; i < batchSize && results.length < limit; i++) {
                 try {
                     const m = msgs[i];
-                    const subj = (m.subject() || '').toLowerCase();
-                    const sndr = (m.sender() || '').toLowerCase();
 
-                    let match = false;
-                    if (searchField === 'subject') match = subj.includes(query);
-                    else if (searchField === 'sender') match = sndr.includes(query);
-                    else if (searchField === 'content') {
+                    if (needsClientMatch) {
+                        let match = false;
                         try { match = (m.content() || '').toLowerCase().includes(query); } catch(e2) {}
-                    } else {
-                        // 'all': search subject + sender (content is too slow for all-field scan)
-                        match = subj.includes(query) || sndr.includes(query);
+                        if (!match) continue;
                     }
 
-                    if (match) {
-                        const dr = m.dateReceived();
-                        results.push({
-                            messageId: m.messageId(),
-                            sender: m.sender(),
-                            subject: m.subject(),
-                            dateReceived: dr ? dr.toISOString() : null,
-                            isRead: m.readStatus(),
-                            isFlagged: m.flaggedStatus(),
-                            mailbox: mbox.name(),
-                            account: accountName
-                        });
-                    }
+                    const dr = m.dateReceived();
+                    results.push({
+                        messageId: m.messageId(),
+                        sender: m.sender(),
+                        subject: m.subject(),
+                        dateReceived: dr ? dr.toISOString() : null,
+                        isRead: m.readStatus(),
+                        isFlagged: m.flaggedStatus(),
+                        mailbox: mbox.name(),
+                        account: accountName
+                    });
                 } catch(e) { /* skip messages that fail to read */ }
             }
         }
