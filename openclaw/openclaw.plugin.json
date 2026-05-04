@@ -2,7 +2,7 @@
   "id": "apple-pim-cli",
   "name": "Apple PIM",
   "description": "macOS Calendar, Reminders, Contacts, and Mail via native Swift CLIs",
-  "version": "3.7.3",
+  "version": "3.7.5",
   "configSchema": {
     "type": "object",
     "properties": {
@@ -36,5 +36,14 @@
       "help": "Override the PIM config root directory (default: ~/.config/apple-pim/).",
       "placeholder": "~/.config/apple-pim"
     }
+  },
+  "contracts": {
+    "tools": [
+      "apple_pim_calendar",
+      "apple_pim_reminder",
+      "apple_pim_contact",
+      "apple_pim_mail",
+      "apple_pim_system"
+    ]
   }
 }
