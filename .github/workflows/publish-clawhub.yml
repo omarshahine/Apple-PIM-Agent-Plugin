@@ -45,6 +45,12 @@ jobs:
           cd openclaw
           npm run prepack
 
+      - name: Install + build (compile TS so clawhub validator finds dist/)
+        run: |
+          cd openclaw
+          npm install
+          npm run build
+
       - name: Publish to ClawHub
         run: |
           clawhub package publish openclaw/ \
