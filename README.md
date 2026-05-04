@@ -564,7 +564,7 @@ You may need to restart your app after granting permissions.
 
 - **Mail.app must be running** — the plugin does not launch it automatically
 - **Automation permission** — System Settings > Privacy & Security > Automation: allow Terminal to control Mail.app
-- **30-second timeout** — JXA scripts have a 30-second timeout. Use `--limit` to reduce result count
+- **30-second timeout** — JXA scripts have a 30-second timeout. Use `--limit` to reduce result count. For search, use `--since` to narrow by date (recommended for large mailboxes)
 - **Message IDs** — Mail tools use RFC 2822 `messageId` (stable across moves). Pass `--mailbox` and `--account` hints for faster lookups
 
 ### CLI Not Found
