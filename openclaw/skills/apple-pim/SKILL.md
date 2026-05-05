@@ -7,11 +7,15 @@ compatibility: |
   macOS only. Requires TCC permissions for Calendars, Reminders, and Contacts via Privacy & Security settings. Mail features require Mail.app running with Automation permission granted.
 metadata:
   author: Omar Shahine
-  version: 3.2.0
+  version: 3.7.12
   openclaw:
-    os: [darwin]
+    os: [macos]
     requires:
-      bins: [calendar-cli]
+      bins:
+        - calendar-cli
+        - reminder-cli
+        - contacts-cli
+        - mail-cli
 ---
 
 # Apple PIM (EventKit, Contacts & Mail)
