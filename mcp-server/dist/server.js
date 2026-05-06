@@ -2998,7 +2998,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve.call(this, root, ref);
+      let _sch = resolve2.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a2 = root.localRefs) === null || _a2 === void 0 ? void 0 : _a2[ref];
         const { schemaId } = this.opts;
@@ -3025,7 +3025,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve(root, ref) {
+    function resolve2(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3601,7 +3601,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve(baseURI, relativeURI, options) {
+    function resolve2(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3829,7 +3829,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve,
+      resolve: resolve2,
       resolveComponent,
       equal,
       serialize,
@@ -45619,8 +45619,8 @@ var require_simple_parser = __commonJS({
       }
       let promise2;
       if (!callback) {
-        promise2 = new Promise((resolve, reject) => {
-          callback = callbackPromise(resolve, reject);
+        promise2 = new Promise((resolve2, reject) => {
+          callback = callbackPromise(resolve2, reject);
         });
       }
       options = options || {};
@@ -45709,13 +45709,13 @@ var require_simple_parser = __commonJS({
       }
       return promise2;
     };
-    function callbackPromise(resolve, reject) {
+    function callbackPromise(resolve2, reject) {
       return function(...args) {
         let err = args.shift();
         if (err) {
           reject(err);
         } else {
-          resolve(...args);
+          resolve2(...args);
         }
       };
     }
@@ -76019,7 +76019,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        await new Promise((resolve2) => setTimeout(resolve2, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error2) {
@@ -76036,7 +76036,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve2, reject) => {
       const earlyReject = (error2) => {
         reject(error2);
       };
@@ -76114,7 +76114,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve(parseResult.data);
+            resolve2(parseResult.data);
           }
         } catch (error2) {
           reject(error2);
@@ -76375,12 +76375,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve2, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve, interval);
+      const timeoutId = setTimeout(resolve2, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -77109,12 +77109,12 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve) => {
+    return new Promise((resolve2) => {
       const json2 = serializeMessage(message);
       if (this._stdout.write(json2)) {
-        resolve();
+        resolve2();
       } else {
-        this._stdout.once("drain", resolve);
+        this._stdout.once("drain", resolve2);
       }
     });
   }
@@ -77307,7 +77307,7 @@ function relativeDateString(daysOffset) {
 var DEFAULT_TIMEOUT_MS = 3e4;
 function createCLIRunner(binDir, envOverrides = {}, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   async function runCLI2(cli, args) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve2, reject) => {
       const cliPath = join(binDir, cli);
       const childEnv = {};
       if (process.env.PATH)
@@ -77342,9 +77342,9 @@ function createCLIRunner(binDir, envOverrides = {}, { timeoutMs = DEFAULT_TIMEOU
           return;
         if (code === 0) {
           try {
-            resolve(JSON.parse(stdout));
+            resolve2(JSON.parse(stdout));
           } catch {
-            resolve({ success: true, output: stdout });
+            resolve2({ success: true, output: stdout });
           }
         } else {
           reject(new Error(stderr || `CLI exited with code ${code}`));
@@ -77780,7 +77780,7 @@ var tools = [
         cc: { type: "array", items: { type: "string" }, description: "CC addresses (send)" },
         bcc: { type: "array", items: { type: "string" }, description: "BCC addresses (send)" },
         from: { type: "string", description: "Sender email address for account selection (send)" },
-        attachment: { type: "array", items: { type: "string" }, description: "Absolute or ~-prefixed file paths to attach (send/reply). Files must exist on disk." },
+        attachment: { type: "array", items: { type: "string" }, description: 'File paths to attach (send/reply). DISABLED BY DEFAULT to prevent local-file exfiltration. Opt in by creating ~/.config/apple-pim/mail-attachments.json with {"enabled": true, "allowedRoots": ["~/Downloads"]}. Even when enabled, paths in ~/.ssh, ~/.aws, ~/.gnupg, ~/.kube, ~/.docker, ~/.secrets, etc. and files matching id_rsa/.netrc/.pgpass/*.pem/*.key/*secret*/*credential* are always refused. Symlinks are resolved to canonical paths before checking.' },
         index: { type: "integer", minimum: 0, description: "Zero-based attachment index (save_attachment). Omit to save all attachments." },
         destDir: { type: "string", description: "Directory to save attachments into (save_attachment). Must be within home directory or system temp. Defaults to system temp. Use dryRun: true to preview." },
         trustedSenders: { type: "string", description: "Path to trusted-senders.json (auth_check)" },
@@ -78396,10 +78396,6 @@ async function handleContact(args, runCLI2) {
   }
 }
 
-// ../lib/handlers/mail.js
-import { existsSync as existsSync2 } from "node:fs";
-import { homedir as homedir2 } from "node:os";
-
 // ../lib/mail-format.js
 var import_mailparser = __toESM(require_mailparser(), 1);
 var import_turndown = __toESM(require_turndown_cjs(), 1);
@@ -78451,6 +78447,158 @@ async function formatMailGetResult(result, format) {
       source: void 0
     }
   };
+}
+
+// ../lib/safe-attachments.js
+import { existsSync as existsSync2, readFileSync, realpathSync, statSync } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import { resolve, sep } from "node:path";
+var CONFIG_PATH = process.env.APPLE_PIM_MAIL_ATTACHMENTS_CONFIG || `${homedir2()}/.config/apple-pim/mail-attachments.json`;
+var DEFAULT_DENIED_BASENAMES = /* @__PURE__ */ new Set([
+  ".netrc",
+  ".pgpass",
+  ".env",
+  ".envrc",
+  "id_rsa",
+  "id_ed25519",
+  "id_ecdsa",
+  "id_dsa",
+  "authorized_keys",
+  "known_hosts",
+  "credentials"
+]);
+var DEFAULT_DENIED_DIR_COMPONENTS = /* @__PURE__ */ new Set([
+  ".ssh",
+  ".aws",
+  ".gnupg",
+  ".kube",
+  ".docker",
+  ".secrets",
+  ".secrets-macbook-pro",
+  ".chezmoi",
+  "Keychains"
+]);
+var DEFAULT_DENIED_BASENAME_REGEX = [
+  /\.pem$/i,
+  /\.key$/i,
+  /\.p12$/i,
+  /\.pfx$/i,
+  /^\.secrets/,
+  /secret/i,
+  /password/i,
+  /credential/i,
+  /token/i,
+  /keychain-access/i
+];
+function expandHome(p) {
+  if (typeof p !== "string")
+    throw new TypeError("Attachment path must be a string");
+  if (p.startsWith("~/"))
+    return homedir2() + p.slice(1);
+  if (p === "~")
+    return homedir2();
+  return p;
+}
+function loadPolicy() {
+  if (!existsSync2(CONFIG_PATH))
+    return { enabled: false };
+  let raw;
+  try {
+    raw = readFileSync(CONFIG_PATH, "utf8");
+  } catch (err) {
+    throw new Error(`Cannot read mail attachments policy at ${CONFIG_PATH}: ${err.message}`);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(`Invalid JSON in ${CONFIG_PATH}: ${err.message}`);
+  }
+  return {
+    enabled: parsed.enabled === true,
+    allowedRoots: Array.isArray(parsed.allowedRoots) ? parsed.allowedRoots.map(expandHome).map((r) => resolve(r)) : [],
+    extraDeniedBasenames: Array.isArray(parsed.deniedBasenames) ? parsed.deniedBasenames : [],
+    extraDeniedDirComponents: Array.isArray(parsed.deniedDirComponents) ? parsed.deniedDirComponents : []
+  };
+}
+function canonicalizeRoot(root) {
+  try {
+    return realpathSync(root);
+  } catch {
+    return resolve(root);
+  }
+}
+function isWithinRoot(canonicalPath, root) {
+  const canonRoot = canonicalizeRoot(root);
+  if (canonicalPath === canonRoot)
+    return true;
+  return canonicalPath.startsWith(canonRoot + sep);
+}
+function failsHardDenylist(canonicalPath, policy) {
+  const parts = canonicalPath.split(sep);
+  const basename = parts[parts.length - 1];
+  if (DEFAULT_DENIED_BASENAMES.has(basename))
+    return `denylisted filename: ${basename}`;
+  if (policy.extraDeniedBasenames?.includes(basename))
+    return `denylisted filename: ${basename}`;
+  for (const re of DEFAULT_DENIED_BASENAME_REGEX) {
+    if (re.test(basename))
+      return `denylisted filename pattern: ${basename}`;
+  }
+  for (const comp of parts.slice(0, -1)) {
+    if (DEFAULT_DENIED_DIR_COMPONENTS.has(comp))
+      return `denylisted directory: ${comp}`;
+    if (policy.extraDeniedDirComponents?.includes(comp))
+      return `denylisted directory: ${comp}`;
+  }
+  return null;
+}
+function validateAttachment(rawPath, { policy = loadPolicy() } = {}) {
+  if (!policy.enabled) {
+    throw new Error(
+      `Mail attachments are disabled by default to prevent local-file exfiltration. To enable, create ${CONFIG_PATH} with {"enabled": true, "allowedRoots": ["~/Downloads"]}. See plugin docs for details.`
+    );
+  }
+  if (!policy.allowedRoots || policy.allowedRoots.length === 0) {
+    throw new Error(
+      `Mail attachments policy at ${CONFIG_PATH} must list at least one entry in "allowedRoots".`
+    );
+  }
+  const expanded = expandHome(rawPath);
+  if (!existsSync2(expanded)) {
+    throw new Error(`Attachment file not found: ${expanded}`);
+  }
+  let canonical;
+  try {
+    canonical = realpathSync(expanded);
+  } catch (err) {
+    throw new Error(`Cannot resolve attachment path ${expanded}: ${err.message}`);
+  }
+  let st;
+  try {
+    st = statSync(canonical);
+  } catch (err) {
+    throw new Error(`Cannot stat attachment ${canonical}: ${err.message}`);
+  }
+  if (!st.isFile()) {
+    throw new Error(`Attachment must be a regular file: ${canonical}`);
+  }
+  const inAllowedRoot = policy.allowedRoots.some((root) => isWithinRoot(canonical, root));
+  if (!inAllowedRoot) {
+    throw new Error(
+      `Attachment ${canonical} is outside allowedRoots (${policy.allowedRoots.join(", ")}). Refusing to attach.`
+    );
+  }
+  const denyReason = failsHardDenylist(canonical, policy);
+  if (denyReason) {
+    throw new Error(`Attachment refused (${denyReason}): ${canonical}`);
+  }
+  return canonical;
+}
+function validateAttachments(paths, opts = {}) {
+  const policy = opts.policy ?? loadPolicy();
+  const list = Array.isArray(paths) ? paths : [paths];
+  return list.map((p) => validateAttachment(p, { policy }));
 }
 
 // ../lib/handlers/mail.js
@@ -78601,14 +78749,9 @@ async function handleMail(args, runCLI2) {
       if (args.from)
         sendArgs.push("--from", args.from);
       if (args.attachment) {
-        const attachments = Array.isArray(args.attachment) ? args.attachment : [args.attachment];
-        for (const filePath of attachments) {
-          const expanded = filePath.startsWith("~/") ? homedir2() + filePath.slice(1) : filePath;
-          if (!existsSync2(expanded)) {
-            throw new Error(`Attachment file not found: ${expanded}`);
-          }
-          sendArgs.push("--attachment", expanded);
-        }
+        const safe = validateAttachments(args.attachment);
+        for (const p of safe)
+          sendArgs.push("--attachment", p);
       }
       return await runCLI2("mail-cli", sendArgs);
     }
@@ -78623,14 +78766,9 @@ async function handleMail(args, runCLI2) {
       if (args.account)
         replyArgs.push("--account", args.account);
       if (args.attachment) {
-        const attachments = Array.isArray(args.attachment) ? args.attachment : [args.attachment];
-        for (const filePath of attachments) {
-          const expanded = filePath.startsWith("~/") ? homedir2() + filePath.slice(1) : filePath;
-          if (!existsSync2(expanded)) {
-            throw new Error(`Attachment file not found: ${expanded}`);
-          }
-          replyArgs.push("--attachment", expanded);
-        }
+        const safe = validateAttachments(args.attachment);
+        for (const p of safe)
+          replyArgs.push("--attachment", p);
       }
       return await runCLI2("mail-cli", replyArgs);
     }

@@ -168,6 +168,27 @@ Override path with `trustedSenders` parameter: `apple_pim_mail({ action: "auth_c
 6. **Reply** preserves threading — looks up message by RFC 2822 ID, then uses Mail.app's `reply` verb
 7. **Auth check** verifies DKIM/SPF against `~/.config/apple-pim/trusted-senders.json` — returns `verified`, `suspicious`, `untrusted`, or `unknown`
 
+### Attachment Policy (Send / Reply)
+
+File attachments are **disabled by default** to prevent local-file exfiltration via prompt-injection. Any `attachment` argument passed to `send` or `reply` will be rejected unless the user has opted in.
+
+**To enable**, create `~/.config/apple-pim/mail-attachments.json`:
+
+```json
+{
+  "enabled": true,
+  "allowedRoots": ["~/Downloads", "~/Documents/agent-attachments"]
+}
+```
+
+Even when enabled, the following are **always refused**:
+
+- Path components matching `.ssh`, `.aws`, `.gnupg`, `.kube`, `.docker`, `.secrets`, `Keychains`
+- Filenames `id_rsa`, `id_ed25519`, `.netrc`, `.pgpass`, `.env`, `authorized_keys`, etc.
+- Filenames matching `*.pem`, `*.key`, `*.p12`, `*.pfx`, or containing `secret`, `password`, `credential`, `token`
+
+Paths are normalized via `realpath` before checking, so symlinks and `..` traversal can't escape the allowlist. Override the policy file location with `APPLE_PIM_MAIL_ATTACHMENTS_CONFIG`.
+
 ### Error Handling
 1. **Check authorization first** with `apple_pim_system` action `status`
 2. **Use `apple_pim_system` action `authorize`** for `notDetermined` domains
