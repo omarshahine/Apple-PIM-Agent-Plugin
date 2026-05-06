@@ -2,7 +2,7 @@
   "id": "apple-pim-cli",
   "name": "Apple PIM",
   "description": "macOS-only. Wraps four native Swift CLIs (calendar-cli, reminder-cli, contacts-cli, mail-cli) you build locally from source via ./setup.sh — no binaries are downloaded by the registry. Grants the agent read/write access to Calendar, Reminders, Contacts, and Mail.app (including send/delete) once you approve the corresponding macOS TCC and Automation prompts.",
-  "version": "3.7.19",
+  "version": "3.7.20",
   "platforms": [
     "darwin"
   ],
@@ -18,7 +18,15 @@
       "macos:reminders",
       "macos:contacts",
       "macos:mail-automation"
-    ]
+    ],
+    "envVars": {
+      "optional": {
+        "APPLE_PIM_PROFILE": "Selects a named PIM profile under ~/.config/apple-pim/profiles/{name}.json. Filters calendars/lists/contacts.",
+        "APPLE_PIM_CONFIG_DIR": "Overrides the PIM config root directory (default: ~/.config/apple-pim/).",
+        "APPLE_PIM_DATE_FORMAT": "Calendar date output format. One of: utc (default), local, day-utc, day-local.",
+        "APPLE_PIM_MAIL_ATTACHMENTS_CONFIG": "Overrides the path to the mail attachment policy file (default: ~/.config/apple-pim/mail-attachments.json). Mail send/reply attachments are default-denied; this file is the opt-in mechanism."
+      }
+    }
   },
   "configSchema": {
     "type": "object",
@@ -34,6 +42,10 @@
       "configDir": {
         "type": "string",
         "description": "Default PIM config directory"
+      },
+      "mailAttachmentsConfig": {
+        "type": "string",
+        "description": "Path to mail attachment policy JSON. Default: ~/.config/apple-pim/mail-attachments.json. Mail send/reply attachments are default-denied unless this file opts in with allowedRoots."
       }
     },
     "additionalProperties": false
@@ -52,6 +64,12 @@
       "label": "Config Directory",
       "help": "Override the PIM config root directory (default: ~/.config/apple-pim/).",
       "placeholder": "~/.config/apple-pim"
+    },
+    "mailAttachmentsConfig": {
+      "label": "Mail Attachments Policy File",
+      "help": "Mail send/reply attachments are default-denied. To allow attachments, point this at a JSON file with {\"enabled\": true, \"allowedRoots\": [\"~/Downloads\"]}. Even when enabled, paths in ~/.ssh, ~/.aws, etc. and files like id_rsa, *.pem, *secret* are always refused.",
+      "placeholder": "~/.config/apple-pim/mail-attachments.json",
+      "advanced": true
     }
   },
   "contracts": {

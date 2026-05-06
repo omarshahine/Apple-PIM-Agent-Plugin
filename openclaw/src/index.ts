@@ -26,6 +26,7 @@ interface PluginConfig {
   binDir?: string;
   profile?: string;
   configDir?: string;
+  mailAttachmentsConfig?: string;
 }
 
 // Tool args always include optional isolation params
@@ -150,6 +151,15 @@ export default definePluginEntry({
   register(api) {
     const config = api.pluginConfig as PluginConfig | undefined;
     const binDir = resolveBinDir(config);
+
+    // Mail attachments policy is read by the JS-side validator from
+    // process.env.APPLE_PIM_MAIL_ATTACHMENTS_CONFIG. If the user configured
+    // an override via the gateway config schema, surface it once at init —
+    // the value is host-level (same for every call), so a single assignment
+    // is correct and avoids per-call env races.
+    if (config?.mailAttachmentsConfig && !process.env.APPLE_PIM_MAIL_ATTACHMENTS_CONFIG) {
+      process.env.APPLE_PIM_MAIL_ATTACHMENTS_CONFIG = config.mailAttachmentsConfig.replace(/^~/, homedir());
+    }
 
     for (const tool of tools) {
       const openclawName = TOOL_NAME_MAP[tool.name];
