@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { loadScenario } from "../helpers/scenario-runner.js";
 import { createMockCLI } from "../helpers/mock-cli.js";
 import { argsPairPresent } from "../helpers/grader.js";
@@ -323,30 +326,65 @@ describe("Category 1: Tool Call Correctness", () => {
   });
 
   describe("send/reply attachment argument construction", () => {
-    it("send passes --attachment for single file path", async () => {
+    let attachDir;
+    let attachA;
+    let attachB;
+    let policyPath;
+
+    beforeAll(() => {
+      attachDir = realpathSync(mkdtempSync(join(tmpdir(), "pim-eval-att-")));
+      attachA = join(attachDir, "a.pdf");
+      attachB = join(attachDir, "b.pdf");
+      writeFileSync(attachA, "%PDF-A");
+      writeFileSync(attachB, "%PDF-B");
+      policyPath = join(attachDir, "mail-attachments.json");
+      writeFileSync(policyPath, JSON.stringify({ enabled: true, allowedRoots: [attachDir] }));
+      process.env.APPLE_PIM_MAIL_ATTACHMENTS_CONFIG = policyPath;
+    });
+
+    afterAll(() => {
+      delete process.env.APPLE_PIM_MAIL_ATTACHMENTS_CONFIG;
+      rmSync(attachDir, { recursive: true, force: true });
+    });
+
+    it("send default-denies attachments when no policy file exists", async () => {
+      const mockCLI = createMockCLI({ "mail-cli:send": { success: true } });
+      const saved = process.env.APPLE_PIM_MAIL_ATTACHMENTS_CONFIG;
+      process.env.APPLE_PIM_MAIL_ATTACHMENTS_CONFIG = "/tmp/pim-eval-no-such-policy.json";
+      try {
+        await expect(handleMail({
+          action: "send", to: ["a@b.com"], subject: "test", body: "hi",
+          attachment: attachA,
+        }, mockCLI)).rejects.toThrow(/disabled by default/i);
+      } finally {
+        process.env.APPLE_PIM_MAIL_ATTACHMENTS_CONFIG = saved;
+      }
+    });
+
+    it("send passes --attachment for single file path (with opt-in policy)", async () => {
       const mockCLI = createMockCLI({ "mail-cli:send": { success: true } });
       await handleMail({
         action: "send", to: ["a@b.com"], subject: "test", body: "hi",
-        attachment: "/dev/null",
+        attachment: attachA,
       }, mockCLI);
 
       const callArgs = mockCLI.mock.calls[0][1];
-      expect(argsPairPresent(callArgs, "--attachment", "/dev/null")).toBe(true);
+      expect(argsPairPresent(callArgs, "--attachment", attachA)).toBe(true);
     });
 
     it("send passes multiple --attachment flags for array", async () => {
       const mockCLI = createMockCLI({ "mail-cli:send": { success: true } });
       await handleMail({
         action: "send", to: ["a@b.com"], subject: "test", body: "hi",
-        attachment: ["/dev/null", "/dev/zero"],
+        attachment: [attachA, attachB],
       }, mockCLI);
 
       const callArgs = mockCLI.mock.calls[0][1];
       const attValues = callArgs
         .map((arg, i) => arg === "--attachment" ? callArgs[i + 1] : null)
         .filter(Boolean);
-      expect(attValues).toContain("/dev/null");
-      expect(attValues).toContain("/dev/zero");
+      expect(attValues).toContain(attachA);
+      expect(attValues).toContain(attachB);
       expect(attValues).toHaveLength(2);
     });
 
@@ -364,34 +402,52 @@ describe("Category 1: Tool Call Correctness", () => {
       const mockCLI = createMockCLI({ "mail-cli:send": { success: true } });
       await expect(handleMail({
         action: "send", to: ["a@b.com"], subject: "test", body: "hi",
-        attachment: "/tmp/does-not-exist-abc123.txt",
-      }, mockCLI)).rejects.toThrow("Attachment file not found");
+        attachment: join(attachDir, "does-not-exist-abc123.txt"),
+      }, mockCLI)).rejects.toThrow(/Attachment file not found/);
+    });
+
+    it("send refuses attachments outside allowedRoots", async () => {
+      const mockCLI = createMockCLI({ "mail-cli:send": { success: true } });
+      await expect(handleMail({
+        action: "send", to: ["a@b.com"], subject: "test", body: "hi",
+        attachment: "/etc/hosts",
+      }, mockCLI)).rejects.toThrow(/outside allowedRoots/i);
+    });
+
+    it("send refuses denylisted filenames even when inside allowedRoots", async () => {
+      const idRsa = join(attachDir, "id_rsa");
+      writeFileSync(idRsa, "PRIVATE KEY");
+      const mockCLI = createMockCLI({ "mail-cli:send": { success: true } });
+      await expect(handleMail({
+        action: "send", to: ["a@b.com"], subject: "test", body: "hi",
+        attachment: idRsa,
+      }, mockCLI)).rejects.toThrow(/denylisted filename/i);
     });
 
     it("reply passes --attachment when provided", async () => {
       const mockCLI = createMockCLI({ "mail-cli:reply": { success: true } });
       await handleMail({
         action: "reply", id: "msg_1", body: "thanks",
-        attachment: "/dev/null",
+        attachment: attachA,
       }, mockCLI);
 
       const callArgs = mockCLI.mock.calls[0][1];
-      expect(argsPairPresent(callArgs, "--attachment", "/dev/null")).toBe(true);
+      expect(argsPairPresent(callArgs, "--attachment", attachA)).toBe(true);
     });
 
     it("reply passes multiple --attachment flags for array", async () => {
       const mockCLI = createMockCLI({ "mail-cli:reply": { success: true } });
       await handleMail({
         action: "reply", id: "msg_1", body: "thanks",
-        attachment: ["/dev/null", "/dev/zero"],
+        attachment: [attachA, attachB],
       }, mockCLI);
 
       const callArgs = mockCLI.mock.calls[0][1];
       const attValues = callArgs
         .map((arg, i) => arg === "--attachment" ? callArgs[i + 1] : null)
         .filter(Boolean);
-      expect(attValues).toContain("/dev/null");
-      expect(attValues).toContain("/dev/zero");
+      expect(attValues).toContain(attachA);
+      expect(attValues).toContain(attachB);
       expect(attValues).toHaveLength(2);
     });
 
@@ -399,8 +455,8 @@ describe("Category 1: Tool Call Correctness", () => {
       const mockCLI = createMockCLI({ "mail-cli:reply": { success: true } });
       await expect(handleMail({
         action: "reply", id: "msg_1", body: "thanks",
-        attachment: "/tmp/does-not-exist-abc123.txt",
-      }, mockCLI)).rejects.toThrow("Attachment file not found");
+        attachment: join(attachDir, "does-not-exist-abc123.txt"),
+      }, mockCLI)).rejects.toThrow(/Attachment file not found/);
     });
   });
 

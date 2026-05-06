@@ -78453,7 +78453,9 @@ async function formatMailGetResult(result, format) {
 import { existsSync as existsSync2, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 import { resolve, sep } from "node:path";
-var CONFIG_PATH = process.env.APPLE_PIM_MAIL_ATTACHMENTS_CONFIG || `${homedir2()}/.config/apple-pim/mail-attachments.json`;
+function configPath() {
+  return process.env.APPLE_PIM_MAIL_ATTACHMENTS_CONFIG || `${homedir2()}/.config/apple-pim/mail-attachments.json`;
+}
 var DEFAULT_DENIED_BASENAMES = /* @__PURE__ */ new Set([
   ".netrc",
   ".pgpass",
@@ -78500,19 +78502,19 @@ function expandHome(p) {
   return p;
 }
 function loadPolicy() {
-  if (!existsSync2(CONFIG_PATH))
+  if (!existsSync2(configPath()))
     return { enabled: false };
   let raw;
   try {
-    raw = readFileSync(CONFIG_PATH, "utf8");
+    raw = readFileSync(configPath(), "utf8");
   } catch (err) {
-    throw new Error(`Cannot read mail attachments policy at ${CONFIG_PATH}: ${err.message}`);
+    throw new Error(`Cannot read mail attachments policy at ${configPath()}: ${err.message}`);
   }
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch (err) {
-    throw new Error(`Invalid JSON in ${CONFIG_PATH}: ${err.message}`);
+    throw new Error(`Invalid JSON in ${configPath()}: ${err.message}`);
   }
   return {
     enabled: parsed.enabled === true,
@@ -78556,12 +78558,12 @@ function failsHardDenylist(canonicalPath, policy) {
 function validateAttachment(rawPath, { policy = loadPolicy() } = {}) {
   if (!policy.enabled) {
     throw new Error(
-      `Mail attachments are disabled by default to prevent local-file exfiltration. To enable, create ${CONFIG_PATH} with {"enabled": true, "allowedRoots": ["~/Downloads"]}. See plugin docs for details.`
+      `Mail attachments are disabled by default to prevent local-file exfiltration. To enable, create ${configPath()} with {"enabled": true, "allowedRoots": ["~/Downloads"]}. See plugin docs for details.`
     );
   }
   if (!policy.allowedRoots || policy.allowedRoots.length === 0) {
     throw new Error(
-      `Mail attachments policy at ${CONFIG_PATH} must list at least one entry in "allowedRoots".`
+      `Mail attachments policy at ${configPath()} must list at least one entry in "allowedRoots".`
     );
   }
   const expanded = expandHome(rawPath);
