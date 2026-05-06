@@ -1,24 +1,15 @@
 ---
 name: apple-pim
-description: |
-  Native macOS personal information management for calendars, reminders, contacts, and local Mail.app. Use when the user wants to schedule meetings, create events, check their calendar, create or complete reminders, look up contacts, find someone's phone number or email, manage tasks and to-do lists, triage local Mail.app messages, or troubleshoot EventKit, Contacts, or Mail.app permissions on macOS.
-license: MIT
-compatibility: |
-  macOS only. Requires TCC permissions for Calendars, Reminders, and Contacts via Privacy & Security settings. Mail features require Mail.app running with Automation permission granted.
-metadata:
-  author: Omar Shahine
-  version: 3.7.16
-  openclaw:
-    os: [macos]
-    requires:
-      bins:
-        - calendar-cli
-        - reminder-cli
-        - contacts-cli
-        - mail-cli
+description: Native macOS personal information management for calendars, reminders, contacts, and local Mail.app. Use when the user wants to schedule meetings, create events, check their calendar, create or complete reminders, look up contacts, find someone's phone number or email, manage tasks and to-do lists, triage local Mail.app messages, or troubleshoot EventKit, Contacts, or Mail.app permissions on macOS.
 ---
 
 # Apple PIM (EventKit, Contacts & Mail)
+
+## Requirements
+
+- **macOS only.** Requires Apple frameworks (EventKit, Contacts, Mail.app) — does not run on Linux or Windows.
+- **Native CLIs**: `calendar-cli`, `reminder-cli`, `contacts-cli`, `mail-cli`. Build locally from source via `./setup.sh` (Swift toolchain required); installs to `~/.local/bin/`. Authoritative declaration is in the plugin manifest under `requires.binaries` and `platforms`.
+- **TCC permissions** for Calendars, Reminders, Contacts (via Privacy & Security). Mail features additionally require Mail.app running and Automation permission granted to your terminal/IDE.
 
 ## Overview
 
