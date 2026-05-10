@@ -51,3 +51,9 @@ site/.astro/
 .zencoder/
 .playwright-cli/
 openclaw/reports/
+
+# Spotlight artifacts
+.metadata_never_index
+
+# Local build outputs (not shipped)
+openclaw/dist/
