@@ -124,7 +124,7 @@ describe("Category 4: Safety Properties", () => {
       const contactTool = tools.find((t) => t.name === "contact");
       const actions = contactTool.inputSchema.properties.action.enum;
       const covered = new Set([
-        "groups", "list", "search", "get", "create", "update", "delete", "schema",
+        "containers", "groups", "list", "search", "get", "create", "update", "delete", "schema",
       ]);
       for (const action of actions) {
         expect(covered.has(action)).toBe(true);

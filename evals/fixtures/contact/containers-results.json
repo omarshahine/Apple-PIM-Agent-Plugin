@@ -1,0 +1,19 @@
+{
+  "containers": [
+    {
+      "name": "iCloud",
+      "id": "A1B2C3D4-5678-90AB-CDEF-111111111111",
+      "type": "CardDAV"
+    },
+    {
+      "name": "Gmail",
+      "id": "E5F6A7B8-9012-34CD-EF56-222222222222",
+      "type": "CardDAV"
+    },
+    {
+      "name": "Exchange",
+      "id": "C9D0E1F2-3456-78AB-CD90-333333333333",
+      "type": "Exchange"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 ---
 description: Manage macOS contacts - list, search, get details, create, update, delete
-argument-hint: "[groups|list|search|get|create|update|delete] [options]"
+argument-hint: "[containers|groups|list|search|get|create|update|delete] [options]"
 allowed-tools:
   - mcp__apple-pim__contact
 ---
@@ -12,6 +12,9 @@ Manage contacts using the Apple Contacts framework.
 ## Available Operations
 
 When the user runs this command, determine which operation they need and use the `contact` tool with the appropriate action:
+
+### List Containers
+Use `contact` with action `containers` to show all contact accounts (iCloud, Exchange, Google, etc.).
 
 ### List Groups
 Use `contact` with action `groups` to show all contact groups.
@@ -35,6 +38,7 @@ Use `contact` with action `get` to get full details for a contact:
 ### Create Contact
 Use `contact` with action `create` to create a new contact:
 - Optional: `name` (full name) OR `firstName`/`lastName`
+- Optional: `container` (target account name — use `containers` to see available accounts)
 - Optional: `email`, `phone`, `organization`, `jobTitle`, `notes`, `birthday`
 
 ### Update Contact
@@ -53,6 +57,11 @@ Use `contact` with action `delete` to remove a contact:
 - Without year: `MM-DD` (e.g., `03-15`)
 
 ## Examples
+
+**List contact accounts:**
+```
+/apple-pim:contacts containers
+```
 
 **List contact groups:**
 ```
@@ -82,6 +91,7 @@ Use `contact` with action `delete` to remove a contact:
 ```
 /apple-pim:contacts create --name "Jane Doe" --email "jane@example.com"
 /apple-pim:contacts create --first-name "John" --last-name "Smith" --phone "555-1234" --organization "Acme Corp"
+/apple-pim:contacts create --name "Jane Doe" --container "iCloud" --email "jane@example.com"
 ```
 
 **Update a contact:**

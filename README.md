@@ -190,9 +190,11 @@ Config files are stored at `~/.config/apple-pim/`:
 
 ### Filter Modes
 
-- **allowlist**: Only listed calendars/lists are accessible
+- **allowlist**: Only listed items are accessible
 - **blocklist**: All EXCEPT listed items are accessible
 - **all**: No filtering (default if no config file exists)
+
+Filtering applies per domain: calendars filter by calendar name, reminders by list name, contacts by account container name (e.g. "iCloud", "Work Exchange", "Personal Gmail"). Use `contacts-cli containers` to see available account names.
 
 ### Profiles
 
@@ -212,6 +214,11 @@ Profiles let you give different agents different access to your PIM data. Each p
     "enabled": true,
     "mode": "allowlist",
     "items": ["Work"]
+  },
+  "contacts": {
+    "enabled": true,
+    "mode": "allowlist",
+    "items": ["Work Exchange"]
   },
   "mail": {
     "enabled": false
@@ -364,7 +371,9 @@ calendar-cli events --from today --to tomorrow
 calendar-cli create --title "Lunch" --start "tomorrow 12pm" --duration 60
 reminder-cli lists
 reminder-cli items --list "Personal" --filter overdue
+contacts-cli containers                             # List contact account containers
 contacts-cli search "John"
+contacts-cli search "John" --profile work           # Scoped to work contacts only
 mail-cli messages --mailbox INBOX --limit 10
 mail-cli send --to "user@example.com" --subject "Hello" --body "Message"
 mail-cli send --to "user@example.com" --subject "Report" --body "See attached" --attachment ~/report.pdf
@@ -460,7 +469,7 @@ mail-cli secrets set smtp.icloud.password --store openclaw
 |------|---------|--------|
 | `calendar` / `apple_pim_calendar` | `list`, `events`, `get`, `search`, `create`, `update`, `delete`, `batch_create` | Calendar events via EventKit |
 | `reminder` / `apple_pim_reminder` | `lists`, `items`, `get`, `search`, `create`, `complete`, `update`, `delete`, `batch_create`, `batch_complete`, `batch_delete` | Reminders via EventKit |
-| `contact` / `apple_pim_contact` | `groups`, `list`, `search`, `get`, `create`, `update`, `delete` | Contacts framework |
+| `contact` / `apple_pim_contact` | `containers`, `groups`, `list`, `search`, `get`, `create`, `update`, `delete` | Contacts framework |
 | `mail` / `apple_pim_mail` | `accounts`, `mailboxes`, `messages`, `get`, `search`, `send`, `reply`, `save_attachment`, `update`, `move`, `delete`, `batch_update`, `batch_delete`, `auth_check` | Mail.app via JXA/AppleScript |
 | `apple-pim` / `apple_pim_system` | `status`, `authorize`, `config_show`, `config_init` | Authorization & configuration |
 

@@ -98,6 +98,20 @@ cases:
     expect:
       throws: "Contact ID is required"
 
+  - id: contact-containers
+    tool: contact
+    description: "Containers action produces correct CLI args"
+    input: { action: containers }
+    expect:
+      cli_args_contain: ["containers"]
+
+  - id: contact-create-with-container
+    tool: contact
+    description: "Container param passes --container flag on create"
+    input: { action: create, name: "Jane Doe", container: "iCloud" }
+    expect:
+      cli_args_contain: ["create", "--name", "--container", "iCloud"]
+
   - id: cal-delete-future-events
     tool: calendar
     description: "futureEvents flag passed on delete"
