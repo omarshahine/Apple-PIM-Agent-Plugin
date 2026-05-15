@@ -169,6 +169,24 @@ describe("buildContactCreateArgs", () => {
     expect(args).toEqual(["create", "--name", "Ada Lovelace", "--notes", "Test"]);
   });
 
+  it("passes --container when container is specified", () => {
+    const args = buildContactCreateArgs({
+      name: "Jane Doe",
+      container: "iCloud",
+      email: "jane@example.com",
+    });
+    expect(args).toContain("--container");
+    const idx = args.indexOf("--container");
+    expect(args[idx + 1]).toBe("iCloud");
+  });
+
+  it("omits --container when not specified", () => {
+    const args = buildContactCreateArgs({
+      name: "Jane Doe",
+    });
+    expect(args).not.toContain("--container");
+  });
+
   it("maps non-empty rich arrays as JSON", () => {
     const args = buildContactCreateArgs({
       firstName: "Ada",

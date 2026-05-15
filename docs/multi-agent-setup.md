@@ -52,14 +52,14 @@ Profiles are the simplest approach. All agents share `~/.config/apple-pim/` but 
     "mode": "allowlist",
     "items": ["Travel"]
   },
-  "mail": { "enabled": false },
   "contacts": { "enabled": false },
+  "mail": { "enabled": false },
   "default_calendar": "Travel",
   "default_reminder_list": "Travel"
 }
 ```
 
-**`work.json`** — work calendar only:
+**`work.json`** — work calendar and work contacts only:
 ```json
 {
   "calendars": {
@@ -72,10 +72,28 @@ Profiles are the simplest approach. All agents share `~/.config/apple-pim/` but 
     "mode": "allowlist",
     "items": ["Work"]
   },
-  "contacts": { "enabled": true },
+  "contacts": {
+    "enabled": true,
+    "mode": "allowlist",
+    "items": ["Work Exchange"]
+  },
   "mail": { "enabled": false },
   "default_calendar": "Work",
   "default_reminder_list": "Work"
+}
+```
+
+**`family.json`** — shared family contacts only:
+```json
+{
+  "calendars": { "enabled": false },
+  "reminders": { "enabled": false },
+  "contacts": {
+    "enabled": true,
+    "mode": "allowlist",
+    "items": ["Family iCloud"]
+  },
+  "mail": { "enabled": false }
 }
 ```
 
@@ -114,6 +132,7 @@ Profiles use **whole-section replacement**, not field-level merge:
 |-------------|---------|--------|
 | `calendars: {mode: "all"}` | `calendars: {mode: "allowlist", items: ["Work"]}` | Profile's calendars config used entirely |
 | `reminders: {mode: "allowlist", items: ["A", "B"]}` | *(not specified)* | Base's reminders config inherited |
+| `contacts: {mode: "all"}` | `contacts: {mode: "allowlist", items: ["Work Exchange"]}` | Profile's contacts config used entirely |
 | `default_calendar: "Personal"` | `default_calendar: "Work"` | Profile's default used |
 
 ## Strategy 2: Config Directory Isolation

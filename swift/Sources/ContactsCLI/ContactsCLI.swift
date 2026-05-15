@@ -10,6 +10,7 @@ struct ContactsCLI: AsyncParsableCommand {
         abstract: "Manage macOS Contacts",
         subcommands: [
             AuthStatus.self,
+            ListContainers.self,
             ListGroups.self,
             ListContacts.self,
             SearchContacts.self,
@@ -315,6 +316,22 @@ let keysToFetch: [CNKeyDescriptor] = [
     CNContactFormatter.descriptorForRequiredKeys(for: .fullName),
 ]
 
+func containerToDict(_ container: CNContainer) -> [String: Any] {
+    let typeName: String
+    switch container.type {
+    case .local: typeName = "local"
+    case .exchange: typeName = "exchange"
+    case .cardDAV: typeName = "cardDAV"
+    case .unassigned: typeName = "unassigned"
+    @unknown default: typeName = "unknown"
+    }
+    return [
+        "id": container.identifier,
+        "name": container.name,
+        "type": typeName
+    ]
+}
+
 func groupToDict(_ group: CNGroup) -> [String: Any] {
     return [
         "id": group.identifier,
@@ -493,7 +510,139 @@ func contactToDict(_ contact: CNContact, brief: Bool = false) -> [String: Any] {
     return dict
 }
 
+// MARK: - Container Filtering
+
+// containers(matching: nil) returns real accounts but also Exchange default lists as Contacts groups (Apple bug).
+// Strip those by excluding any container whose identifier also appears in groups(matching: nil).
+func allAccountContainers() throws -> [CNContainer] {
+    let all = try contactStore.containers(matching: nil)
+    let groupIds = Set(try contactStore.groups(matching: nil).map { $0.identifier })
+    return all.filter { !groupIds.contains($0.identifier) }
+}
+
+func filteredContainers(config: PIMConfiguration) throws -> [CNContainer] {
+    let accounts = try allAccountContainers()
+    return ItemFilter.filter(items: accounts, config: config.contacts, name: { $0.name }, id: { $0.identifier })
+}
+
+func fetchContactsFromAllowedContainers(config: PIMConfiguration) throws -> [CNContact] {
+    let allowed = try filteredContainers(config: config)
+    var contacts: [CNContact] = []
+    for container in allowed {
+        let request = CNContactFetchRequest(keysToFetch: keysToFetch)
+        request.predicate = CNContact.predicateForContactsInContainer(withIdentifier: container.identifier)
+        request.unifyResults = false
+        request.mutableObjects = false
+        try contactStore.enumerateContacts(with: request) { contact, _ in
+            contacts.append(contact)
+        }
+    }
+    return contacts
+}
+
+// MARK: - Scoped Contact Resolution
+
+enum ContactAccessMode {
+    case fullAccess
+    case scopedContainers(Set<String>)
+}
+
+struct AuthorizedRawContact {
+    let contact: CNContact
+    let accountContainer: CNContainer
+}
+
+func contactAccessMode(config: PIMConfiguration) -> ContactAccessMode {
+    guard config.contacts.mode != .all else { return .fullAccess }
+    let allowed = (try? filteredContainers(config: config)) ?? []
+    return .scopedContainers(Set(allowed.map { $0.identifier }))
+}
+
+func resolveAccountContainer(forContactId contactId: String) throws -> CNContainer? {
+    let containerPred = CNContainer.predicateForContainerOfContact(withIdentifier: contactId)
+    let containers = try contactStore.containers(matching: containerPred)
+    guard let direct = containers.first else { return nil }
+
+    let groupIds = Set(try contactStore.groups(matching: nil).map { $0.identifier })
+    if groupIds.contains(direct.identifier) {
+        let parentPred = CNContainer.predicateForContainerOfGroup(withIdentifier: direct.identifier)
+        return try contactStore.containers(matching: parentPred).first
+    }
+    return direct
+}
+
+func isMultiSourceUnifiedId(_ contactId: String) throws -> Bool {
+    let containerPred = CNContainer.predicateForContainerOfContact(withIdentifier: contactId)
+    let containers = try contactStore.containers(matching: containerPred)
+    return containers.isEmpty
+}
+
+func resolveAuthorizedBackings(
+    forContactId contactId: String,
+    allowedContainerIds: Set<String>,
+    keysToFetch keys: [CNKeyDescriptor]
+) throws -> [AuthorizedRawContact] {
+    let unified = try contactStore.unifiedContact(
+        withIdentifier: contactId,
+        keysToFetch: [CNContactIdentifierKey as CNKeyDescriptor]
+    )
+
+    let request = CNContactFetchRequest(keysToFetch: keys)
+    request.predicate = CNContact.predicateForContacts(withIdentifiers: [unified.identifier])
+    request.unifyResults = false
+    request.mutableObjects = false
+
+    var authorized: [AuthorizedRawContact] = []
+    try contactStore.enumerateContacts(with: request) { contact, _ in
+        guard let account = try? resolveAccountContainer(forContactId: contact.identifier) else { return }
+        if allowedContainerIds.contains(account.identifier) {
+            authorized.append(AuthorizedRawContact(contact: contact, accountContainer: account))
+        }
+    }
+    return authorized
+}
+
+/// Validate that a contact ID is a backing ID in an allowed container.
+/// Returns the resolved account container on success.
+@discardableResult
+func validateScopedContactAccess(id: String, allowedIds: Set<String>) throws -> CNContainer {
+    guard try !isMultiSourceUnifiedId(id) else {
+        throw CLIError.invalidInput("Use a specific contact ID from list or search.")
+    }
+    guard let account = try resolveAccountContainer(forContactId: id) else {
+        throw CLIError.notFound("Contact not found: \(id)")
+    }
+    guard allowedIds.contains(account.identifier) else {
+        throw CLIError.accessDenied("Contact is not in your allowed accounts.")
+    }
+    return account
+}
+
 // MARK: - Commands
+
+struct ListContainers: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "containers",
+        abstract: "List all contact account containers"
+    )
+
+    @OptionGroup var pimOptions: PIMOptions
+
+    func run() async throws {
+        try await requestContactsAccess()
+        let config = pimOptions.loadConfig()
+        try checkContactsEnabled(config: config)
+
+        let containers = try filteredContainers(config: config)
+        let result = containers.map { containerToDict($0) }
+
+        outputJSON([
+            "success": true,
+            "containers": result,
+            "count": result.count
+        ])
+    }
+}
 
 struct ListGroups: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -507,8 +656,23 @@ struct ListGroups: AsyncParsableCommand {
         try await requestContactsAccess()
         let config = pimOptions.loadConfig()
         try checkContactsEnabled(config: config)
+        let mode = contactAccessMode(config: config)
 
-        let groups = try contactStore.groups(matching: nil)
+        var groups: [CNGroup]
+        switch mode {
+        case .fullAccess:
+            groups = try contactStore.groups(matching: nil)
+        case .scopedContainers(let allowedIds):
+            let allGroups = try contactStore.groups(matching: nil)
+            groups = allGroups.filter { group in
+                guard let container = try? contactStore.containers(
+                    matching: CNContainer.predicateForContainerOfGroup(withIdentifier: group.identifier)
+                ).first else {
+                    return false
+                }
+                return allowedIds.contains(container.identifier)
+            }
+        }
         let result = groups.map { groupToDict($0) }
 
         outputJSON([
@@ -536,6 +700,7 @@ struct ListContacts: AsyncParsableCommand {
         try await requestContactsAccess()
         let config = pimOptions.loadConfig()
         try checkContactsEnabled(config: config)
+        let mode = contactAccessMode(config: config)
 
         var contacts: [CNContact] = []
 
@@ -548,16 +713,41 @@ struct ListContacts: AsyncParsableCommand {
 
             // Fetch contacts in group
             let predicate = CNContact.predicateForContactsInGroup(withIdentifier: matchedGroup.identifier)
-            contacts = try contactStore.unifiedContacts(matching: predicate, keysToFetch: keysToFetch)
+
+            switch mode {
+            case .fullAccess:
+                contacts = try contactStore.unifiedContacts(matching: predicate, keysToFetch: keysToFetch)
+            case .scopedContainers(let allowedIds):
+                let containerPred = CNContainer.predicateForContainerOfGroup(withIdentifier: matchedGroup.identifier)
+                if let container = try contactStore.containers(matching: containerPred).first {
+                    guard allowedIds.contains(container.identifier) else {
+                        throw CLIError.accessDenied("Group is not in your allowed accounts.")
+                    }
+                }
+                let request = CNContactFetchRequest(keysToFetch: keysToFetch)
+                request.predicate = predicate
+                request.unifyResults = false
+                request.mutableObjects = false
+                try contactStore.enumerateContacts(with: request) { contact, _ in
+                    contacts.append(contact)
+                }
+            }
         } else {
             // Fetch all contacts
-            let request = CNContactFetchRequest(keysToFetch: keysToFetch)
-            request.sortOrder = .familyName
-
-            try contactStore.enumerateContacts(with: request) { contact, stop in
-                contacts.append(contact)
-                if contacts.count >= limit {
-                    stop.pointee = true
+            switch mode {
+            case .fullAccess:
+                let request = CNContactFetchRequest(keysToFetch: keysToFetch)
+                request.sortOrder = .familyName
+                try contactStore.enumerateContacts(with: request) { contact, stop in
+                    contacts.append(contact)
+                    if contacts.count >= limit {
+                        stop.pointee = true
+                    }
+                }
+            case .scopedContainers:
+                contacts = try fetchContactsFromAllowedContainers(config: config)
+                if contacts.count > limit {
+                    contacts = Array(contacts.prefix(limit))
                 }
             }
         }
@@ -590,41 +780,40 @@ struct SearchContacts: AsyncParsableCommand {
         try await requestContactsAccess()
         let config = pimOptions.loadConfig()
         try checkContactsEnabled(config: config)
+        let mode = contactAccessMode(config: config)
 
-        let predicate = CNContact.predicateForContacts(matchingName: query)
-        var contacts = try contactStore.unifiedContacts(matching: predicate, keysToFetch: keysToFetch)
+        var contacts: [CNContact]
 
-        // Also search by email and phone if name search returns few results
-        if contacts.count < limit {
-            let allContacts = try fetchAllContacts()
-            let queryLower = query.lowercased()
+        switch mode {
+        case .fullAccess:
+            let predicate = CNContact.predicateForContacts(matchingName: query)
+            contacts = try contactStore.unifiedContacts(matching: predicate, keysToFetch: keysToFetch)
 
-            let emailPhoneMatches = allContacts.filter { contact in
-                // Skip if already found by name
-                if contacts.contains(where: { $0.identifier == contact.identifier }) {
-                    return false
-                }
-
-                // Check emails
-                for email in contact.emailAddresses {
-                    if (email.value as String).lowercased().contains(queryLower) {
-                        return true
-                    }
-                }
-
-                // Check phones (strip non-digits for comparison)
-                let queryDigits = query.filter { $0.isNumber }
-                for phone in contact.phoneNumbers {
-                    let phoneDigits = phone.value.stringValue.filter { $0.isNumber }
-                    if phoneDigits.contains(queryDigits) || queryDigits.contains(phoneDigits) {
-                        return true
-                    }
-                }
-
-                return false
+            // Also search by email and phone if name search returns few results
+            if contacts.count < limit {
+                let allContacts = try fetchAllContactsUnfiltered()
+                contacts.append(contentsOf: searchByEmailPhone(allContacts, excluding: contacts))
             }
 
-            contacts.append(contentsOf: emailPhoneMatches)
+        case .scopedContainers(let allowedIds):
+            let nameRequest = CNContactFetchRequest(keysToFetch: keysToFetch)
+            nameRequest.predicate = CNContact.predicateForContacts(matchingName: query)
+            nameRequest.unifyResults = false
+            nameRequest.mutableObjects = false
+
+            var nameMatches: [CNContact] = []
+            try contactStore.enumerateContacts(with: nameRequest) { contact, _ in
+                guard let account = try? resolveAccountContainer(forContactId: contact.identifier) else { return }
+                if allowedIds.contains(account.identifier) {
+                    nameMatches.append(contact)
+                }
+            }
+            contacts = nameMatches
+
+            if contacts.count < limit {
+                let allAllowed = try fetchContactsFromAllowedContainers(config: config)
+                contacts.append(contentsOf: searchByEmailPhone(allAllowed, excluding: contacts))
+            }
         }
 
         let result = contacts.prefix(limit).map { contactToDict($0, brief: true) }
@@ -637,7 +826,32 @@ struct SearchContacts: AsyncParsableCommand {
         ])
     }
 
-    func fetchAllContacts() throws -> [CNContact] {
+    private func searchByEmailPhone(_ pool: [CNContact], excluding: [CNContact]) -> [CNContact] {
+        let queryLower = query.lowercased()
+        let queryDigits = query.filter { $0.isNumber }
+        let existingIds = Set(excluding.map { $0.identifier })
+
+        return pool.filter { contact in
+            // Skip if already found by name
+            if existingIds.contains(contact.identifier) { return false }
+
+            // Check emails
+            for email in contact.emailAddresses {
+                if (email.value as String).lowercased().contains(queryLower) { return true }
+            }
+
+            // Check phones (strip non-digits for comparison)
+            if !queryDigits.isEmpty {
+                for phone in contact.phoneNumbers {
+                    let phoneDigits = phone.value.stringValue.filter { $0.isNumber }
+                    if phoneDigits.contains(queryDigits) || queryDigits.contains(phoneDigits) { return true }
+                }
+            }
+            return false
+        }
+    }
+
+    private func fetchAllContactsUnfiltered() throws -> [CNContact] {
         var contacts: [CNContact] = []
         let request = CNContactFetchRequest(keysToFetch: keysToFetch)
 
@@ -664,18 +878,57 @@ struct GetContact: AsyncParsableCommand {
         try await requestContactsAccess()
         let config = pimOptions.loadConfig()
         try checkContactsEnabled(config: config)
+        let mode = contactAccessMode(config: config)
 
-        let predicate = CNContact.predicateForContacts(withIdentifiers: [id])
-        let contacts = try contactStore.unifiedContacts(matching: predicate, keysToFetch: keysToFetch)
+        switch mode {
+        case .fullAccess:
+            let predicate = CNContact.predicateForContacts(withIdentifiers: [id])
+            let contacts = try contactStore.unifiedContacts(matching: predicate, keysToFetch: keysToFetch)
 
-        guard let contact = contacts.first else {
-            throw CLIError.notFound("Contact not found: \(id)")
+            guard let contact = contacts.first else {
+                throw CLIError.notFound("Contact not found: \(id)")
+            }
+
+            outputJSON([
+                "success": true,
+                "contact": contactToDict(contact, brief: false)
+            ])
+
+        case .scopedContainers(let allowedIds):
+            let account = try validateScopedContactAccess(id: id, allowedIds: allowedIds)
+
+            let request = CNContactFetchRequest(keysToFetch: keysToFetch)
+            request.predicate = CNContact.predicateForContacts(withIdentifiers: [id])
+            request.unifyResults = false
+            request.mutableObjects = false
+            var contact: CNContact?
+            try contactStore.enumerateContacts(with: request) { c, stop in
+                contact = c
+                stop.pointee = true
+            }
+            guard let found = contact else {
+                throw CLIError.notFound("Contact not found: \(id)")
+            }
+
+            var contactDict = contactToDict(found, brief: false)
+            contactDict["sourceContainer"] = account.name
+
+            let related = try resolveAuthorizedBackings(
+                forContactId: id, allowedContainerIds: allowedIds, keysToFetch: keysToFetch
+            ).filter { $0.contact.identifier != id }
+
+            let relatedDicts: [[String: Any]] = related.map { arc in
+                var d = contactToDict(arc.contact, brief: false)
+                d["sourceContainer"] = arc.accountContainer.name
+                return d
+            }
+
+            outputJSON([
+                "success": true,
+                "contact": contactDict,
+                "relatedContacts": relatedDicts
+            ])
         }
-
-        outputJSON([
-            "success": true,
-            "contact": contactToDict(contact, brief: false)
-        ])
     }
 }
 
@@ -686,6 +939,9 @@ struct CreateContact: AsyncParsableCommand {
     )
 
     @OptionGroup var pimOptions: PIMOptions
+
+    @Option(name: .long, help: "Target container/account name or ID")
+    var container: String?
 
     // Name fields
     @Option(name: .long, help: "First name")
@@ -784,6 +1040,30 @@ struct CreateContact: AsyncParsableCommand {
         let config = pimOptions.loadConfig()
         try checkContactsEnabled(config: config)
 
+        var targetContainerId: String? = nil
+        if let containerHint = container {
+            let accounts = try allAccountContainers()
+            guard let matched = accounts.first(where: { $0.identifier == containerHint || $0.name.lowercased() == containerHint.lowercased() }) else {
+                throw CLIError.notFound("Container not found: \(containerHint)")
+            }
+            guard ItemFilter.isAllowed(name: matched.name, id: matched.identifier, config: config.contacts) else {
+                throw CLIError.accessDenied("Target container is not in your allowed accounts.")
+            }
+            targetContainerId = matched.identifier
+        } else if case .scopedContainers(let allowedIds) = contactAccessMode(config: config) {
+            // Without --container, Contacts saves to the system default account.
+            // In scoped mode that default may be disallowed (e.g. iCloud while only Exchange is allowed),
+            // which would bypass the allowlist. Resolve and validate explicitly.
+            let defaultId = contactStore.defaultContainerIdentifier()
+            if allowedIds.contains(defaultId) {
+                targetContainerId = defaultId
+            } else if allowedIds.count == 1, let onlyAllowed = allowedIds.first {
+                targetContainerId = onlyAllowed
+            } else {
+                throw CLIError.invalidInput("System default contacts account is not in your allowed accounts. Pass --container explicitly.")
+            }
+        }
+
         let contact = CNMutableContact()
 
         // Name
@@ -853,7 +1133,7 @@ struct CreateContact: AsyncParsableCommand {
         if let note = notes { contact.note = note }
 
         let saveRequest = CNSaveRequest()
-        saveRequest.add(contact, toContainerWithIdentifier: nil)
+        saveRequest.add(contact, toContainerWithIdentifier: targetContainerId)
         try contactStore.execute(saveRequest)
 
         outputJSON([
@@ -968,117 +1248,172 @@ struct UpdateContact: AsyncParsableCommand {
         try await requestContactsAccess()
         let config = pimOptions.loadConfig()
         try checkContactsEnabled(config: config)
+        let mode = contactAccessMode(config: config)
 
-        let maxAttempts = 3
-        var attempts = 0
+        switch mode {
+        case .fullAccess:
+            let maxAttempts = 3
+            var attempts = 0
 
-        while true {
-            attempts += 1
+            while true {
+                attempts += 1
 
-            let predicate = CNContact.predicateForContacts(withIdentifiers: [id])
-            let contacts = try contactStore.unifiedContacts(matching: predicate, keysToFetch: keysToFetch)
+                let predicate = CNContact.predicateForContacts(withIdentifiers: [id])
+                let contacts = try contactStore.unifiedContacts(matching: predicate, keysToFetch: keysToFetch)
 
-            guard let existingContact = contacts.first else {
-                throw CLIError.notFound("Contact not found: \(id)")
-            }
-
-            let contact = existingContact.mutableCopy() as! CNMutableContact
-
-            // Name fields
-            if let first = firstName { contact.givenName = first }
-            if let last = lastName { contact.familyName = last }
-            if let v = middleName { contact.middleName = v }
-            if let v = namePrefix { contact.namePrefix = v }
-            if let v = nameSuffix { contact.nameSuffix = v }
-            if let v = nickname { contact.nickname = v }
-            if let v = previousFamilyName { contact.previousFamilyName = v }
-
-            // Phonetic
-            if let v = phoneticGivenName { contact.phoneticGivenName = v }
-            if let v = phoneticMiddleName { contact.phoneticMiddleName = v }
-            if let v = phoneticFamilyName { contact.phoneticFamilyName = v }
-            if let v = phoneticOrganizationName { contact.phoneticOrganizationName = v }
-
-            // Organization
-            if let org = organization { contact.organizationName = org }
-            if let title = jobTitle { contact.jobTitle = title }
-            if let dept = department { contact.departmentName = dept }
-
-            // Contact type
-            if let ct = contactType?.lowercased() {
-                contact.contactType = ct == "organization" ? .organization : .person
-            }
-
-            // Emails (JSON array replaces all; simple --email replaces primary)
-            if let emailsJSON = emails {
-                contact.emailAddresses = try parseEmails(emailsJSON)
-            } else if let emailAddr = email {
-                if contact.emailAddresses.isEmpty {
-                    contact.emailAddresses = [CNLabeledValue(label: CNLabelWork, value: emailAddr as NSString)]
-                } else {
-                    var existing = contact.emailAddresses.map { $0.mutableCopy() as! CNLabeledValue<NSString> }
-                    existing[0] = CNLabeledValue(label: existing[0].label, value: emailAddr as NSString)
-                    contact.emailAddresses = existing
+                guard let existingContact = contacts.first else {
+                    throw CLIError.notFound("Contact not found: \(id)")
                 }
-            }
 
-            // Phones (JSON array replaces all; simple --phone replaces primary)
-            if let phonesJSON = phones {
-                contact.phoneNumbers = try parsePhones(phonesJSON)
-            } else if let phoneNum = phone {
-                if contact.phoneNumbers.isEmpty {
-                    contact.phoneNumbers = [CNLabeledValue(label: CNLabelPhoneNumberMain, value: CNPhoneNumber(stringValue: phoneNum))]
-                } else {
-                    var existing = contact.phoneNumbers.map { $0.mutableCopy() as! CNLabeledValue<CNPhoneNumber> }
-                    existing[0] = CNLabeledValue(label: existing[0].label, value: CNPhoneNumber(stringValue: phoneNum))
-                    contact.phoneNumbers = existing
+                let contact = existingContact.mutableCopy() as! CNMutableContact
+
+                try applyContactMutations(to: contact)
+
+                let saveRequest = CNSaveRequest()
+                saveRequest.update(contact)
+
+                do {
+                    try contactStore.execute(saveRequest)
+                } catch {
+                    // CoreData 134092 = NSManagedObjectMergeError (iCloud sync conflict)
+                    // May appear at top level or nested in underlyingErrors
+                    if isMergeConflict(error) && attempts < maxAttempts {
+                        fputs("Warning: Merge conflict (attempt \(attempts)/\(maxAttempts)). Re-fetching and retrying...\n", stderr)
+                        try await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+                        continue
+                    }
+                    throw error
                 }
+
+                outputJSON([
+                    "success": true,
+                    "message": "Contact updated successfully",
+                    "contact": contactToDict(contact, brief: false)
+                ])
+                return
             }
 
-            // Structured arrays (replace all when provided)
-            if let json = addresses { contact.postalAddresses = try parseAddresses(json) }
-            if let json = urls { contact.urlAddresses = try parseURLs(json) }
-            if let json = socialProfiles { contact.socialProfiles = try parseSocialProfiles(json) }
-            if let json = instantMessages { contact.instantMessageAddresses = try parseInstantMessages(json) }
-            if let json = relations { contact.contactRelations = try parseRelations(json) }
-            if let json = dates { contact.dates = try parseDates(json) }
+        case .scopedContainers(let allowedIds):
+            try validateScopedContactAccess(id: id, allowedIds: allowedIds)
 
-            // Birthday
-            if let birthdayStr = birthday {
-                contact.birthday = try parseBirthday(birthdayStr)
-            }
+            let maxAttempts = 3
+            var attempts = 0
 
-            // Notes (guarded: macOS may restrict note access via TCC)
-            if let note = notes {
-                if existingContact.isKeyAvailable(CNContactNoteKey) {
-                    contact.note = note
-                } else {
-                    fputs("Warning: Cannot set notes — Contacts note access not available. Check System Settings > Privacy & Security > Contacts.\n", stderr)
+            while true {
+                attempts += 1
+
+                let request = CNContactFetchRequest(keysToFetch: keysToFetch)
+                request.predicate = CNContact.predicateForContacts(withIdentifiers: [id])
+                request.unifyResults = false
+                request.mutableObjects = false
+                var fetched: CNContact?
+                try contactStore.enumerateContacts(with: request) { c, stop in
+                    fetched = c
+                    stop.pointee = true
                 }
-            }
-
-            let saveRequest = CNSaveRequest()
-            saveRequest.update(contact)
-
-            do {
-                try contactStore.execute(saveRequest)
-            } catch {
-                // CoreData 134092 = NSManagedObjectMergeError (iCloud sync conflict)
-                // May appear at top level or nested in underlyingErrors
-                if isMergeConflict(error) && attempts < maxAttempts {
-                    fputs("Warning: Merge conflict (attempt \(attempts)/\(maxAttempts)). Re-fetching and retrying...\n", stderr)
-                    try await Task.sleep(nanoseconds: 500_000_000) // 0.5s
-                    continue
+                guard let existingContact = fetched else {
+                    throw CLIError.notFound("Contact not found: \(id)")
                 }
-                throw error
-            }
 
-            outputJSON([
-                "success": true,
-                "message": "Contact updated successfully",
-                "contact": contactToDict(contact, brief: false)
-            ])
-            return
+                let contact = existingContact.mutableCopy() as! CNMutableContact
+                try applyContactMutations(to: contact)
+
+                let saveRequest = CNSaveRequest()
+                saveRequest.update(contact)
+
+                do {
+                    try contactStore.execute(saveRequest)
+                } catch {
+                    // CoreData 134092 = NSManagedObjectMergeError (iCloud sync conflict)
+                    // May appear at top level or nested in underlyingErrors
+                    if isMergeConflict(error) && attempts < maxAttempts {
+                        fputs("Warning: Merge conflict (attempt \(attempts)/\(maxAttempts)). Re-fetching and retrying...\n", stderr)
+                        try await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+                        continue
+                    }
+                    throw error
+                }
+
+                outputJSON([
+                    "success": true,
+                    "message": "Contact updated successfully",
+                    "contact": contactToDict(contact, brief: false)
+                ])
+                return
+            }
+        }
+    }
+
+    private func applyContactMutations(to contact: CNMutableContact) throws {
+        // Name fields
+        if let first = firstName { contact.givenName = first }
+        if let last = lastName { contact.familyName = last }
+        if let v = middleName { contact.middleName = v }
+        if let v = namePrefix { contact.namePrefix = v }
+        if let v = nameSuffix { contact.nameSuffix = v }
+        if let v = nickname { contact.nickname = v }
+        if let v = previousFamilyName { contact.previousFamilyName = v }
+
+        // Phonetic
+        if let v = phoneticGivenName { contact.phoneticGivenName = v }
+        if let v = phoneticMiddleName { contact.phoneticMiddleName = v }
+        if let v = phoneticFamilyName { contact.phoneticFamilyName = v }
+        if let v = phoneticOrganizationName { contact.phoneticOrganizationName = v }
+
+        // Organization
+        if let org = organization { contact.organizationName = org }
+        if let title = jobTitle { contact.jobTitle = title }
+        if let dept = department { contact.departmentName = dept }
+
+        // Contact type
+        if let ct = contactType?.lowercased() {
+            contact.contactType = ct == "organization" ? .organization : .person
+        }
+
+        // Emails (JSON array replaces all; simple --email replaces primary)
+        if let emailsJSON = emails {
+            contact.emailAddresses = try parseEmails(emailsJSON)
+        } else if let emailAddr = email {
+            if contact.emailAddresses.isEmpty {
+                contact.emailAddresses = [CNLabeledValue(label: CNLabelWork, value: emailAddr as NSString)]
+            } else {
+                let first = contact.emailAddresses[0]
+                contact.emailAddresses[0] = CNLabeledValue(label: first.label, value: emailAddr as NSString)
+            }
+        }
+
+        // Phones (JSON array replaces all; simple --phone replaces primary)
+        if let phonesJSON = phones {
+            contact.phoneNumbers = try parsePhones(phonesJSON)
+        } else if let phoneNum = phone {
+            if contact.phoneNumbers.isEmpty {
+                contact.phoneNumbers = [CNLabeledValue(label: CNLabelPhoneNumberMain, value: CNPhoneNumber(stringValue: phoneNum))]
+            } else {
+                let first = contact.phoneNumbers[0]
+                contact.phoneNumbers[0] = CNLabeledValue(label: first.label, value: CNPhoneNumber(stringValue: phoneNum))
+            }
+        }
+
+        // Structured arrays (replace all when provided)
+        if let json = addresses { contact.postalAddresses = try parseAddresses(json) }
+        if let json = urls { contact.urlAddresses = try parseURLs(json) }
+        if let json = socialProfiles { contact.socialProfiles = try parseSocialProfiles(json) }
+        if let json = instantMessages { contact.instantMessageAddresses = try parseInstantMessages(json) }
+        if let json = relations { contact.contactRelations = try parseRelations(json) }
+        if let json = dates { contact.dates = try parseDates(json) }
+
+        // Birthday
+        if let birthdayStr = birthday {
+            contact.birthday = try parseBirthday(birthdayStr)
+        }
+
+        // Notes (guarded: macOS may restrict note access via TCC)
+        if let note = notes {
+            if contact.isKeyAvailable(CNContactNoteKey) {
+                contact.note = note
+            } else {
+                fputs("Warning: Cannot set notes — Contacts note access not available. Check System Settings > Privacy & Security > Contacts.\n", stderr)
+            }
         }
     }
 }
@@ -1099,25 +1434,58 @@ struct DeleteContact: AsyncParsableCommand {
         let config = pimOptions.loadConfig()
         try checkContactsEnabled(config: config)
 
-        let predicate = CNContact.predicateForContacts(withIdentifiers: [id])
-        let contacts = try contactStore.unifiedContacts(matching: predicate, keysToFetch: keysToFetch)
+        let mode = contactAccessMode(config: config)
 
-        guard let existingContact = contacts.first else {
-            throw CLIError.notFound("Contact not found: \(id)")
+        switch mode {
+        case .fullAccess:
+            let predicate = CNContact.predicateForContacts(withIdentifiers: [id])
+            let contacts = try contactStore.unifiedContacts(matching: predicate, keysToFetch: keysToFetch)
+
+            guard let existingContact = contacts.first else {
+                throw CLIError.notFound("Contact not found: \(id)")
+            }
+
+            let contactInfo = contactToDict(existingContact, brief: true)
+            let contact = existingContact.mutableCopy() as! CNMutableContact
+
+            let saveRequest = CNSaveRequest()
+            saveRequest.delete(contact)
+            try contactStore.execute(saveRequest)
+
+            outputJSON([
+                "success": true,
+                "message": "Contact deleted successfully",
+                "deletedContact": contactInfo
+            ])
+
+        case .scopedContainers(let allowedIds):
+            try validateScopedContactAccess(id: id, allowedIds: allowedIds)
+
+            let request = CNContactFetchRequest(keysToFetch: keysToFetch)
+            request.predicate = CNContact.predicateForContacts(withIdentifiers: [id])
+            request.unifyResults = false
+            request.mutableObjects = false
+            var fetched: CNContact?
+            try contactStore.enumerateContacts(with: request) { c, stop in
+                fetched = c
+                stop.pointee = true
+            }
+            guard let existingContact = fetched else {
+                throw CLIError.notFound("Contact not found: \(id)")
+            }
+
+            let contactInfo = contactToDict(existingContact, brief: true)
+            let contact = existingContact.mutableCopy() as! CNMutableContact
+            let saveRequest = CNSaveRequest()
+            saveRequest.delete(contact)
+            try contactStore.execute(saveRequest)
+
+            outputJSON([
+                "success": true,
+                "message": "Contact deleted successfully",
+                "deletedContact": contactInfo
+            ])
         }
-
-        let contactInfo = contactToDict(existingContact, brief: true)
-        let contact = existingContact.mutableCopy() as! CNMutableContact
-
-        let saveRequest = CNSaveRequest()
-        saveRequest.delete(contact)
-        try contactStore.execute(saveRequest)
-
-        outputJSON([
-            "success": true,
-            "message": "Contact deleted successfully",
-            "deletedContact": contactInfo
-        ])
     }
 }
 

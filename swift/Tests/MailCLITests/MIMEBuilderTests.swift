@@ -1,4 +1,5 @@
 import Foundation
+import struct MailCLI.Attachment
 import Testing
 @testable import MailCLI
 
@@ -257,9 +258,10 @@ struct MIMEBuilderTests {
 
     @Test("RFC 5322 date format is parseable")
     func testDateFormat() {
+        // formatRFC5322Date renders in local timezone — epoch 0 is 1969 west of UTC, 1970 at/east of UTC
         let s = MIMEMessage.formatRFC5322Date(Date(timeIntervalSince1970: 0))
-        // Example: "Thu, 1 Jan 1970 00:00:00 +0000"
-        #expect(s.contains("1970"))
+        #expect(s.contains("1969") || s.contains("1970"),
+                "Expected year 1969 or 1970 in: \(s)")
         #expect(s.range(of: #"^[A-Z][a-z]{2}, \d{1,2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} [+-]\d{4}$"#,
                        options: .regularExpression) != nil,
                 "Date does not match RFC 5322 shape: \(s)")
