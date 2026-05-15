@@ -1050,6 +1050,18 @@ struct CreateContact: AsyncParsableCommand {
                 throw CLIError.accessDenied("Target container is not in your allowed accounts.")
             }
             targetContainerId = matched.identifier
+        } else if case .scopedContainers(let allowedIds) = contactAccessMode(config: config) {
+            // Without --container, Contacts saves to the system default account.
+            // In scoped mode that default may be disallowed (e.g. iCloud while only Exchange is allowed),
+            // which would bypass the allowlist. Resolve and validate explicitly.
+            let defaultId = contactStore.defaultContainerIdentifier()
+            if allowedIds.contains(defaultId) {
+                targetContainerId = defaultId
+            } else if allowedIds.count == 1, let onlyAllowed = allowedIds.first {
+                targetContainerId = onlyAllowed
+            } else {
+                throw CLIError.invalidInput("System default contacts account is not in your allowed accounts. Pass --container explicitly.")
+            }
         }
 
         let contact = CNMutableContact()
@@ -1255,7 +1267,7 @@ struct UpdateContact: AsyncParsableCommand {
 
                 let contact = existingContact.mutableCopy() as! CNMutableContact
 
-                applyContactMutations(to: contact)
+                try applyContactMutations(to: contact)
 
                 let saveRequest = CNSaveRequest()
                 saveRequest.update(contact)
@@ -1284,27 +1296,27 @@ struct UpdateContact: AsyncParsableCommand {
         case .scopedContainers(let allowedIds):
             try validateScopedContactAccess(id: id, allowedIds: allowedIds)
 
-            let request = CNContactFetchRequest(keysToFetch: keysToFetch)
-            request.predicate = CNContact.predicateForContacts(withIdentifiers: [id])
-            request.unifyResults = false
-            request.mutableObjects = false
-            var fetched: CNContact?
-            try contactStore.enumerateContacts(with: request) { c, stop in
-                fetched = c
-                stop.pointee = true
-            }
-            guard let existingContact = fetched else {
-                throw CLIError.notFound("Contact not found: \(id)")
-            }
-
             let maxAttempts = 3
             var attempts = 0
 
             while true {
                 attempts += 1
 
+                let request = CNContactFetchRequest(keysToFetch: keysToFetch)
+                request.predicate = CNContact.predicateForContacts(withIdentifiers: [id])
+                request.unifyResults = false
+                request.mutableObjects = false
+                var fetched: CNContact?
+                try contactStore.enumerateContacts(with: request) { c, stop in
+                    fetched = c
+                    stop.pointee = true
+                }
+                guard let existingContact = fetched else {
+                    throw CLIError.notFound("Contact not found: \(id)")
+                }
+
                 let contact = existingContact.mutableCopy() as! CNMutableContact
-                applyContactMutations(to: contact)
+                try applyContactMutations(to: contact)
 
                 let saveRequest = CNSaveRequest()
                 saveRequest.update(contact)
@@ -1332,7 +1344,7 @@ struct UpdateContact: AsyncParsableCommand {
         }
     }
 
-    private func applyContactMutations(to contact: CNMutableContact) {
+    private func applyContactMutations(to contact: CNMutableContact) throws {
         // Name fields
         if let first = firstName { contact.givenName = first }
         if let last = lastName { contact.familyName = last }
@@ -1360,7 +1372,7 @@ struct UpdateContact: AsyncParsableCommand {
 
         // Emails (JSON array replaces all; simple --email replaces primary)
         if let emailsJSON = emails {
-            contact.emailAddresses = (try? parseEmails(emailsJSON)) ?? []
+            contact.emailAddresses = try parseEmails(emailsJSON)
         } else if let emailAddr = email {
             if contact.emailAddresses.isEmpty {
                 contact.emailAddresses = [CNLabeledValue(label: CNLabelWork, value: emailAddr as NSString)]
@@ -1372,7 +1384,7 @@ struct UpdateContact: AsyncParsableCommand {
 
         // Phones (JSON array replaces all; simple --phone replaces primary)
         if let phonesJSON = phones {
-            contact.phoneNumbers = (try? parsePhones(phonesJSON)) ?? []
+            contact.phoneNumbers = try parsePhones(phonesJSON)
         } else if let phoneNum = phone {
             if contact.phoneNumbers.isEmpty {
                 contact.phoneNumbers = [CNLabeledValue(label: CNLabelPhoneNumberMain, value: CNPhoneNumber(stringValue: phoneNum))]
@@ -1383,16 +1395,16 @@ struct UpdateContact: AsyncParsableCommand {
         }
 
         // Structured arrays (replace all when provided)
-        if let json = addresses { contact.postalAddresses = (try? parseAddresses(json)) ?? [] }
-        if let json = urls { contact.urlAddresses = (try? parseURLs(json)) ?? [] }
-        if let json = socialProfiles { contact.socialProfiles = (try? parseSocialProfiles(json)) ?? [] }
-        if let json = instantMessages { contact.instantMessageAddresses = (try? parseInstantMessages(json)) ?? [] }
-        if let json = relations { contact.contactRelations = (try? parseRelations(json)) ?? [] }
-        if let json = dates { contact.dates = (try? parseDates(json)) ?? [] }
+        if let json = addresses { contact.postalAddresses = try parseAddresses(json) }
+        if let json = urls { contact.urlAddresses = try parseURLs(json) }
+        if let json = socialProfiles { contact.socialProfiles = try parseSocialProfiles(json) }
+        if let json = instantMessages { contact.instantMessageAddresses = try parseInstantMessages(json) }
+        if let json = relations { contact.contactRelations = try parseRelations(json) }
+        if let json = dates { contact.dates = try parseDates(json) }
 
         // Birthday
         if let birthdayStr = birthday {
-            contact.birthday = try? parseBirthday(birthdayStr)
+            contact.birthday = try parseBirthday(birthdayStr)
         }
 
         // Notes (guarded: macOS may restrict note access via TCC)
