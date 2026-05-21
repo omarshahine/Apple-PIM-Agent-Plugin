@@ -2,7 +2,7 @@
 description: Manage macOS reminders - list, search, create, complete, update, delete with filtering and batch operations
 argument-hint: "[lists|items|search|create|complete|update|delete] [options]"
 allowed-tools:
-  - mcp__apple-pim__reminder
+  - mcp__plugin_apple-pim_apple-pim__reminder
 ---
 
 # Reminder Management

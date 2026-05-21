@@ -54,11 +54,11 @@ description: |
   assistant: "I'll use the pim-assistant agent to check authorization status."
   </example>
 tools:
-  - mcp__apple-pim__apple-pim
-  - mcp__apple-pim__calendar
-  - mcp__apple-pim__reminder
-  - mcp__apple-pim__contact
-  - mcp__apple-pim__mail
+  - mcp__plugin_apple-pim_apple-pim__apple-pim
+  - mcp__plugin_apple-pim_apple-pim__calendar
+  - mcp__plugin_apple-pim_apple-pim__reminder
+  - mcp__plugin_apple-pim_apple-pim__contact
+  - mcp__plugin_apple-pim_apple-pim__mail
 color: blue
 ---
 

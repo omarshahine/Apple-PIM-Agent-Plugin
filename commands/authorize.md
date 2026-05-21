@@ -2,7 +2,7 @@
 description: Check and request macOS permissions for calendars, reminders, contacts, and Mail.app automation
 argument-hint: "[status|request] [--domain calendars|reminders|contacts|mail]"
 allowed-tools:
-  - mcp__apple-pim__apple-pim
+  - mcp__plugin_apple-pim_apple-pim__apple-pim
 ---
 
 # Authorize Apple PIM Access

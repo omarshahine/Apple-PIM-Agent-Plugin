@@ -2,7 +2,7 @@
 description: Manage macOS calendar events - list, search, create, update, delete with batch operations
 argument-hint: "[list|events|search|create|update|delete] [options]"
 allowed-tools:
-  - mcp__apple-pim__calendar
+  - mcp__plugin_apple-pim_apple-pim__calendar
 ---
 
 # Calendar Management

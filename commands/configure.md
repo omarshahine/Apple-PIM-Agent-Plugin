@@ -1,7 +1,7 @@
 ---
 description: Configure which domains, calendars, and reminder lists the plugin can access
 allowed-tools:
-  - mcp__apple-pim__apple-pim
+  - mcp__plugin_apple-pim_apple-pim__apple-pim
   - Write
   - Read
   - AskUserQuestion

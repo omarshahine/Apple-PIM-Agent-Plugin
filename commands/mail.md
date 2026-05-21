@@ -2,7 +2,7 @@
 description: Manage macOS Mail.app - list, read, search, send, reply, update flags, move, delete, and verify sender authentication
 argument-hint: "[accounts|mailboxes|messages|get|search|send|reply|update|move|delete|auth_check] [options]"
 allowed-tools:
-  - mcp__apple-pim__mail
+  - mcp__plugin_apple-pim_apple-pim__mail
 ---
 
 # Mail Management

@@ -286,7 +286,7 @@ mail-cli auth-check --id "<message-id@example.com>"
 mail-cli auth-check --id "<message-id>" --trusted-senders ~/custom/senders.json
 
 # MCP tool
-mcp__apple-pim__mail({ action: "auth_check", id: "<message-id>" })
+mcp__plugin_apple-pim_apple-pim__mail({ action: "auth_check", id: "<message-id>" })
 
 # OpenClaw tool
 apple_pim_mail({ action: "auth_check", id: "<message-id>" })
