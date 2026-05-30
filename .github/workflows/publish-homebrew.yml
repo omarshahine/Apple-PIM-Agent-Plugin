@@ -1,0 +1,78 @@
+name: Publish to Homebrew Tap
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+# Bumps the findmy-cli formula in omarshahine/homebrew-tap to the tag that
+# triggered this run. The formula builds from the GitHub source tarball, so we
+# only need to update `url` and `sha256` — no bottle upload.
+#
+# Requires a repo secret HOMEBREW_TAP_TOKEN: a fine-grained PAT scoped to
+# omarshahine/homebrew-tap with Contents: read & write. The default GITHUB_TOKEN
+# cannot push to a different repository.
+jobs:
+  bump:
+    name: Bump findmy-cli formula
+    runs-on: ubuntu-latest
+    env:
+      TAP_REPO: omarshahine/homebrew-tap
+      FORMULA_PATH: Formula/apple-pim-cli.rb
+    steps:
+      - name: Resolve version and tarball checksum
+        id: meta
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TARBALL="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
+          echo "Fetching $TARBALL"
+          # Retry to absorb the brief delay before GitHub serves a fresh tag tarball.
+          for attempt in 1 2 3 4 5; do
+            if curl -fsSL "$TARBALL" -o source.tar.gz; then
+              break
+            fi
+            echo "Attempt $attempt failed; retrying in 10s..."
+            sleep 10
+          done
+          SHA256=$(sha256sum source.tar.gz | awk '{print $1}')
+          echo "version=$VERSION"   >> "$GITHUB_OUTPUT"
+          echo "tarball=$TARBALL"   >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256"     >> "$GITHUB_OUTPUT"
+          echo "Resolved v$VERSION -> $SHA256"
+
+      - name: Checkout tap
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TAP_REPO }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Update formula
+        run: |
+          cd tap
+          FILE="${FORMULA_PATH}"
+          NEW_URL="${{ steps.meta.outputs.tarball }}"
+          NEW_SHA="${{ steps.meta.outputs.sha256 }}"
+
+          # Replace the archive url and the sha256 that immediately follows it.
+          perl -0pi -e "s{url \"https://github.com/${GITHUB_REPOSITORY//\//\\/}/archive/refs/tags/v[^\"]+\.tar\.gz\"}{url \"$NEW_URL\"}" "$FILE"
+          perl -0pi -e "s{^(\s*)sha256 \"[0-9a-f]{64}\"}{\${1}sha256 \"$NEW_SHA\"}m" "$FILE"
+
+          echo "----- updated formula head -----"
+          grep -nE 'url |sha256 ' "$FILE" | head -4
+
+      - name: Commit and push
+        run: |
+          cd tap
+          if git diff --quiet -- "${FORMULA_PATH}"; then
+            echo "Formula already up to date; nothing to commit."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${FORMULA_PATH}"
+          git commit -m "findmy-cli: update to v${{ steps.meta.outputs.version }}"
+          git push
