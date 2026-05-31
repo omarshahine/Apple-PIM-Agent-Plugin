@@ -367,6 +367,13 @@ private func startTLSWriteCallback(
 /// re-EHLO over the now-encrypted channel. See issue #62.
 ///
 /// `@unchecked Sendable`: all mutable state is serialized through `queue`.
+///
+/// Concurrency note: I/O is blocking, serialized on a single dedicated
+/// `DispatchQueue`. `receiveLine()` can hold that queue's thread in `recv()` for
+/// up to `timeout` seconds, and `send()` serializes behind it. This is fine for
+/// the intended single-shot, strictly-sequential SMTP conversation (one transport
+/// per `smtp-send` invocation, its own private queue — never a shared pool). It
+/// is NOT safe to reuse one instance for overlapping/concurrent sends.
 public final class STARTTLSTransport: SMTPTransport, @unchecked Sendable {
 
     private let host: String

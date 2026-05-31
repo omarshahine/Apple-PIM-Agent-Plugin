@@ -94,7 +94,15 @@ public struct IMAPClient: Sendable {
         guard login.ok else { throw IMAPClientError.loginFailed(login.text) }
 
         // 3. APPEND with a literal. The command line ends with `{N}`; the server
-        //    answers with a `+` continuation, then we stream the message bytes.
+        //    answers with a `+` continuation, then we stream exactly N octets
+        //    followed by a CRLF that terminates the command.
+        //
+        //    The literal is `rawMessage` verbatim (N == rawMessage.count) — the
+        //    terminating CRLF is a SEPARATE octet pair that is NOT counted in {N}
+        //    (RFC 3501 §6.3.11; this matches Python's imaplib). Folding the CRLF
+        //    into the literal would either mis-count {N} or, for a message that
+        //    already ends in CRLF (the normal rendered case), omit the terminator
+        //    entirely and hang the session waiting for end-of-command.
         let appendTag = "A2"
         let dateArg = Self.imapInternalDate(internalDate)
         let literalLength = rawMessage.count
@@ -108,13 +116,11 @@ public struct IMAPClient: Sendable {
             throw IMAPClientError.appendNoContinuation(continuation)
         }
 
-        // Stream the message bytes, then the terminating CRLF that closes the literal.
+        // Stream the N-octet literal, then the command-terminating CRLF.
         var payload = rawMessage
-        if !payload.suffix(2).elementsEqual("\r\n".utf8) {
-            payload.append(Data("\r\n".utf8))
-        }
+        payload.append(Data("\r\n".utf8))
         try await transport.send(payload)
-        if verbose { logSink.log("C: <\(rawMessage.count) bytes of APPEND literal>") }
+        if verbose { logSink.log("C: <\(literalLength) bytes of APPEND literal>") }
 
         let appendResp = try await readTagged(transport, tag: appendTag)
         guard appendResp.ok else { throw IMAPClientError.appendRejected(appendResp.text) }
@@ -126,14 +132,27 @@ public struct IMAPClient: Sendable {
 
     // MARK: - Response reading
 
+    /// Maximum untagged/continuation lines tolerated before the tagged response.
+    /// A backstop against a server that streams indefinitely without ever sending
+    /// the tag — the transport's receive timeout is the primary bound, this caps
+    /// the pathological "fast but endless" case. Generous so legitimate multi-line
+    /// responses never false-trip.
+    private static let maxResponseLines = 10_000
+
     /// Read lines until the tagged response (`<tag> OK|NO|BAD …`) arrives,
     /// skipping untagged (`*`) and continuation (`+`) lines.
     private func readTagged(_ transport: SMTPTransport, tag: String) async throws -> (ok: Bool, text: String) {
+        var lineCount = 0
         while true {
             let line = try await receive(transport)
             if line.hasPrefix(tag + " ") {
                 let rest = String(line.dropFirst(tag.count + 1))
                 return (rest.uppercased().hasPrefix("OK"), rest)
+            }
+            lineCount += 1
+            if lineCount > Self.maxResponseLines {
+                throw IMAPClientError.appendRejected(
+                    "no tagged '\(tag)' response after \(Self.maxResponseLines) lines")
             }
             // Untagged status / continuation — keep reading.
         }

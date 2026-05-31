@@ -38,8 +38,9 @@ struct IMAPClientTests {
                     && $0.hasSuffix("\r\n")
             }, label: "APPEND command"),
             .reply(lines: ["+ go ahead"]),
-            // raw already ends in CRLF, so no extra CRLF is appended.
-            .expectSend({ $0 == rawString }, label: "APPEND literal"),
+            // Literal is `raw` verbatim ({len} octets); a SEPARATE CRLF terminates
+            // the command, so the single send payload is raw + CRLF.
+            .expectSend({ $0 == rawString + "\r\n" }, label: "APPEND literal"),
             .reply(lines: ["A2 OK [APPENDUID 1 99] APPEND completed"]),
             .expectSend({ $0 == "A3 LOGOUT\r\n" }, label: "LOGOUT"),
             .reply(lines: ["* BYE logging out", "A3 OK LOGOUT completed"]),
@@ -60,7 +61,31 @@ struct IMAPClientTests {
             .reply(lines: ["* CAPABILITY IMAP4rev1 UIDPLUS", "A1 OK done"]),
             .expectSend({ $0.hasPrefix("A2 APPEND ") }, label: "APPEND command"),
             .reply(lines: ["+ ready for literal"]),
-            .expectSend({ $0 == rawString }, label: "literal"),
+            .expectSend({ $0 == rawString + "\r\n" }, label: "literal"),
+            .reply(lines: ["A2 OK appended"]),
+            .expectSend({ $0 == "A3 LOGOUT\r\n" }, label: "LOGOUT"),
+            .reply(lines: ["A3 OK"]),
+        ])
+        try await client().runAppend(transport: fake, rawMessage: raw, internalDate: Self.fixedDate)
+        try fake.verifyComplete()
+    }
+
+    @Test("Literal length matches message exactly even when it lacks a trailing CRLF")
+    func testLiteralLengthWithoutTrailingCRLF() async throws {
+        // Regression for the {N} mismatch: a message NOT ending in CRLF must still
+        // advertise {rawMessage.count} and stream exactly that many octets, with a
+        // separate CRLF terminator (so the payload is raw + CRLF).
+        let raw = Data("From: a@b.com\r\nSubject: NoTrailingCRLF\r\n\r\nbody no newline".utf8)
+        let len = raw.count
+        #expect(!raw.suffix(2).elementsEqual("\r\n".utf8), "fixture must not end in CRLF")
+        let rawString = String(data: raw, encoding: .utf8)!
+        let fake = FakeTransport([
+            .reply(lines: ["* OK ready"]),
+            .expectSend({ $0.hasPrefix("A1 LOGIN ") }, label: "LOGIN"),
+            .reply(lines: ["A1 OK done"]),
+            .expectSend({ $0.contains("{\(len)}") }, label: "APPEND command advertises raw octet count"),
+            .reply(lines: ["+ go"]),
+            .expectSend({ $0 == rawString + "\r\n" }, label: "literal + terminator"),
             .reply(lines: ["A2 OK appended"]),
             .expectSend({ $0 == "A3 LOGOUT\r\n" }, label: "LOGOUT"),
             .reply(lines: ["A3 OK"]),
@@ -116,7 +141,7 @@ struct IMAPClientTests {
             .reply(lines: ["A1 OK done"]),
             .expectSend({ $0.hasPrefix("A2 APPEND ") }, label: "APPEND command"),
             .reply(lines: ["+ go ahead"]),
-            .expectSend({ $0 == rawString }, label: "literal"),
+            .expectSend({ $0 == rawString + "\r\n" }, label: "literal"),
             .reply(lines: ["A2 NO over quota"]),
         ])
         await #expect(throws: IMAPClientError.self) {
@@ -151,7 +176,7 @@ struct IMAPClientTests {
             .reply(lines: ["A1 OK done"]),
             .expectSend({ $0.hasPrefix("A2 APPEND ") }, label: "APPEND command"),
             .reply(lines: ["+ go"]),
-            .expectSend({ $0 == rawString }, label: "literal"),
+            .expectSend({ $0 == rawString + "\r\n" }, label: "literal"),
             .reply(lines: ["A2 OK appended"]),
             .expectSend({ $0 == "A3 LOGOUT\r\n" }, label: "LOGOUT"),
             .reply(lines: ["A3 OK"]),
