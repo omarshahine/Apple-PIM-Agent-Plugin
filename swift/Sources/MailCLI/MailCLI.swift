@@ -255,17 +255,62 @@ func inferMimeJXA() -> String {
 }
 
 /// Validate that a destination directory is within the user's home or system temp.
-/// Prevents agents from writing attachments to arbitrary filesystem locations.
-/// Call after createDirectory so resolvingSymlinksInPath works on the real path.
+/// Directory/path components that must never be a write target, even inside the
+/// home directory. Blocks credential stores and login-persistence locations so a
+/// prompt-injected agent cannot drop an attachment into `~/Library/LaunchAgents`
+/// or overwrite material under `~/.ssh`. Mirrors the read-side denylist in
+/// lib/safe-attachments.js.
+private let deniedDestComponents: Set<String> = [
+    ".ssh", ".aws", ".gnupg", ".kube", ".docker",
+    ".secrets", ".chezmoi", "Keychains",
+    "LaunchAgents", "LaunchDaemons",
+]
+
+/// Canonicalize a path that may not exist yet by resolving symlinks on its
+/// deepest existing ancestor, then re-appending the not-yet-created tail. This
+/// lets `validateDestDir` run *before* the directory is created, so a rejected
+/// target never leaves a stray directory behind.
+func canonicalizeIntendedPath(_ url: URL) -> String {
+    let fm = FileManager.default
+    var existing = url.standardizedFileURL   // resolves ".." lexically
+    var tail: [String] = []
+    while !fm.fileExists(atPath: existing.path) {
+        let parent = existing.deletingLastPathComponent()
+        if parent.path == existing.path { break }  // reached root
+        tail.insert(existing.lastPathComponent, at: 0)
+        existing = parent
+    }
+    var resolved = existing.resolvingSymlinksInPath().standardizedFileURL
+    for comp in tail { resolved.appendPathComponent(comp) }
+    return resolved.standardizedFileURL.path
+}
+
+/// Prevents agents from writing attachments to arbitrary or sensitive filesystem
+/// locations. Confines writes to the home directory or system temp, then rejects
+/// sensitive subpaths (credential stores, login-persistence dirs) even within
+/// home. Validate the *intended* path before creating it so a rejected target
+/// never results in a stray directory.
 func validateDestDir(_ url: URL) throws {
     let home = FileManager.default.homeDirectoryForCurrentUser
         .resolvingSymlinksInPath().standardizedFileURL.path
     let tmp = FileManager.default.temporaryDirectory
         .resolvingSymlinksInPath().standardizedFileURL.path
-    let resolved = url.resolvingSymlinksInPath().standardizedFileURL.path
-    guard resolved == home || resolved.hasPrefix(home + "/") ||
-          resolved == tmp  || resolved.hasPrefix(tmp  + "/") else {
+    let resolved = canonicalizeIntendedPath(url)
+
+    let inHome = resolved == home || resolved.hasPrefix(home + "/")
+    let inTmp = resolved == tmp || resolved.hasPrefix(tmp + "/")
+    guard inHome || inTmp else {
         throw CLIError.invalidInput("destDir must be within your home directory or system temp directory, got: \(resolved)")
+    }
+
+    // Reject sensitive subpaths even when inside home.
+    let components = resolved.split(separator: "/").map(String.init)
+    for comp in components where deniedDestComponents.contains(comp) {
+        throw CLIError.invalidInput("destDir may not target the protected location \"\(comp)\": \(resolved)")
+    }
+    // Block the plugin's own config/secrets directory.
+    if resolved == "\(home)/.config/apple-pim" || resolved.hasPrefix("\(home)/.config/apple-pim/") {
+        throw CLIError.invalidInput("destDir may not target the apple-pim config directory: \(resolved)")
     }
 }
 
@@ -1725,11 +1770,12 @@ struct SaveAttachment: AsyncParsableCommand {
             destDirURL = FileManager.default.temporaryDirectory.appendingPathComponent("apple-pim-attachments")
         }
 
-        try FileManager.default.createDirectory(at: destDirURL, withIntermediateDirectories: true)
-
-        // Security: restrict writes to home directory or system temp.
-        // Called after createDirectory so resolvingSymlinksInPath works on the real path.
+        // Security: restrict writes to home directory or system temp, and reject
+        // sensitive subpaths — validated *before* creating the directory so a
+        // rejected target never leaves a stray directory behind.
         try validateDestDir(destDirURL)
+
+        try FileManager.default.createDirectory(at: destDirURL, withIntermediateDirectories: true)
 
         // Build save targets with deduplicated filenames.
         // allocatedPaths tracks planned writes so batch saves with duplicate
