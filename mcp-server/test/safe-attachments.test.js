@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { validateAttachment, validateAttachments } from "../../lib/safe-attachments.js";
+import { homedir, tmpdir } from "node:os";
+import { validateAttachment, validateAttachments, validateDestDir } from "../../lib/safe-attachments.js";
 
 let workdir;
 const canon = (p) => realpathSync(p);
@@ -138,5 +139,53 @@ describe("safe-attachments", () => {
     const policy = { enabled: true, allowedRoots: [workdir] };
     expect(validateAttachments(a, { policy })).toEqual([canon(a)]);
     expect(validateAttachments([a, b], { policy })).toEqual([canon(a), canon(b)]);
+  });
+});
+
+describe("validateDestDir (save_attachment write confinement)", () => {
+  it("accepts a directory under the home directory", () => {
+    const dir = join(homedir(), "Downloads", "pim-test");
+    expect(validateDestDir(dir)).toBe(dir);
+  });
+
+  it("expands ~ and accepts the result", () => {
+    expect(validateDestDir("~/Downloads")).toBe(join(homedir(), "Downloads"));
+  });
+
+  it("accepts a directory under system temp", () => {
+    const dir = join(tmpdir(), "pim-att");
+    expect(validateDestDir(dir)).toBe(dir);
+  });
+
+  it("rejects a path outside home and temp", () => {
+    expect(() => validateDestDir("/etc/cron.d")).toThrow(/within your home directory or system temp/i);
+  });
+
+  it("rejects login-persistence directories even inside home", () => {
+    expect(() => validateDestDir(join(homedir(), "Library", "LaunchAgents"))).toThrow(
+      /protected location "LaunchAgents"/,
+    );
+  });
+
+  it("rejects credential-store directories even inside home", () => {
+    expect(() => validateDestDir(join(homedir(), ".ssh"))).toThrow(/protected location "\.ssh"/);
+    expect(() => validateDestDir(join(homedir(), ".aws", "x"))).toThrow(/protected location "\.aws"/);
+  });
+
+  it("rejects '..' traversal that escapes home into a protected dir", () => {
+    expect(() => validateDestDir(join(homedir(), "Downloads", "..", ".ssh"))).toThrow(
+      /protected location "\.ssh"/,
+    );
+  });
+
+  it("rejects the apple-pim config directory", () => {
+    expect(() => validateDestDir(join(homedir(), ".config", "apple-pim"))).toThrow(
+      /apple-pim config directory/,
+    );
+  });
+
+  it("rejects non-string and empty input", () => {
+    expect(() => validateDestDir("")).toThrow(/non-empty string/);
+    expect(() => validateDestDir(undefined)).toThrow(/non-empty string/);
   });
 });

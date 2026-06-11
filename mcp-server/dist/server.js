@@ -77888,7 +77888,7 @@ var tools = [
         from: { type: "string", description: "Sender email address for account selection (send)" },
         attachment: { type: "array", items: { type: "string" }, description: 'File paths to attach (send/reply). DISABLED BY DEFAULT to prevent local-file exfiltration. Opt in by creating ~/.config/apple-pim/mail-attachments.json with {"enabled": true, "allowedRoots": ["~/Downloads"]}. Even when enabled, paths in ~/.ssh, ~/.aws, ~/.gnupg, ~/.kube, ~/.docker, ~/.secrets, etc. and files matching id_rsa/.netrc/.pgpass/*.pem/*.key/*secret*/*credential* are always refused. Symlinks are resolved to canonical paths before checking.' },
         index: { type: "integer", minimum: 0, description: "Zero-based attachment index (save_attachment). Omit to save all attachments." },
-        destDir: { type: "string", description: "Directory to save attachments into (save_attachment). Must be within home directory or system temp. Defaults to system temp. Use dryRun: true to preview." },
+        destDir: { type: "string", description: "Directory to save attachments into (save_attachment). Must be within home directory or system temp; sensitive subpaths (~/.ssh, ~/.aws, ~/.gnupg, ~/Library/LaunchAgents, ~/.config/apple-pim, etc.) are always refused even inside home. Defaults to system temp. Use dryRun: true to preview." },
         trustedSenders: { type: "string", description: "Path to trusted-senders.json (auth_check)" },
         configDir: { type: "string", description: "Override PIM config directory (OpenClaw only \u2014 ignored by MCP server)" },
         profile: { type: "string", description: "Override PIM profile name (OpenClaw only \u2014 MCP server uses APPLE_PIM_PROFILE env)" }
@@ -78561,7 +78561,7 @@ async function formatMailGetResult(result, format) {
 
 // ../lib/safe-attachments.js
 import { existsSync as existsSync2, readFileSync as readFileSync2, realpathSync, statSync } from "node:fs";
-import { homedir as homedir2 } from "node:os";
+import { homedir as homedir2, tmpdir as tmpdir2 } from "node:os";
 import { resolve, sep } from "node:path";
 function configPath() {
   return process.env.APPLE_PIM_MAIL_ATTACHMENTS_CONFIG || `${homedir2()}/.config/apple-pim/mail-attachments.json`;
@@ -78711,6 +78711,44 @@ function validateAttachments(paths, opts = {}) {
   const policy = opts.policy ?? loadPolicy();
   const list = Array.isArray(paths) ? paths : [paths];
   return list.map((p) => validateAttachment(p, { policy }));
+}
+var DENIED_DEST_COMPONENTS = /* @__PURE__ */ new Set([
+  ".ssh",
+  ".aws",
+  ".gnupg",
+  ".kube",
+  ".docker",
+  ".secrets",
+  ".chezmoi",
+  "Keychains",
+  "LaunchAgents",
+  "LaunchDaemons"
+]);
+function validateDestDir(rawDir) {
+  if (typeof rawDir !== "string" || rawDir.length === 0) {
+    throw new TypeError("destDir must be a non-empty string");
+  }
+  const expanded = expandHome(rawDir);
+  const resolved = resolve(expanded);
+  const home = canonicalizeRoot(homedir2());
+  const tmpRoots = [canonicalizeRoot(tmpdir2()), "/tmp", "/private/tmp", "/var/folders", "/private/var/folders"];
+  const inHome = resolved === home || resolved.startsWith(home + sep);
+  const inTmp = tmpRoots.some((r) => resolved === r || resolved.startsWith(r + sep));
+  if (!inHome && !inTmp) {
+    throw new Error(
+      `destDir must be within your home directory or system temp directory, got: ${resolved}`
+    );
+  }
+  for (const comp of resolved.split(sep)) {
+    if (DENIED_DEST_COMPONENTS.has(comp)) {
+      throw new Error(`destDir may not target the protected location "${comp}": ${resolved}`);
+    }
+  }
+  const appleConfig = `${home}${sep}.config${sep}apple-pim`;
+  if (resolved === appleConfig || resolved.startsWith(appleConfig + sep)) {
+    throw new Error(`destDir may not target the apple-pim config directory: ${resolved}`);
+  }
+  return resolved;
 }
 
 // ../lib/handlers/mail.js
@@ -78891,7 +78929,7 @@ async function handleMail(args, runCLI2) {
       if (args.index !== void 0)
         saveArgs.push("--index", String(args.index));
       if (args.destDir)
-        saveArgs.push("--dest-dir", args.destDir);
+        saveArgs.push("--dest-dir", validateDestDir(args.destDir));
       if (args.mailbox)
         saveArgs.push("--mailbox", args.mailbox);
       if (args.account)
