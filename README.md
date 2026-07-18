@@ -1,9 +1,11 @@
-# Apple PIM CLI Tools
+# Apple PIM: Calendar, Reminders, Contacts, Mail
 
-[![GitHub](https://img.shields.io/github/v/release/omarshahine/Apple-PIM-Agent-Plugin)](https://github.com/omarshahine/Apple-PIM-Agent-Plugin)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/omarshahine/Apple-PIM-Agent-Plugin/blob/main/LICENSE)
+*PIM = Personal Information Manager.*
 
-**GitHub**: [github.com/omarshahine/Apple-PIM-Agent-Plugin](https://github.com/omarshahine/Apple-PIM-Agent-Plugin)
+[![GitHub](https://img.shields.io/github/v/release/omarshahine/apple-pim)](https://github.com/omarshahine/apple-pim)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/omarshahine/apple-pim/blob/main/LICENSE)
+
+**GitHub**: [github.com/omarshahine/apple-pim](https://github.com/omarshahine/apple-pim)
 
 Native macOS integration for Calendar, Reminders, Contacts, and Mail using EventKit, Contacts, and JXA frameworks. Works with **Claude Code** (via MCP) and **OpenClaw** (via native tool registration).
 
@@ -49,7 +51,7 @@ The `--install` flag creates symlinks in `~/.local/bin/`, so rebuilding (`swift 
 Inside Claude Code, run:
 
 ```
-/plugin marketplace add omarshahine/Apple-PIM-Agent-Plugin
+/plugin marketplace add omarshahine/apple-pim
 /plugin install apple-pim@apple-pim
 ```
 
@@ -93,15 +95,15 @@ Optionally, configure the binary location if the CLIs are not on PATH:
 ### Development Installation
 
 ```bash
-git clone https://github.com/omarshahine/Apple-PIM-Agent-Plugin.git
-cd Apple-PIM-Agent-Plugin
+git clone https://github.com/omarshahine/apple-pim.git
+cd apple-pim
 ./setup.sh
 ```
 
 Then inside Claude Code, add the local checkout as a marketplace:
 
 ```
-/plugin marketplace add /absolute/path/to/Apple-PIM-Agent-Plugin
+/plugin marketplace add /absolute/path/to/apple-pim
 /plugin install apple-pim@apple-pim
 ```
 

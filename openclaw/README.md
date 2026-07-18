@@ -1,4 +1,6 @@
-# Apple PIM
+# Apple PIM: Calendar, Reminders, Contacts, Mail
+
+*PIM = Personal Information Manager.*
 
 OpenClaw plugin for native macOS Calendar, Reminders, Contacts, and Mail. It wraps four Swift CLIs (`calendar-cli`, `reminder-cli`, `contacts-cli`, `mail-cli`) built locally from EventKit, Contacts, and JXA. Once you approve the matching macOS permission prompts, the agent gets read/write access to all four domains, including mail send and delete.
 
@@ -56,7 +58,7 @@ Even when enabled, sensitive paths (`~/.ssh`, `~/.aws`, etc.) and files like
 - **Per-domain control**: each domain (calendar, reminder, contact, mail) can be enabled or disabled independently.
 - Same Swift CLIs power both the Claude Code plugin (via MCP) and this OpenClaw plugin (via native tool registration).
 
-Full docs: [github.com/omarshahine/Apple-PIM-Agent-Plugin](https://github.com/omarshahine/Apple-PIM-Agent-Plugin)
+Full docs: [github.com/omarshahine/apple-pim](https://github.com/omarshahine/apple-pim)
 
 ## License
 

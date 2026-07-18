@@ -65,12 +65,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/omarshahine/Apple-PIM-Agent-Plugin.git",
+    "url": "https://github.com/omarshahine/apple-pim.git",
     "directory": "openclaw"
   },
-  "homepage": "https://github.com/omarshahine/Apple-PIM-Agent-Plugin#readme",
+  "homepage": "https://github.com/omarshahine/apple-pim#readme",
   "bugs": {
-    "url": "https://github.com/omarshahine/Apple-PIM-Agent-Plugin/issues"
+    "url": "https://github.com/omarshahine/apple-pim/issues"
   },
   "publishConfig": {
     "access": "public"

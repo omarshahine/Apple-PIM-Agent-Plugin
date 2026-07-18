@@ -1,7 +1,7 @@
 {
   "id": "apple-pim-cli",
-  "name": "Apple PIM",
-  "description": "macOS-only. Wraps four native Swift CLIs (calendar-cli, reminder-cli, contacts-cli, mail-cli) you build locally from source via ./setup.sh — no binaries are downloaded by the registry. Grants the agent read/write access to Calendar, Reminders, Contacts, and Mail.app (including send/delete) once you approve the corresponding macOS TCC and Automation prompts.",
+  "name": "Apple PIM: Calendar, Reminders, Contacts, Mail",
+  "description": "macOS-only. Wraps four native Swift CLIs (calendar-cli, reminder-cli, contacts-cli, mail-cli) you build locally from source via ./setup.sh \u2014 no binaries are downloaded by the registry. Grants the agent read/write access to Calendar, Reminders, Contacts, and Mail.app (including send/delete) once you approve the corresponding macOS TCC and Automation prompts.",
   "version": "3.8.3",
   "configSchema": {
     "type": "object",
@@ -12,11 +12,11 @@
       },
       "profile": {
         "type": "string",
-        "description": "Default PIM config profile name"
+        "description": "Default profile name for Apple PIM (Personal Information Manager) config"
       },
       "configDir": {
         "type": "string",
-        "description": "Default PIM config directory"
+        "description": "Default config directory for Apple PIM (Personal Information Manager)"
       },
       "mailAttachmentsConfig": {
         "type": "string",
@@ -32,12 +32,12 @@
       "placeholder": "~/.local/bin"
     },
     "profile": {
-      "label": "PIM Profile",
+      "label": "Profile",
       "help": "Config profile name for filtering calendars/lists/contacts. See ~/.config/apple-pim/profiles/."
     },
     "configDir": {
       "label": "Config Directory",
-      "help": "Override the PIM config root directory (default: ~/.config/apple-pim/).",
+      "help": "Override the config root directory for Apple PIM (default: ~/.config/apple-pim/).",
       "placeholder": "~/.config/apple-pim"
     },
     "mailAttachmentsConfig": {

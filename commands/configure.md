@@ -9,6 +9,8 @@ allowed-tools:
 
 # Configure Apple PIM Access
 
+Apple PIM is the Personal Information Manager plugin for Calendar, Reminders, Contacts, and Mail.
+
 Help the user configure which domains, calendars, and reminder lists the apple-pim plugin can access.
 
 **Tip:** If you encounter permission errors during configuration, use `/apple-pim:authorize` to check and request macOS permissions first.

@@ -216,10 +216,10 @@ clawpatch revalidate --finding <id>
 If this repo needs hand-authored feature coverage, keep those curated definitions in `tools/clawpatch/features/` and sync/copy them into `.clawpatch/features/` before review. Do not commit `.clawpatch/` generated state.
 
 
-<!-- BEGIN CLAUDE MEMORY IMPORT: -Users-omarshahine-GitHub-Apple-PIM-Agent-Plugin -->
+<!-- BEGIN CLAUDE MEMORY IMPORT: -Users-omarshahine-GitHub-apple-pim -->
 ## Imported Claude Project Memory
 
-Durable memory promoted from `~/.claude/projects/-Users-omarshahine-GitHub-Apple-PIM-Agent-Plugin/memory` during the AGENTS.md migration. Keep this section current when project-specific operating knowledge changes.
+Durable memory promoted from `~/.claude/projects/-Users-omarshahine-GitHub-apple-pim/memory` during the AGENTS.md migration. Keep this section current when project-specific operating knowledge changes.
 
 ### memory/MEMORY.md
 
@@ -338,4 +338,4 @@ The plugin ships an in-repo helper at `helper/` (Info.plist + `pim-helper` zsh d
 
 **How to apply:** Mail.app is intentionally NOT routed through the helper — it uses Automation TCC, a different service. If a new EventKit/Contacts CLI is added, list it in `HELPER_ELIGIBLE_CLIS` in `lib/cli-runner.js` and add the corresponding usage string to `helper/Info.plist`. Do not bind Info.plist into the CLI Mach-O via linker `-sectcreate` — empirically tested, doesn't fix the responsible-process attribution. Related: see [[feedback_push_vs_pr]] for unrelated push/PR convention; nothing else cross-references yet.
 
-<!-- END CLAUDE MEMORY IMPORT: -Users-omarshahine-GitHub-Apple-PIM-Agent-Plugin -->
+<!-- END CLAUDE MEMORY IMPORT: -Users-omarshahine-GitHub-apple-pim -->

@@ -3,7 +3,7 @@ name: apple-pim
 description: Native macOS personal information management for calendars, reminders, contacts, and local Mail.app. Use when the user wants to schedule meetings, create events, check their calendar, create or complete reminders, look up contacts, find someone's phone number or email, manage tasks and to-do lists, triage local Mail.app messages, or troubleshoot EventKit, Contacts, or Mail.app permissions on macOS.
 ---
 
-# Apple PIM (EventKit, Contacts & Mail)
+# Apple PIM: Personal Information Manager (EventKit, Contacts & Mail)
 
 ## Requirements
 

@@ -53,11 +53,11 @@ npm run prepack
 clawhub package publish "$PKG_DIR" \
   --family code-plugin \
   --name "apple-pim-cli" \
-  --display-name "Apple PIM" \
+  --display-name "Apple PIM: Calendar, Reminders, Contacts, Mail" \
   --version "$VERSION" \
   --changelog "$CHANGELOG" \
   --tags "latest" \
-  --source-repo "omarshahine/Apple-PIM-Agent-Plugin" \
+  --source-repo "omarshahine/apple-pim" \
   --source-commit "$COMMIT" \
   --source-ref "main" \
   --source-path "openclaw"

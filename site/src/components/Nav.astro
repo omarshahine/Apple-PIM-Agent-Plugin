@@ -7,7 +7,7 @@ try {
 } catch {
   // Shallow clone (e.g. Cloudflare Pages) — fall back to GitHub API
   try {
-    const res = await fetch('https://api.github.com/repos/omarshahine/Apple-PIM-Agent-Plugin/releases/latest');
+    const res = await fetch('https://api.github.com/repos/omarshahine/apple-pim/releases/latest');
     if (res.ok) {
       const data = await res.json();
       version = data.tag_name || '';
@@ -69,7 +69,7 @@ const navLinks = [
 
         <!-- Star on GitHub -->
         <a
-          href="https://github.com/omarshahine/Apple-PIM-Agent-Plugin"
+          href="https://github.com/omarshahine/apple-pim"
           target="_blank"
           rel="noopener noreferrer"
           class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-muted hover:text-foreground hover:bg-card transition-all ml-1"
@@ -131,7 +131,7 @@ const navLinks = [
           </a>
         ))}
         <a
-          href="https://github.com/omarshahine/Apple-PIM-Agent-Plugin"
+          href="https://github.com/omarshahine/apple-pim"
           target="_blank"
           rel="noopener noreferrer"
           class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm text-muted hover:text-foreground hover:bg-card transition-all mobile-link"
@@ -202,7 +202,7 @@ const navLinks = [
     const el = document.getElementById('github-stars');
     if (!el) return;
     try {
-      const res = await fetch('https://api.github.com/repos/omarshahine/Apple-PIM-Agent-Plugin');
+      const res = await fetch('https://api.github.com/repos/omarshahine/apple-pim');
       if (res.ok) {
         const data = await res.json();
         const count = data.stargazers_count;

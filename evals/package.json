@@ -1,7 +1,7 @@
 {
   "private": true,
   "type": "module",
-  "description": "Agent eval suite for Apple PIM CLI tools",
+  "description": "Agent eval suite for Apple PIM, a Personal Information Manager for Calendar, Reminders, Contacts, and Mail",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest"
