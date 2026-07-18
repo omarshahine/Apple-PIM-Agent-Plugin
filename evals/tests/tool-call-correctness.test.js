@@ -313,7 +313,9 @@ describe("Category 1: Tool Call Correctness", () => {
       await handleMail({ action: "save_attachment", id: "msg_1", destDir: "/tmp/test" }, mockCLI);
 
       const callArgs = mockCLI.mock.calls[0][1];
-      expect(argsPairPresent(callArgs, "--dest-dir", "/tmp/test")).toBe(true);
+      // destDir is canonicalized before it reaches the CLI, so /tmp resolves to
+      // /private/tmp on macOS and stays /tmp on Linux.
+      expect(argsPairPresent(callArgs, "--dest-dir", join(realpathSync("/tmp"), "test"))).toBe(true);
     });
 
     it("omits --index when index is not provided", async () => {
