@@ -12,17 +12,62 @@
 # responsible process; the macOS prompt then fires against the helper's
 # bundle id, and the grant persists across hosts.
 #
-# Idempotent. Safe to re-run after `setup.sh --install`.
+# Idempotent in the strong sense: if the installed bundle already has the
+# same content AND a valid signature, this script leaves it completely
+# untouched. That matters because macOS TCC binds permission grants to the
+# helper's code signature — re-signing an unchanged bundle silently drops
+# every Calendar / Reminders / Contacts grant and forces the user to
+# re-answer all the permission dialogs. Pass --force to rebuild anyway.
+#
+# Signing identity: ad-hoc ("-") by default. Set APPLE_PIM_SIGN_IDENTITY to
+# a codesign identity (e.g. "Developer ID Application: ...") to use a stable
+# certificate; grants then survive rebuilds on the same identity.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC_DIR="$REPO_ROOT/helper"
 APP_PATH="${APPLE_PIM_HELPER_APP:-$HOME/Applications/PIMHelper.app}"
+SIGN_IDENTITY="${APPLE_PIM_SIGN_IDENTITY:--}"
+FORCE=false
+[[ "${1:-}" == "--force" ]] && FORCE=true
 
 if [[ ! -f "$SRC_DIR/Info.plist" || ! -f "$SRC_DIR/pim-helper" ]]; then
     echo "build-helper-app: missing helper sources at $SRC_DIR" >&2
     exit 1
+fi
+
+# True when the installed bundle's signature matches the requested identity.
+# Ad-hoc shows as `Signature=adhoc` (no Authority line); a certificate shows
+# its identity string as the first `Authority=` line.
+installed_identity_matches() {
+    local info
+    info="$(codesign -dvvv "$APP_PATH" 2>&1)" || return 1
+    if [[ "$SIGN_IDENTITY" == "-" ]]; then
+        grep -q "^Signature=adhoc" <<<"$info"
+    else
+        [[ "$(awk -F= '/^Authority=/{print $2; exit}' <<<"$info")" == "$SIGN_IDENTITY" ]]
+    fi
+}
+
+# Skip entirely when the install is already current: identical content and a
+# signature that still verifies. This preserves existing TCC grants (macOS
+# binds them to the signature). Identity is only enforced when the caller
+# explicitly asked for one via APPLE_PIM_SIGN_IDENTITY — with the ad-hoc
+# default, an existing valid signature of any kind is left alone rather than
+# downgraded (which would drop the grants).
+if [[ "$FORCE" != true && -d "$APP_PATH" ]] \
+    && cmp -s "$SRC_DIR/Info.plist" "$APP_PATH/Contents/Info.plist" \
+    && cmp -s "$SRC_DIR/pim-helper" "$APP_PATH/Contents/MacOS/pim-helper" \
+    && codesign --verify "$APP_PATH" >/dev/null 2>&1 \
+    && { [[ -z "${APPLE_PIM_SIGN_IDENTITY:-}" ]] || installed_identity_matches; }; then
+    echo "PIMHelper.app is up to date at: $APP_PATH (leaving untouched to preserve TCC grants)"
+    exit 0
+fi
+
+if [[ -d "$APP_PATH" ]]; then
+    echo "warning: replacing PIMHelper.app re-signs it — macOS will drop existing" >&2
+    echo "warning: Calendar/Reminders/Contacts grants and re-prompt on next use." >&2
 fi
 
 mkdir -p "$(dirname "$APP_PATH")"
@@ -42,9 +87,9 @@ cp "$SRC_DIR/Info.plist" "$APP_PATH/Contents/Info.plist"
 cp "$SRC_DIR/pim-helper" "$APP_PATH/Contents/MacOS/pim-helper"
 chmod +x "$APP_PATH/Contents/MacOS/pim-helper"
 
-# Ad-hoc sign the bundle. --force overwrites any prior signature; --deep
-# walks contents (the bundle is shallow but this future-proofs nested files).
-codesign --force --deep --sign - "$APP_PATH" >/dev/null
+# Sign the bundle. --force overwrites any prior signature; --deep walks
+# contents (the bundle is shallow but this future-proofs nested files).
+codesign --force --deep --sign "$SIGN_IDENTITY" "$APP_PATH" >/dev/null
 
 # Register with Launch Services so `open -a` resolves the bundle id.
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
