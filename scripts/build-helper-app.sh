@@ -37,12 +37,30 @@ if [[ ! -f "$SRC_DIR/Info.plist" || ! -f "$SRC_DIR/pim-helper" ]]; then
     exit 1
 fi
 
-# Skip entirely when the install is already current: identical content and
-# a signature that still verifies. This preserves existing TCC grants.
+# True when the installed bundle's signature matches the requested identity.
+# Ad-hoc shows as `Signature=adhoc` (no Authority line); a certificate shows
+# its identity string as the first `Authority=` line.
+installed_identity_matches() {
+    local info
+    info="$(codesign -dvvv "$APP_PATH" 2>&1)" || return 1
+    if [[ "$SIGN_IDENTITY" == "-" ]]; then
+        grep -q "^Signature=adhoc" <<<"$info"
+    else
+        [[ "$(awk -F= '/^Authority=/{print $2; exit}' <<<"$info")" == "$SIGN_IDENTITY" ]]
+    fi
+}
+
+# Skip entirely when the install is already current: identical content and a
+# signature that still verifies. This preserves existing TCC grants (macOS
+# binds them to the signature). Identity is only enforced when the caller
+# explicitly asked for one via APPLE_PIM_SIGN_IDENTITY — with the ad-hoc
+# default, an existing valid signature of any kind is left alone rather than
+# downgraded (which would drop the grants).
 if [[ "$FORCE" != true && -d "$APP_PATH" ]] \
     && cmp -s "$SRC_DIR/Info.plist" "$APP_PATH/Contents/Info.plist" \
     && cmp -s "$SRC_DIR/pim-helper" "$APP_PATH/Contents/MacOS/pim-helper" \
-    && codesign --verify "$APP_PATH" >/dev/null 2>&1; then
+    && codesign --verify "$APP_PATH" >/dev/null 2>&1 \
+    && { [[ -z "${APPLE_PIM_SIGN_IDENTITY:-}" ]] || installed_identity_matches; }; then
     echo "PIMHelper.app is up to date at: $APP_PATH (leaving untouched to preserve TCC grants)"
     exit 0
 fi

@@ -95,11 +95,14 @@ echo ""
 
 # ------------------------------------------------------------ stuck helper
 echo "Helper processes:"
+# A helper is stale once it outlives the longest legitimate call window —
+# the 120s TCC-prompt timeout plus margin. MUST match STALE_HELPER_SECONDS
+# in lib/cli-runner.js so diagnosis and auto-repair agree on "stuck".
+STALE_HELPER_SECONDS=130
 STUCK_PIDS=()
 while IFS= read -r pid; do
     [[ -n "$pid" ]] || continue
     etime="$(ps -o etime= -p "$pid" 2>/dev/null | tr -d ' ')"
-    # anything older than 60s cannot be serving a live call (default timeout 30s)
     secs=0
     if [[ "$etime" == *-* ]]; then
         secs=999999
@@ -108,7 +111,7 @@ while IFS= read -r pid; do
         if [[ -n "${c:-}" ]]; then secs=$((10#$a * 3600 + 10#$b * 60 + 10#$c));
         elif [[ -n "${b:-}" ]]; then secs=$((10#$a * 60 + 10#$b)); fi
     fi
-    if (( secs > 60 )); then
+    if (( secs > STALE_HELPER_SECONDS )); then
         STUCK_PIDS+=("$pid")
         fail "stuck pim-helper (pid $pid, age ${etime:-?}) — blocks ALL helper calls with error -1712"
     else

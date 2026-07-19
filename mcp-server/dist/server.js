@@ -72137,7 +72137,6 @@ function probeSwiftBinDirs(extraLocations = []) {
     return { dir, status, target };
   });
 }
-var lastFailedProbe = null;
 function describeBinDirProblem(probe) {
   const lines = ["Swift CLI binaries not found. Locations checked:"];
   for (const { dir, status, target } of probe) {
@@ -72160,12 +72159,7 @@ function describeBinDirProblem(probe) {
 function findSwiftBinDir(extraLocations = []) {
   const probe = probeSwiftBinDirs(extraLocations);
   const ok = probe.find((p) => p.status === "ok");
-  if (ok) {
-    lastFailedProbe = null;
-    return ok.dir;
-  }
-  lastFailedProbe = probe;
-  return probe[0].dir;
+  return ok ? ok.dir : probe[0].dir;
 }
 function relativeDateString(daysOffset) {
   const date3 = /* @__PURE__ */ new Date();
@@ -72174,6 +72168,7 @@ function relativeDateString(daysOffset) {
 }
 var DEFAULT_TIMEOUT_MS = 3e4;
 var PROMPT_TIMEOUT_MS = 12e4;
+var STALE_HELPER_SECONDS = Math.ceil(PROMPT_TIMEOUT_MS / 1e3) + 10;
 var HELPER_ELIGIBLE_CLIS = /* @__PURE__ */ new Set([
   "calendar-cli",
   "reminder-cli",
@@ -72221,8 +72216,8 @@ async function findHelperProcesses() {
   }
   return procs;
 }
-async function reapStaleHelpers(timeoutMs) {
-  const staleAfterSeconds = Math.ceil(timeoutMs / 1e3) + 5;
+async function reapStaleHelpers() {
+  const staleAfterSeconds = STALE_HELPER_SECONDS;
   const procs = await findHelperProcesses();
   let reaped = 0;
   for (const { pid, ageSeconds } of procs) {
@@ -72258,7 +72253,7 @@ function runViaHelper(cli, args, env, timeoutMs, binDir) {
   return chained;
 }
 async function launchHelper(cli, args, env, timeoutMs, binDir) {
-  await reapStaleHelpers(timeoutMs);
+  await reapStaleHelpers();
   return new Promise((resolve2, reject) => {
     const scratch = mkdtempSync(join(tmpdir(), "pim-helper-"));
     const outFile = join(scratch, "out");
@@ -72374,9 +72369,8 @@ function createCLIRunner(binDir, envOverrides = {}, { timeoutMs = DEFAULT_TIMEOU
       }
     } catch {
     }
-    const probeNote = lastFailedProbe ? `
-${describeBinDirProblem(lastFailedProbe)}` : `
-Fix: run setup.sh --install from the apple-pim repo, or scripts/doctor.sh to diagnose.`;
+    const probeNote = `
+${describeBinDirProblem(probeSwiftBinDirs([binDir]))}`;
     throw new Error(`${cli}: ${detail}${probeNote}`);
   }
   async function probeRoute(cli) {
