@@ -87,6 +87,13 @@ final class EnvelopeQueriesTests: XCTestCase {
         XCTAssertFalse(isJunkMailboxName("Train Spam"))
     }
 
+    func testEpochValueCoalescesIntegerAndReal() {
+        XCTAssertEqual(epochValue(Int64(1753036640)), 1753036640.0)
+        XCTAssertEqual(epochValue(1753036640.5), 1753036640.5)
+        XCTAssertNil(epochValue(nil))
+        XCTAssertNil(epochValue("not a number"))
+    }
+
     // MARK: - LIKE escaping
 
     func testEscapeLikePattern() {

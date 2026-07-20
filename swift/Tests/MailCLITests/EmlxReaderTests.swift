@@ -88,6 +88,22 @@ final class EmlxReaderTests: XCTestCase {
         XCTAssertEqual(msg.content, "Hello there")
     }
 
+    func testMultipartBoundaryOnlyMatchesAtLineStart() throws {
+        // RFC 2046: a body mentioning the boundary mid-line must not split there.
+        let raw = """
+        Content-Type: multipart/alternative; boundary="BOUND"\r
+        \r
+        --BOUND\r
+        Content-Type: text/plain; charset=utf-8\r
+        \r
+        pass the flag --BOUND to the tool\r
+        --BOUND--\r
+        """
+        let msg = try parseEmlx(data: emlxData(message: raw))
+        XCTAssertEqual(msg.content.trimmingCharacters(in: .whitespacesAndNewlines),
+                       "pass the flag --BOUND to the tool")
+    }
+
     // MARK: - Transfer encodings
 
     func testQuotedPrintableDecoding() {

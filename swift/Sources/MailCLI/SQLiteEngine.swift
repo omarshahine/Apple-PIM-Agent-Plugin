@@ -78,7 +78,7 @@ struct SQLiteEngine {
                                     comment: row["sender_comment"] as? String ?? ""),
             "subject": fullSubject(prefix: row["subject_prefix"] as? String,
                                    subject: row["subject"] as? String),
-            "dateReceived": (row["date_received"] as? Int64).map { isoStringFromEpoch(Double($0)) } ?? NSNull(),
+            "dateReceived": epochValue(row["date_received"]).map { isoStringFromEpoch($0) } ?? NSNull(),
             "isRead": (row["read"] as? Int64 ?? 0) != 0,
             "isFlagged": (row["flagged"] as? Int64 ?? 0) != 0,
         ]
@@ -218,7 +218,7 @@ struct SQLiteEngine {
 
         let emlx = try readEmlx(at: emlxURL)
         var message = summaryDict(row, includeJunkAndAttachments: true, includeLocation: true)
-        message["dateSent"] = (row["date_sent"] as? Int64).flatMap { $0 > 0 ? isoStringFromEpoch(Double($0)) : nil } ?? NSNull()
+        message["dateSent"] = epochValue(row["date_sent"]).flatMap { $0 > 0 ? isoStringFromEpoch($0) : nil } ?? NSNull()
         message["replyTo"] = emlx.header("Reply-To") ?? message["sender"] ?? ""
         message["content"] = emlx.content
         message["allHeaders"] = emlx.rawHeaders
