@@ -141,5 +141,7 @@ final class LabeledValueMergeTests: XCTestCase {
         XCTAssertEqual(appleScriptEscaped(#"plain"#), "plain")
         XCTAssertEqual(appleScriptEscaped(#"a "quoted" value"#), #"a \"quoted\" value"#)
         XCTAssertEqual(appleScriptEscaped(#"back\slash"#), #"back\\slash"#)
+        // Line breaks must not survive into the newline-joined script.
+        XCTAssertEqual(appleScriptEscaped("multi\nline\rvalue"), "multi line value")
     }
 }

@@ -351,9 +351,14 @@ func fetchContactForMutation(id: String, unified: Bool) throws -> CNContact? {
 }
 
 /// Escape a string for embedding inside a double-quoted AppleScript literal.
+/// Newlines and carriage returns are stripped: the generated script is
+/// newline-joined, so an embedded line break inside a label or value would
+/// otherwise terminate the string literal and inject a new statement.
 func appleScriptEscaped(_ s: String) -> String {
     s.replacingOccurrences(of: "\\", with: "\\\\")
         .replacingOccurrences(of: "\"", with: "\\\"")
+        .replacingOccurrences(of: "\r", with: " ")
+        .replacingOccurrences(of: "\n", with: " ")
 }
 
 /// Run an AppleScript via /usr/bin/osascript. Throws CLIError on failure.
